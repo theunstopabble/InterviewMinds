@@ -2,330 +2,241 @@ import { useState, useEffect, useRef } from "react";
 import {
   Mic,
   MicOff,
-  Volume2,
-  ArrowLeft,
+  Send,
+  StopCircle,
   Loader2,
   Sparkles,
+  Volume2
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api"; // ✅ Secured API Interceptor
-import { Button } from "@/components/ui/button"; // Shadcn Button
-import { Card, CardContent } from "@/components/ui/card"; // Shadcn Card
-import { Badge } from "@/components/ui/badge"; // Shadcn Badge
-import { toast } from "sonner"; // ✅ Sonner Toast
+import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import CodeEditor from "@/components/CodeEditor"; // ✅ Importing the Editor we just built
+
+interface Message {
+  role: "user" | "ai";
+  content: string;
+}
 
 export default function InterviewPage() {
   const navigate = useNavigate();
 
   // --- STATES ---
-  const [isListening, setIsListening] = useState(false);
-  const [isThinking, setIsThinking] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false); // AI Thinking
+  const [isRecording, setIsRecording] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [aiResponse, setAiResponse] = useState(
-    "Hello! I am ready based on your resume. Tap the Mic to start."
+
+  // --- EDITOR STATE ---
+  const [code, setCode] = useState<string | undefined>(
+    "// Technical Interview Session\n// Problem: Write a function to reverse a string.\n\nfunction solution() {\n  // Write your code here\n}"
   );
-  const [history, setHistory] = useState<{ role: string; text: string }[]>([]);
+  const [language, setLanguage] = useState("javascript");
 
   const recognitionRef = useRef<any>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // --- 1. SPEECH RECOGNITION SETUP ---
+  // --- 1. INITIALIZATION ---
   useEffect(() => {
-    if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = "en-US";
-
-      recognitionRef.current.onresult = (event: any) => {
-        const text = event.results[0][0].transcript;
-        setTranscript(text);
-        console.log("User said:", text);
-        handleAIResponse(text);
-      };
-
-      recognitionRef.current.onerror = (event: any) => {
-        console.error("Speech Error:", event.error);
-        setIsListening(false);
-        toast.error("Could not hear you. Please try again.");
-      };
-
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
-    } else {
-      toast.error("Your browser does not support Voice Recognition.");
-    }
-  }, []);
-
-  // --- 2. TEXT TO SPEECH (Improved) ---
-  const speak = (text: string) => {
-    window.speechSynthesis.cancel();
-    setIsAiSpeaking(true);
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-
-    // Select best voice
-    const preferredVoice = voices.find(
-      (voice) =>
-        voice.name.includes("Google US English") ||
-        voice.name.includes("Google") ||
-        voice.name.includes("Natural")
-    );
-
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-    }
-
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-
-    utterance.onend = () => {
-      setIsAiSpeaking(false);
-    };
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // Load voices early
-  useEffect(() => {
-    window.speechSynthesis.getVoices();
-  }, []);
-
-  // --- 3. CORE INTERVIEW LOGIC (Secured) ---
-  const handleAIResponse = async (userText: string) => {
-    setIsThinking(true);
-
-    try {
-      const resumeId = localStorage.getItem("resumeId");
-
-      if (!resumeId) {
-        toast.error("Resume ID missing. Please upload again.");
-        navigate("/");
-        return;
-      }
-
-      // API Call (Interceptor adds Token)
-      const res = await api.post("/chat", {
-        message: userText,
-        resumeId: resumeId,
-        history: history,
-      });
-
-      const aiReply = res.data.reply;
-
-      setAiResponse(aiReply);
-      speak(aiReply);
-
-      // Update History
-      setHistory((prev) => [
-        ...prev,
-        { role: "user", text: userText },
-        { role: "model", text: aiReply },
-      ]);
-    } catch (error) {
-      console.error("API Error:", error);
-      toast.error("AI connection failed. Trying again...");
-    } finally {
-      setIsThinking(false);
-    }
-  };
-
-  // --- 4. END INTERVIEW LOGIC ---
-  const handleEndInterview = async () => {
-    if (history.length === 0) {
+    const resumeId = localStorage.getItem("resumeId");
+    if (!resumeId) {
+      toast.error("No resume found");
       navigate("/");
       return;
     }
+    // Start the session with a greeting
+    if (messages.length === 0) {
+      handleAIResponse("Start the technical interview based on my resume.", true);
+    }
+  }, []);
 
-    setIsThinking(true);
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  // --- 2. VOICE SETUP ---
+  const speakText = (text: string) => {
+    window.speechSynthesis.cancel();
+    setIsAiSpeaking(true);
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find((v) => v.name.includes("Google") || v.name.includes("Natural"));
+    if (preferredVoice) utterance.voice = preferredVoice;
+    
+    utterance.onend = () => setIsAiSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const startListening = () => {
+    if (!("webkitSpeechRecognition" in window)) {
+      toast.error("Voice not supported in this browser");
+      return;
+    }
+    const SpeechRecognition = (window as any).webkitSpeechRecognition;
+    recognitionRef.current = new SpeechRecognition();
+    recognitionRef.current.continuous = false;
+    recognitionRef.current.lang = "en-US";
+
+    recognitionRef.current.onstart = () => setIsRecording(true);
+    recognitionRef.current.onend = () => setIsRecording(false);
+    
+    recognitionRef.current.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript); // Put voice text into input box
+    };
+
+    recognitionRef.current.start();
+  };
+
+  // --- 3. INTERACTION LOGIC ---
+  const handleAIResponse = async (userMessage: string, isInit = false) => {
+    if (!userMessage.trim()) return;
+
     const resumeId = localStorage.getItem("resumeId");
+    
+    // UI Update (Optimistic)
+    if (!isInit) {
+        setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+        setInput("");
+    }
+    
+    setIsLoading(true);
 
     try {
-      toast.info("Generating your Performance Report...");
-      const res = await api.post("/interview/end", {
+      // Send Chat + Current Code Context to AI
+      const res = await api.post("/chat", {
+        message: userMessage,
         resumeId,
-        history,
+        history: messages.map(m => ({ role: m.role === "ai" ? "model" : "user", text: m.content })),
+        // currentCode: code // (Future: Send code to AI so it can review it)
       });
 
-      navigate(`/feedback/${res.data.id}`);
+      const aiReply = res.data.reply;
+      
+      setMessages((prev) => [...prev, { role: "ai", content: aiReply }]);
+      speakText(aiReply);
+
     } catch (error) {
-      console.error("End Interview Error:", error);
-      toast.error("Failed to generate report.");
-      navigate("/");
+      toast.error("Failed to connect to AI.");
     } finally {
-      setIsThinking(false);
+      setIsLoading(false);
     }
   };
 
-  const toggleMic = () => {
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      window.speechSynthesis.cancel();
-      recognitionRef.current.start();
-      setIsListening(true);
-      setTranscript("");
+  const endInterview = async () => {
+    const resumeId = localStorage.getItem("resumeId");
+    try {
+      toast.info("Generating Report...");
+      const res = await api.post("/interview/end", { 
+        resumeId, 
+        history: messages.map(m => ({ role: m.role === "ai" ? "model" : "user", text: m.content })) 
+      });
+      navigate(`/feedback/${res.data.id}`);
+    } catch (e) {
+        toast.error("Error ending session");
     }
   };
 
-  // --- UI RENDER (Sci-Fi Layout) ---
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-black text-white flex flex-col p-6 relative overflow-hidden">
-      {/* Background Ambience */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-      </div>
-
-      {/* Header */}
-      <div className="flex justify-between items-center z-10 mb-8 max-w-5xl mx-auto w-full">
-        <div className="flex items-center gap-3">
-          <div className="bg-slate-800 p-2.5 rounded-xl border border-slate-700 shadow-lg">
-            <Sparkles className="w-5 h-5 text-blue-400" />
+    <div className="flex h-[calc(100vh-4rem)] w-full bg-black text-white overflow-hidden">
+      
+      {/* ================= LEFT SIDE: AI AVATAR & CHAT (40%) ================= */}
+      <div className="w-[40%] flex flex-col border-r border-white/10 bg-slate-950/50 relative">
+        
+        {/* Header */}
+        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-900/50">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-blue-400" />
+            <span className="font-semibold text-slate-200">AI Interviewer</span>
           </div>
-          <div>
-            <h1 className="font-bold text-lg text-slate-200 tracking-wide">
-              AI Interviewer
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Google L5 SDE Persona
-            </p>
-          </div>
-        </div>
-
-        <Button
-          variant="destructive"
-          onClick={handleEndInterview}
-          disabled={isThinking}
-          className="gap-2 shadow-lg shadow-red-500/10 hover:shadow-red-500/20 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all"
-        >
-          {isThinking ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <ArrowLeft className="w-4 h-4" />
-          )}
-          End Session
-        </Button>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col items-center justify-center z-10 max-w-2xl mx-auto w-full gap-10">
-        {/* 🧠 AI Avatar / Visualizer */}
-        <div className="relative group scale-110">
-          {/* Outer Glow Ring (Status Dependent) */}
-          <div
-            className={`absolute inset-0 rounded-full blur-3xl transition-all duration-1000 opacity-40 ${
-              isListening
-                ? "bg-green-500"
-                : isThinking
-                ? "bg-purple-500"
-                : isAiSpeaking
-                ? "bg-blue-500"
-                : "bg-transparent"
-            }`}
-          ></div>
-
-          <div
-            className={`relative w-64 h-64 rounded-full border-[6px] flex items-center justify-center bg-slate-950 shadow-2xl transition-all duration-500 ${
-              isListening
-                ? "border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]"
-                : isThinking
-                ? "border-purple-500 shadow-[0_0_30px_rgba(168,85,247,0.3)]"
-                : isAiSpeaking
-                ? "border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.3)]"
-                : "border-slate-800"
-            }`}
-          >
-            {isThinking ? (
-              <Loader2 className="w-24 h-24 text-purple-500 animate-spin" />
-            ) : isAiSpeaking ? (
-              /* Wave Animation */
-              <div className="flex items-center gap-2 h-24">
-                {[...Array(5)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-3 bg-blue-400 rounded-full animate-wave"
-                    style={{ animationDelay: `${i * 0.1}s` }}
-                  ></div>
-                ))}
-              </div>
-            ) : (
-              <Volume2
-                className={`w-24 h-24 transition-colors duration-300 ${
-                  isListening ? "text-green-400" : "text-slate-600"
-                }`}
-              />
-            )}
-          </div>
-
-          {/* Status Badge */}
-          <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2">
-            <Badge
-              variant="outline"
-              className={`px-4 py-1.5 text-sm font-medium backdrop-blur-md border-opacity-60 shadow-lg ${
-                isListening
-                  ? "border-green-500 text-green-300 bg-green-900/40"
-                  : isThinking
-                  ? "border-purple-500 text-purple-300 bg-purple-900/40"
-                  : isAiSpeaking
-                  ? "border-blue-500 text-blue-300 bg-blue-900/40"
-                  : "border-slate-600 text-slate-400 bg-slate-800/80"
-              }`}
-            >
-              {isListening
-                ? "Listening..."
-                : isThinking
-                ? "Thinking..."
-                : isAiSpeaking
-                ? "Speaking..."
-                : "Idle"}
-            </Badge>
-          </div>
-        </div>
-
-        {/* 💬 Chat Area */}
-        <Card className="w-full bg-slate-900/60 border-slate-800/60 backdrop-blur-xl p-8 min-h-[160px] flex flex-col items-center justify-center text-center shadow-2xl rounded-2xl">
-          <CardContent className="p-0 space-y-4">
-            {transcript && (
-              <p className="text-slate-400 italic text-sm animate-in fade-in slide-in-from-bottom-2">
-                You: "{transcript}"
-              </p>
-            )}
-            <p className="text-xl md:text-2xl text-slate-100 font-medium leading-relaxed tracking-wide">
-              {aiResponse}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* 🎙️ Controls */}
-        <div className="flex flex-col items-center gap-4">
-          <Button
-            size="icon"
-            onClick={toggleMic}
-            disabled={isThinking}
-            className={`w-24 h-24 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 border-4 border-slate-900 ${
-              isListening
-                ? "bg-red-500 hover:bg-red-600 shadow-red-500/40 animate-pulse"
-                : "bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 shadow-blue-500/30"
-            }`}
-          >
-            {isListening ? (
-              <MicOff className="w-10 h-10 text-white" />
-            ) : (
-              <Mic className="w-10 h-10 text-white" />
-            )}
+          <Button variant="destructive" size="sm" onClick={endInterview} className="h-8 gap-2 text-xs">
+            <StopCircle className="w-3 h-3" /> End Session
           </Button>
-          <span className="text-slate-500 text-sm font-semibold uppercase tracking-wider">
-            {isListening ? "Tap to Stop" : "Tap to Speak"}
-          </span>
+        </div>
+
+        {/* 🧠 AI Visualizer (Small) */}
+        <div className="flex justify-center py-4 bg-slate-950/30">
+             <div className={`relative w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
+                 isAiSpeaking ? "border-blue-500 shadow-lg shadow-blue-500/20 scale-110" : "border-slate-700"
+             }`}>
+                {isLoading ? (
+                    <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+                ) : isAiSpeaking ? (
+                    <Volume2 className="w-6 h-6 text-blue-400 animate-pulse" />
+                ) : (
+                    <div className="w-3 h-3 bg-slate-600 rounded-full" />
+                )}
+             </div>
+        </div>
+
+        {/* 💬 Chat History */}
+        <ScrollArea className="flex-1 p-4">
+          <div className="space-y-4 pb-4">
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] p-3 rounded-lg text-sm leading-relaxed ${
+                  msg.role === "user" 
+                    ? "bg-blue-600 text-white rounded-tr-none shadow-md shadow-blue-900/20" 
+                    : "bg-slate-800 border border-slate-700 text-slate-200 rounded-tl-none"
+                }`}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            <div ref={scrollRef} />
+          </div>
+        </ScrollArea>
+
+        {/* ⌨️ Input Area */}
+        <div className="p-4 border-t border-white/10 bg-slate-900">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={startListening}
+              className={`border-slate-700 bg-slate-800 hover:bg-slate-700 ${isRecording ? "text-red-500 border-red-500 animate-pulse" : "text-slate-400"}`}
+            >
+              {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </Button>
+            
+            <input
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-md px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+              placeholder="Type or speak..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAIResponse(input)}
+              disabled={isLoading}
+            />
+            
+            <Button 
+                onClick={() => handleAIResponse(input)} 
+                disabled={isLoading || !input.trim()} 
+                size="icon" 
+                className="bg-blue-600 hover:bg-blue-500"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* ================= RIGHT SIDE: CODE EDITOR (60%) ================= */}
+      <div className="w-[60%] h-full flex flex-col bg-[#1e1e1e]">
+        {/* We use the Component we created earlier */}
+        <CodeEditor 
+          code={code || ""} 
+          setCode={setCode} 
+          language={language} 
+          setLanguage={setLanguage} 
+        />
+      </div>
+
     </div>
   );
 }
