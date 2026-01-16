@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
@@ -15,6 +15,12 @@ const MONGO_URI = process.env.MONGO_URI || "";
 
 app.use(cors());
 app.use(express.json());
+
+// 2. Ping Route (CORS ke baad, Auth se pehle) ✅
+app.get("/ping", (req: Request, res: Response) => {
+  res.send("pong");
+});
+
 app.use("/api/resume", requireAuth, resumeRoutes);
 app.use("/api/chat", requireAuth, chatRoutes);
 app.use("/api/interview", requireAuth, interviewRoutes);
