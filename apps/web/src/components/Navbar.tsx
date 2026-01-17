@@ -1,11 +1,64 @@
 import { Link, useLocation } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
-import { LayoutDashboard, PlusCircle, Sparkles } from "lucide-react";
+import {
+  LayoutDashboard,
+  PlusCircle,
+  Sparkles,
+  Download, // ✅ Added Download Icon
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react"; // ✅ Added Hooks
 
 export default function Navbar() {
   const location = useLocation();
   const isActive = (path: string) => location.pathname === path;
+
+  // --- 📱 PWA INSTALL LOGIC START ---
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    // 1. Check if already installed
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      setIsInstalled(true);
+    }
+
+    // 2. Listen for "Ready to Install" event
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault(); // Default prompt roko
+      setDeferredPrompt(e); // Event save karo
+    };
+
+    // 3. Listen for success
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+      console.log("App Installed Successfully");
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    // Show prompt
+    deferredPrompt.prompt();
+    // Wait for choice
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === "accepted") {
+      setDeferredPrompt(null);
+    }
+  };
+  // --- 📱 PWA INSTALL LOGIC END ---
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-slate-950/50 backdrop-blur-xl">
@@ -21,7 +74,19 @@ export default function Navbar() {
         </Link>
 
         {/* Navigation Links */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 lg:gap-6">
+          {/* 👇 INSTALL APP BUTTON (Only Visible if Installable) */}
+          {!isInstalled && deferredPrompt && (
+            <Button
+              onClick={handleInstallClick}
+              variant="outline"
+              className="gap-2 border-green-500/30 text-green-400 hover:text-green-300 hover:bg-green-500/10 hidden sm:flex"
+            >
+              <Download className="w-4 h-4" />
+              Install App
+            </Button>
+          )}
+
           {/* Dashboard Link */}
           <Link to="/dashboard">
             <Button
@@ -31,7 +96,7 @@ export default function Navbar() {
               }`}
             >
               <LayoutDashboard className="w-4 h-4" />
-              Dashboard
+              <span className="hidden sm:inline">Dashboard</span>
             </Button>
           </Link>
 
@@ -45,7 +110,7 @@ export default function Navbar() {
               }`}
             >
               <PlusCircle className="w-4 h-4" />
-              New Interview
+              <span className="hidden sm:inline">New Interview</span>
             </Button>
           </Link>
 
