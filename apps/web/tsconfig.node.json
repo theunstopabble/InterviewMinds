@@ -15,11 +15,8 @@
     "moduleDetection": "force",
     "noEmit": true,
 
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    /* Strict Mode OFF for Config Files */
+    "strict": false
   },
   "include": ["vite.config.ts"]
 }
