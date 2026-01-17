@@ -15,7 +15,7 @@ export default defineConfig({
       },
       includeAssets: ["favicon.ico", "apple-touch-icon.png", "masked-icon.svg"],
       manifest: {
-        name: "InterviewMinds.ai",
+        name: "InterviewMinds",
         short_name: "InterviewMinds",
         description: "AI-Powered Mock Interview Platform",
         theme_color: "#0f172a",

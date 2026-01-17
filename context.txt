@@ -24,8 +24,14 @@ InterviewMinds
 │   │   ├── package.json
 │   │   └── tsconfig.json
 │   └── web
+│       ├── dev-dist
+│       │   ├── registerSW.js
+│       │   ├── sw.js
+│       │   └── workbox-6d1fb45c.js
 │       ├── public
-│       │   └── vite.svg
+│       │   ├── favicon.ico
+│       │   ├── pwa-192x192.png
+│       │   └── pwa-512x512.png
 │       ├── src
 │       │   ├── assets
 │       │   │   └── react.svg
