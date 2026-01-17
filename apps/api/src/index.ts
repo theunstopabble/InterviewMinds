@@ -13,22 +13,33 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 const MONGO_URI = process.env.MONGO_URI || "";
 
-// 1. Middleware
-app.use(cors()); // Allow all origins (Safe for now)
+// 👇 CORS FIX: Mobile ke liye Specific Permission
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173", // Local Vite
+      "http://localhost:5174", // Local Vite (Alternative)
+      "https://interview-minds.vercel.app", // Aapka Live Vercel Domain
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true, // ⚠️ Ye sabse zaroori hai Mobile Auth ke liye
+  })
+);
+
 app.use(express.json());
 
-// 2. Health Check (Auth NOT required)
+// 2. Ping Route (CORS ke baad, Auth se pehle)
 app.get("/ping", (req: Request, res: Response) => {
   res.send("pong");
 });
 
-// 3. Root Route (Auth NOT required)
+// 3. Root Route
 app.get("/", (req: Request, res: Response) => {
   res.json({ message: "InterviewMinds Backend is Running!" });
 });
 
-// 4. Protected Routes (Auth REQUIRED)
-// Yahan hum requireAuth laga rahe hain, matlab bina login koi API use nahi kar payega
+// 4. Protected Routes
 app.use("/api/resume", requireAuth, resumeRoutes);
 app.use("/api/chat", requireAuth, chatRoutes);
 app.use("/api/interview", requireAuth, interviewRoutes);
@@ -44,12 +55,11 @@ if (!MONGO_URI) {
 }
 
 // 6. Start Server
-// Ye check zaroori hai taaki Vercel aur Local dono jagah code na phate
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
 }
 
-// 7. Export App (Vercel Needs This)
+// 7. Export App
 export default app;
