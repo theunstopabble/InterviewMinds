@@ -1,0 +1,83 @@
+InterviewMinds
+├── .turbo
+│   ├── cache
+│   ├── cookies
+│   └── daemon
+│       └── b740e4c89c5e5a93-turbo.log.2026-01-17
+├── apps
+│   ├── api
+│   │   ├── src
+│   │   │   ├── middleware
+│   │   │   │   └── auth.ts
+│   │   │   ├── models
+│   │   │   │   ├── Interview.ts
+│   │   │   │   └── Resume.ts
+│   │   │   ├── routes
+│   │   │   │   ├── chat.ts
+│   │   │   │   ├── compiler.ts
+│   │   │   │   ├── interview.ts
+│   │   │   │   └── resume.ts
+│   │   │   ├── index.ts
+│   │   │   └── types.d.ts
+│   │   ├── .env
+│   │   ├── package-lock.json
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── web
+│       ├── public
+│       │   └── vite.svg
+│       ├── src
+│       │   ├── assets
+│       │   │   └── react.svg
+│       │   ├── components
+│       │   │   ├── ui
+│       │   │   │   ├── badge.tsx
+│       │   │   │   ├── button.tsx
+│       │   │   │   ├── card.tsx
+│       │   │   │   ├── input.tsx
+│       │   │   │   ├── label.tsx
+│       │   │   │   ├── progress.tsx
+│       │   │   │   ├── scroll-area.tsx
+│       │   │   │   ├── select.tsx
+│       │   │   │   ├── separator.tsx
+│       │   │   │   ├── skeleton.tsx
+│       │   │   │   └── sonner.tsx
+│       │   │   ├── AxiosInterceptor.tsx
+│       │   │   ├── CodeEditor.tsx
+│       │   │   ├── Navbar.tsx
+│       │   │   ├── OutputConsole.tsx
+│       │   │   └── ResumeUpload.tsx
+│       │   ├── lib
+│       │   │   ├── api.ts
+│       │   │   └── utils.ts
+│       │   ├── pages
+│       │   │   ├── DashboardPage.tsx
+│       │   │   ├── FeedbackPage.tsx
+│       │   │   ├── InterviewPage.tsx
+│       │   │   └── SignInPage.tsx
+│       │   ├── services
+│       │   │   └── compiler.ts
+│       │   ├── App.css
+│       │   ├── App.tsx
+│       │   ├── index.css
+│       │   └── main.tsx
+│       ├── .env
+│       ├── README.md
+│       ├── components.json
+│       ├── eslint.config.js
+│       ├── index.html
+│       ├── package-lock.json
+│       ├── package.json
+│       ├── postcss.config.js
+│       ├── tailwind.config.js
+│       ├── tsconfig.app.json
+│       ├── tsconfig.json
+│       ├── tsconfig.node.json
+│       ├── vercel.json
+│       └── vite.config.ts
+├── packages
+│   └── shared
+├── context.txt
+├── package-lock.json
+├── package.json
+└── turbo.json

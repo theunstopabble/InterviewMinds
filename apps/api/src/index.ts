@@ -6,6 +6,7 @@ import resumeRoutes from "./routes/resume";
 import chatRoutes from "./routes/chat";
 import interviewRoutes from "./routes/interview";
 import { requireAuth } from "./middleware/auth";
+import compilerRoutes from "./routes/compiler";
 
 dotenv.config();
 
@@ -43,6 +44,7 @@ app.get("/", (req: Request, res: Response) => {
 app.use("/api/resume", requireAuth, resumeRoutes);
 app.use("/api/chat", requireAuth, chatRoutes);
 app.use("/api/interview", requireAuth, interviewRoutes);
+app.use("/api/compiler", requireAuth, compilerRoutes);
 
 // 5. Database Connection
 if (!MONGO_URI) {
