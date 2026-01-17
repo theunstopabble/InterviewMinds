@@ -4,7 +4,8 @@ import react from "@vitejs/plugin-react";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  // FIX: 'as any' lagane se TypeScript version conflict ignore karega
+  plugins: [react() as any],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
