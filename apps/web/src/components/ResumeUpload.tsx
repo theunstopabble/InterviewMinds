@@ -1,17 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { UploadCloud, Loader2, FileText, CheckCircle } from "lucide-react";
-import { api } from "../lib/api"; // Smart Axios
-import { Button } from "@/components/ui/button"; // Shadcn Button
+import { api } from "../lib/api";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card"; // Shadcn Card
-import { Input } from "@/components/ui/input"; // Shadcn Input
-import { Label } from "@/components/ui/label"; // Shadcn Label
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 export default function ResumeUpload() {
@@ -21,7 +21,26 @@ export default function ResumeUpload() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+
+      // 1. Mobile Validation Fix
+      if (
+        selectedFile.type !== "application/pdf" &&
+        !selectedFile.name.endsWith(".pdf")
+      ) {
+        toast.error("Invalid File", {
+          description: "Please upload a valid PDF.",
+        });
+        return;
+      }
+
+      // 2. Size Limit Check (5MB)
+      if (selectedFile.size > 5 * 1024 * 1024) {
+        toast.error("File too large", { description: "Max size is 5MB." });
+        return;
+      }
+
+      setFile(selectedFile);
     }
   };
 
@@ -33,27 +52,28 @@ export default function ResumeUpload() {
     formData.append("resume", file);
 
     try {
-      // 👇 API Call using Interceptor
+      // 👇 3. Timeout Fix for Slow Mobile Networks
       const res = await api.post("/resume/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
+        timeout: 60000, // 60 Seconds wait karega (Mobile data ke liye zaroori)
       });
 
-      // Resume ID save karo
       localStorage.setItem("resumeId", res.data.id);
 
-      // ✅ SUCCESS TOAST (Sonner Style)
       toast.success("Resume Uploaded!", {
         description: "Redirecting to interview...",
       });
 
-      // Thoda wait karke redirect karo taaki user toast dekh sake
       setTimeout(() => navigate("/interview"), 1000);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload failed", error);
 
-      // ❌ ERROR TOAST
+      // Error Details dikhayein
+      const errorMessage =
+        error.response?.data?.error || "Connection Timeout or Server Error";
+
       toast.error("Upload Failed", {
-        description: "Please check your file and try again.",
+        description: errorMessage,
       });
     } finally {
       setLoading(false);
@@ -76,7 +96,6 @@ export default function ResumeUpload() {
 
       <CardContent className="space-y-8">
         <div className="grid w-full items-center gap-4">
-          {/* Custom Stylized Input Area */}
           <div className="flex flex-col space-y-4">
             <Label
               htmlFor="resume"
@@ -85,12 +104,13 @@ export default function ResumeUpload() {
               Select Resume
             </Label>
             <div className="relative group cursor-pointer">
+              {/* 👇 4. Main Fix: Accept 'application/pdf' explicitly for Android */}
               <Input
                 id="resume"
                 type="file"
-                accept=".pdf"
+                accept="application/pdf, .pdf"
                 onChange={handleFileChange}
-                className="hidden" // Asli input ko chupaya
+                className="hidden"
               />
               <label
                 htmlFor="resume"
@@ -114,7 +134,7 @@ export default function ResumeUpload() {
                   <>
                     <FileText className="w-10 h-10 text-slate-500 mb-3 group-hover:text-blue-400 transition-colors" />
                     <p className="text-lg text-slate-300 font-medium group-hover:text-white">
-                      Click to browse or drag file
+                      Click to browse
                     </p>
                     <p className="text-sm text-slate-500 mt-1">
                       PDF Files Only
@@ -126,7 +146,6 @@ export default function ResumeUpload() {
           </div>
         </div>
 
-        {/* Shadcn Button with Loading State */}
         <Button
           onClick={handleUpload}
           disabled={!file || loading}
