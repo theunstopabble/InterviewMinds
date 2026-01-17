@@ -1,13 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
-import {
-  LayoutDashboard,
-  PlusCircle,
-  Sparkles,
-  Download,
-  Menu,
-  X,
-} from "lucide-react";
+import { LayoutDashboard, PlusCircle, Download, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 
@@ -28,8 +21,8 @@ export default function Navbar() {
 
     // 2. Listen for "Ready to Install" event
     const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault(); // Stop default browser prompt
-      setDeferredPrompt(e); // Save event
+      e.preventDefault();
+      setDeferredPrompt(e);
     };
 
     // 3. Listen for success
@@ -69,25 +62,29 @@ export default function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-slate-950/50 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        {/* ================= LEFT: LOGO ================= */}
-        <Link to="/" className="flex items-center gap-2 group">
-          <div className="bg-blue-600/20 p-2 rounded-lg group-hover:bg-blue-600/30 transition-colors">
-            <Sparkles className="w-5 h-5 text-blue-400" />
-          </div>
-          <span className="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+        {/* ================= LEFT: LOGO (UPDATED) ================= */}
+        <Link to="/" className="flex items-center gap-3 group shrink-0">
+          {/* ✅ Ab hum PWA Image use kar rahe hain (Sparkles hata diya) */}
+          <img
+            src="/pwa-192x192.png"
+            alt="InterviewMinds Logo"
+            className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform"
+          />
+
+          <span className="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
             InterviewMinds
           </span>
         </Link>
 
         {/* ================= CENTER: DESKTOP MENU ================= */}
         <div className="hidden md:flex items-center gap-4">
-          {/* 👇 Desktop Install Button */}
+          {/* Desktop Install Button */}
           {!isInstalled && deferredPrompt && (
             <Button
               onClick={handleInstallClick}
               variant="outline"
               size="sm"
-              className="gap-2 border-green-500/30 text-green-400 hover:text-green-300 hover:bg-green-500/10 animate-pulse"
+              className="gap-2 border-green-500/30 text-green-400 hover:bg-green-500/10 animate-pulse"
             >
               <Download className="w-4 h-4" />
               Install App
@@ -126,27 +123,30 @@ export default function Navbar() {
         </div>
 
         {/* ================= RIGHT: MOBILE ACTIONS ================= */}
-        <div className="flex items-center gap-3 md:hidden">
-          {/* 👇 Mobile Install Icon (Icon Only to save space) */}
+        <div className="flex items-center gap-2 md:hidden">
+          {/* Mobile Install Button (Icon Only) */}
           {!isInstalled && deferredPrompt && (
             <button
               onClick={handleInstallClick}
-              className="p-2 rounded-full bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-all border border-green-500/30 animate-pulse"
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-green-500/10 text-green-400 border border-green-500/30 animate-pulse active:scale-95 transition-all"
               title="Install App"
             >
               <Download className="w-5 h-5" />
             </button>
           )}
 
-          {/* User Profile (Smaller) */}
-          <div className="scale-90">
-            <UserButton afterSignOutUrl="/sign-in" />
+          {/* User Profile */}
+          <div className="flex items-center justify-center">
+            <UserButton
+              afterSignOutUrl="/sign-in"
+              appearance={{ elements: { avatarBox: "w-8 h-8" } }}
+            />
           </div>
 
           {/* Hamburger Menu Toggle */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="text-slate-300 hover:text-white p-1"
+            className="text-slate-300 hover:text-white p-1 ml-1"
           >
             {isMobileMenuOpen ? (
               <X className="w-6 h-6" />
@@ -159,8 +159,8 @@ export default function Navbar() {
 
       {/* ================= MOBILE MENU DROPDOWN ================= */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-slate-950 border-b border-white/10 p-4 space-y-3 animate-in slide-in-from-top-2">
-          <Link to="/dashboard">
+        <div className="md:hidden bg-slate-950 border-b border-white/10 p-4 space-y-3 animate-in slide-in-from-top-2 shadow-2xl">
+          <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
             <Button
               variant="ghost"
               className={`w-full justify-start gap-2 ${
@@ -174,7 +174,7 @@ export default function Navbar() {
             </Button>
           </Link>
 
-          <Link to="/">
+          <Link to="/" onClick={() => setIsMobileMenuOpen(false)}>
             <Button className="w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-purple-600">
               <PlusCircle className="w-4 h-4" />
               New Interview
