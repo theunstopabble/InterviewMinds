@@ -18,6 +18,7 @@ InterviewMinds
 │   │   │   │   ├── interview.ts
 │   │   │   │   └── resume.ts
 │   │   │   ├── index.ts
+│   │   │   ├── test-models.ts
 │   │   │   └── types.d.ts
 │   │   ├── .env
 │   │   ├── package-lock.json
