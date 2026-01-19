@@ -14,7 +14,7 @@ const upload = multer({ storage: storage });
 
 // Embeddings Model (Ye text ko numbers mein badalta hai)
 const embeddings = new GoogleGenerativeAIEmbeddings({
-  modelName: "embedding-001",
+  modelName: "text-embedding-004", // Pehle 'embedding-001' tha
   apiKey: process.env.GEMINI_API_KEY,
 });
 
@@ -54,7 +54,16 @@ router.post("/upload", upload.single("resume"), async (req: any, res: any) => {
     const chunkTexts = outputChunks.map((chunk) => chunk.pageContent);
 
     // Ek baar mein sabka vector mangwao (Batch Call)
+    console.log("⏳ Generating Embeddings... (This might take a moment)");
     const vectors = await embeddings.embedDocuments(chunkTexts);
+
+    if (vectors.length > 0 && vectors[0].length > 0) {
+      console.log(`✅ Success! Generated ${vectors.length} vectors.`);
+      console.log(`📏 Dimension Check: ${vectors[0].length} (Should be 768)`);
+    } else {
+      console.error("❌ ERROR: Generated vectors are EMPTY!");
+      throw new Error("Vector generation failed");
+    }
 
     // Wapas combine karo
     const chunksWithEmbeddings = outputChunks.map((chunk, index) => ({

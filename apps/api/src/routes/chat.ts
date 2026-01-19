@@ -1,20 +1,21 @@
 import express from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ResumeModel } from "../models/Resume";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+import Groq from "groq-sdk";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const router = express.Router();
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+// ✅ 1. SETUP GROQ (Chat ke liye - Free & Fast)
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+// ✅ 2. SETUP GEMINI EMBEDDINGS (Context search ke liye - Matches Upload Logic)
 const embeddings = new GoogleGenerativeAIEmbeddings({
-  modelName: "embedding-001",
+  modelName: "text-embedding-004", // Must match 'resume.ts'
   apiKey: process.env.GEMINI_API_KEY,
-  maxRetries: 0, // ⚡ IMPORTANT: Retry mat karna, seedha fallback par jana
+  maxRetries: 0,
 });
 
 router.post("/", async (req: any, res: any) => {
@@ -24,88 +25,101 @@ router.post("/", async (req: any, res: any) => {
     if (!message || !resumeId)
       return res.status(400).json({ error: "Required fields missing" });
 
-    // --- STEP 1: CONTEXT RETRIEVAL (Circuit Breaker Logic) ---
     let contextText = "";
 
+    // --- STEP 1: CONTEXT RETRIEVAL (Gemini Embeddings + MongoDB) ---
     try {
-      // Koshish karo Vector Search use karne ki (Smart Way)
       console.log("🔍 Attempting Vector Search...");
+
+      // 1. User ke message ko vector mein badlo
       const queryVector = await embeddings.embedQuery(message);
 
+      // 2. MongoDB mein search karo
       const resumes = await ResumeModel.aggregate([
         {
           $vectorSearch: {
-            index: "vector_index",
-            path: "chunks.embedding",
+            index: "vector_index", // Atlas Index Name
+            path: "chunks.embedding", // Path to vector
             queryVector: queryVector,
             numCandidates: 50,
             limit: 3,
           },
         },
-        { $project: { chunks: 1, score: { $meta: "vectorSearchScore" } } },
+        {
+          $project: {
+            content: 1,
+            score: { $meta: "vectorSearchScore" },
+          },
+        },
       ]);
 
-      if (resumes.length > 0 && resumes[0].chunks) {
-        // Filhal fallback raw content par hi rakhte hain safety ke liye
-        // Production mein hum yahan specific chunks nikalte hain
-        const r = await ResumeModel.findById(resumeId);
-        if (r) contextText = r.content.substring(0, 5000);
+      if (resumes.length > 0) {
+        // Top match ka content uthao
+        contextText = resumes[0].content?.substring(0, 5000) || "";
+        console.log("✅ Vector Search Success");
       } else {
-        throw new Error("No vectors found");
+        throw new Error("No vectors found (Similarity too low or Indexing)");
       }
-      console.log("✅ Vector Search Success");
-    } catch (err) {
-      // Agar API Limit khatam ho gayi ya koi error aaya -> Fallback karo (Desi Jugaad)
-      console.warn(
-        "⚠️ Vector Search Failed (Rate Limit or Indexing), switching to Basic Mode."
-      );
+    } catch (err: any) {
+      console.error("🔴 Vector Search Warning:", err.message);
+      console.warn("⚠️ Switching to Basic Mode (Reading raw resume from DB).");
 
+      // Fallback: Agar vector search fail ho, toh seedha ID se utha lo
       const r = await ResumeModel.findById(resumeId);
       if (r) {
-        // Resume ka shuruwat ka hissa utha lo (Fallback)
         contextText = r.content.substring(0, 8000);
       }
     }
 
-    // --- STEP 2: GENERATE RESPONSE ---
-    const conversationHistory = history
-      ? history
-          .map(
-            (msg: any) =>
-              `${msg.role === "user" ? "Candidate" : "Interviewer"}: ${
-                msg.text
-              }`
-          )
-          .join("\n")
-      : "No previous conversation.";
+    // --- STEP 2: GENERATE RESPONSE (Groq - Llama 3) ---
+    // Gemini ka quota khatam ho gaya tha, isliye Groq use kar rahe hain
 
-    const prompt = `
-      You are an expert Technical Interviewer.
+    const systemPrompt = `
+      You are an expert Technical Interviewer for InterviewMinds.ai.
       
       --- RESUME CONTEXT ---
       ${contextText}
       
-      --- HISTORY ---
-      ${conversationHistory}
-      
-      --- CANDIDATE INPUT ---
-      "${message}"
-
       --- INSTRUCTIONS ---
-      1. Reply in HINGLISH if input is Hindi. English if English.
-      2. Ask technical questions based on the Resume Context.
-      3. Keep it short (2-3 sentences).
-      4. DO NOT use Devanagari script.
+      1. Reply in HINGLISH (Mix of Hindi & English).
+      2. Ask exactly ONE technical question based on the Resume Context.
+      3. Keep it professional but conversational.
+      4. Do not provide the answer, just ask the question.
+      5. If the user says "Hi" or "Intro", start with a welcome message referencing their resume skills.
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const aiText = response.text();
+    // History format karna Groq ke liye
+    const messages: any[] = [{ role: "system", content: systemPrompt }];
+
+    if (history && Array.isArray(history)) {
+      history.forEach((msg: any) => {
+        messages.push({
+          role: msg.role === "user" ? "user" : "assistant",
+          content: msg.text,
+        });
+      });
+    }
+
+    // Current message add karo
+    messages.push({ role: "user", content: message });
+
+    // AI ko call karo
+    const completion = await groq.chat.completions.create({
+      messages: messages,
+      model: "llama-3.3-70b-versatile", // Super Fast & Free Limit
+      temperature: 0.7,
+    });
+
+    const aiText =
+      completion.choices[0]?.message?.content ||
+      "Server Error: No response from AI.";
 
     res.json({ reply: aiText });
   } catch (error: any) {
-    console.error("❌ Chat Error:", error);
-    res.status(500).json({ error: "AI Failed", details: error.message });
+    console.error("❌ Critical Chat Error:", error.message);
+    res
+      .status(500)
+      .json({ error: "AI Service Failed", details: error.message });
   }
 });
 
