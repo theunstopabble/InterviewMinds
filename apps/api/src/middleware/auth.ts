@@ -1,11 +1,10 @@
 import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
-import { Request, Response, NextFunction } from "express"; // ✅ Types Import kiye
+import { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
 
-// .env load karo
 dotenv.config();
 
-// Debugging: Check karo ki key mili ya nahi
+// Debugging Logs (Optional - rakh sakte ho agar dekhna hai)
 console.log("Checking Clerk Keys...");
 console.log(
   "Publishable Key:",
@@ -16,13 +15,9 @@ console.log(
   process.env.CLERK_SECRET_KEY ? "✅ Found" : "❌ Missing",
 );
 
-// 1. Clerk Middleware Instance Banao
-const clerkAuth = ClerkExpressRequireAuth({
-  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-  secretKey: process.env.CLERK_SECRET_KEY,
-});
+// ✅ FIX: Empty Call. Clerk automatically reads keys from process.env
+const clerkAuth = ClerkExpressRequireAuth();
 
-// 2. Wrapper Function Banao (Types Fix karne ke liye)
 export const requireAuth = (
   req: Request,
   res: Response,
@@ -30,13 +25,11 @@ export const requireAuth = (
 ) => {
   clerkAuth(req, res, (err: any) => {
     if (err) {
-      console.error("Auth Error Details:", err);
-      // Agar error aaye (jaise token missing/invalid), to 401 bhejo
+      console.error("Auth Error Details:", err.message);
       return res
         .status(401)
         .json({ error: "Unauthorized! Please login first." });
     }
-    // Agar sab sahi hai, to agle route par jao
     next();
   });
 };
