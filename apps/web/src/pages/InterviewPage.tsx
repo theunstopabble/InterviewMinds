@@ -19,6 +19,8 @@ import { executeCode } from "@/services/compiler";
 import { useSpeech } from "@/hooks/useSpeech";
 import WebcamAnalysis from "@/components/WebcamAnalysis";
 import { useAudioAnalysis } from "@/hooks/useAudioAnalysis";
+import { useProctoring } from "@/hooks/useProctoring";
+import ProctoringUI from "@/components/ProctoringUI";
 
 interface Message {
   role: "user" | "ai";
@@ -76,6 +78,7 @@ export default function InterviewPage() {
 
   // 🎧 Phase 7: Audio Intelligence Hook
   const { warning } = useAudioAnalysis(isListening);
+  const { violationCount, lastViolation } = useProctoring(isInterviewStarted);
 
   // --- EDITOR STATE ---
   const [code, setCode] = useState<string | undefined>(
@@ -331,11 +334,20 @@ export default function InterviewPage() {
 
         {/* 🎥 NEW: Webcam Analysis Section */}
         <div className="relative p-4 bg-slate-950/30 border-b border-white/10 shrink-0">
+          {/* 1. Camera Feed */}
           <WebcamAnalysis
             onEmotionUpdate={setUserEmotion}
             isInterviewActive={isInterviewStarted}
             onRecordingComplete={(blob) => setRecordedBlob(blob)}
           />
+
+          {/* 2. Proctoring UI (Warnings) - ✅ Separate Component */}
+          <ProctoringUI
+            violationCount={violationCount}
+            lastViolation={lastViolation}
+          />
+
+          {/* 3. Audio Coach UI (Existing) */}
 
           {/* 🎤 AUDIO COACH (Phase 7) */}
           {isListening && warning && (
