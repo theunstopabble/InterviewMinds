@@ -1,31 +1,34 @@
 import { Link, useLocation } from "react-router-dom";
-import { UserButton } from "@clerk/clerk-react";
+import { UserButton, useAuth } from "@clerk/clerk-react"; // ✅ Auth Hook Added
 import { LayoutDashboard, PlusCircle, Download, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 
 export default function Navbar() {
+  const { isSignedIn } = useAuth(); // ✅ Check if user is logged in
   const location = useLocation();
   const isActive = (path: string) => location.pathname === path;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // --- 📱 PWA INSTALL LOGIC START ---
+  // ===========================================================================
+  // 📱 PWA INSTALL LOGIC (Start)
+  // ===========================================================================
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    // 1. Check if already installed
+    // 1. Check if already installed (Standalone Mode)
     if (window.matchMedia("(display-mode: standalone)").matches) {
       setIsInstalled(true);
     }
 
-    // 2. Listen for "Ready to Install" event
+    // 2. Listen for "beforeinstallprompt" event
     const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
+      e.preventDefault(); // Prevent default mini-infobar
+      setDeferredPrompt(e); // Save event for later
     };
 
-    // 3. Listen for success
+    // 3. Listen for successful installation
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
@@ -38,7 +41,7 @@ export default function Navbar() {
     return () => {
       window.removeEventListener(
         "beforeinstallprompt",
-        handleBeforeInstallPrompt
+        handleBeforeInstallPrompt,
       );
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
@@ -46,13 +49,15 @@ export default function Navbar() {
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
-    deferredPrompt.prompt();
+    deferredPrompt.prompt(); // Show install prompt
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === "accepted") {
       setDeferredPrompt(null);
     }
   };
-  // --- 📱 PWA INSTALL LOGIC END ---
+  // ===========================================================================
+  // 📱 PWA INSTALL LOGIC (End)
+  // ===========================================================================
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -60,17 +65,16 @@ export default function Navbar() {
   }, [location.pathname]);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-slate-950/50 backdrop-blur-xl">
+    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-slate-950/50 backdrop-blur-xl transition-all duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        {/* ================= LEFT: LOGO (UPDATED) ================= */}
+        {/* ================= LEFT: LOGO ================= */}
         <Link to="/" className="flex items-center gap-3 group shrink-0">
-          {/* ✅ Ab hum PWA Image use kar rahe hain (Sparkles hata diya) */}
+          {/* ✅ PWA Icon as Logo */}
           <img
             src="/pwa-192x192.png"
             alt="InterviewMinds Logo"
-            className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform"
+            className="w-8 h-8 rounded-lg shadow-lg shadow-blue-500/20 group-hover:scale-110 transition-transform duration-300"
           />
-
           <span className="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
             InterviewMinds
           </span>
@@ -78,7 +82,7 @@ export default function Navbar() {
 
         {/* ================= CENTER: DESKTOP MENU ================= */}
         <div className="hidden md:flex items-center gap-4">
-          {/* Desktop Install Button */}
+          {/* 1. Install App Button (Only if installable) */}
           {!isInstalled && deferredPrompt && (
             <Button
               onClick={handleInstallClick}
@@ -91,40 +95,62 @@ export default function Navbar() {
             </Button>
           )}
 
-          <Link to="/dashboard">
-            <Button
-              variant="ghost"
-              className={`gap-2 text-slate-300 hover:text-white hover:bg-white/5 ${
-                isActive("/dashboard") ? "bg-white/10 text-white" : ""
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              Dashboard
-            </Button>
-          </Link>
+          {/* 2. Navigation Links (Only if Signed In) */}
+          {isSignedIn ? (
+            <>
+              <Link to="/dashboard">
+                <Button
+                  variant="ghost"
+                  className={`gap-2 text-slate-300 hover:text-white hover:bg-white/5 ${
+                    isActive("/dashboard") ? "bg-white/10 text-white" : ""
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </Button>
+              </Link>
 
-          <Link to="/">
-            <Button
-              className={`gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-0 ${
-                isActive("/")
-                  ? "opacity-100 shadow-lg shadow-blue-500/20"
-                  : "opacity-90"
-              }`}
-            >
-              <PlusCircle className="w-4 h-4" />
-              New Interview
-            </Button>
-          </Link>
+              <Link to="/interview">
+                {" "}
+                {/* Updated to point to Interview Page explicitly if needed, or keep '/' */}
+                <Button
+                  className={`gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-0 ${
+                    isActive("/interview")
+                      ? "opacity-100 shadow-lg shadow-blue-500/20"
+                      : "opacity-90"
+                  }`}
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  New Interview
+                </Button>
+              </Link>
 
-          {/* User Profile */}
-          <div className="ml-2">
-            <UserButton afterSignOutUrl="/sign-in" />
-          </div>
+              {/* User Profile */}
+              <div className="ml-2">
+                <UserButton
+                  afterSignOutUrl="/sign-in"
+                  appearance={{
+                    elements: {
+                      avatarBox:
+                        "w-9 h-9 border-2 border-slate-700 hover:border-blue-500 transition-all",
+                    },
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            /* 3. Sign In Button (If logged out) */
+            <Link to="/sign-in">
+              <Button className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/20">
+                Sign In
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* ================= RIGHT: MOBILE ACTIONS ================= */}
         <div className="flex items-center gap-2 md:hidden">
-          {/* Mobile Install Button (Icon Only) */}
+          {/* Mobile Install Icon */}
           {!isInstalled && deferredPrompt && (
             <button
               onClick={handleInstallClick}
@@ -135,13 +161,15 @@ export default function Navbar() {
             </button>
           )}
 
-          {/* User Profile */}
-          <div className="flex items-center justify-center">
-            <UserButton
-              afterSignOutUrl="/sign-in"
-              appearance={{ elements: { avatarBox: "w-8 h-8" } }}
-            />
-          </div>
+          {/* Mobile User Profile */}
+          {isSignedIn ? (
+            <div className="flex items-center justify-center">
+              <UserButton
+                afterSignOutUrl="/sign-in"
+                appearance={{ elements: { avatarBox: "w-8 h-8" } }}
+              />
+            </div>
+          ) : null}
 
           {/* Hamburger Menu Toggle */}
           <button
@@ -160,26 +188,36 @@ export default function Navbar() {
       {/* ================= MOBILE MENU DROPDOWN ================= */}
       {isMobileMenuOpen && (
         <div className="md:hidden bg-slate-950 border-b border-white/10 p-4 space-y-3 animate-in slide-in-from-top-2 shadow-2xl">
-          <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
-            <Button
-              variant="ghost"
-              className={`w-full justify-start gap-2 ${
-                isActive("/dashboard")
-                  ? "bg-white/10 text-white"
-                  : "text-slate-300"
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              Dashboard
-            </Button>
-          </Link>
+          {isSignedIn ? (
+            <>
+              <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button
+                  variant="ghost"
+                  className={`w-full justify-start gap-2 ${
+                    isActive("/dashboard")
+                      ? "bg-white/10 text-white"
+                      : "text-slate-300"
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </Button>
+              </Link>
 
-          <Link to="/" onClick={() => setIsMobileMenuOpen(false)}>
-            <Button className="w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-purple-600">
-              <PlusCircle className="w-4 h-4" />
-              New Interview
-            </Button>
-          </Link>
+              <Link to="/interview" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button className="w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-purple-600">
+                  <PlusCircle className="w-4 h-4" />
+                  New Interview
+                </Button>
+              </Link>
+            </>
+          ) : (
+            <Link to="/sign-in" onClick={() => setIsMobileMenuOpen(false)}>
+              <Button className="w-full bg-blue-600 hover:bg-blue-500">
+                Sign In
+              </Button>
+            </Link>
+          )}
         </div>
       )}
     </nav>
