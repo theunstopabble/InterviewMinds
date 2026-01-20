@@ -18,6 +18,7 @@ import { OutputConsole } from "@/components/OutputConsole";
 import { executeCode } from "@/services/compiler";
 import { useSpeech } from "@/hooks/useSpeech";
 import WebcamAnalysis from "@/components/WebcamAnalysis";
+import { useAudioAnalysis } from "@/hooks/useAudioAnalysis"; // ✅ Phase 7 Import
 
 interface Message {
   role: "user" | "ai";
@@ -51,7 +52,7 @@ export default function InterviewPage() {
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
 
-  // ✅ FIX: Log emotion to satisfy TypeScript unused variable check & for debugging
+  // ✅ Log emotion to satisfy TypeScript unused variable check & for debugging
   useEffect(() => {
     if (userEmotion) {
       // console.log("Real-time Emotion Detected:", userEmotion);
@@ -72,6 +73,9 @@ export default function InterviewPage() {
     cancelSpeech,
     setTranscript,
   } = useSpeech();
+
+  // 🎧 Phase 7: Audio Intelligence Hook
+  const { warning } = useAudioAnalysis(isListening);
 
   // --- EDITOR STATE ---
   const [code, setCode] = useState<string | undefined>(
@@ -295,6 +299,26 @@ export default function InterviewPage() {
             isInterviewActive={isInterviewStarted}
             onRecordingComplete={(blob) => setRecordedBlob(blob)}
           />
+
+          {/* 🎤 AUDIO COACH (New Feature) */}
+          {isListening && warning && (
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
+              <div
+                className={`px-4 py-1.5 rounded-full text-xs font-bold shadow-lg backdrop-blur-md transition-all flex items-center gap-2 border ${
+                  warning.includes("Good")
+                    ? "bg-green-500/20 text-green-400 border-green-500/50"
+                    : "bg-yellow-500/20 text-yellow-400 border-yellow-500/50 animate-bounce"
+                }`}
+              >
+                {warning.includes("Quiet") ? (
+                  <Volume2 className="w-3 h-3" />
+                ) : (
+                  <Sparkles className="w-3 h-3" />
+                )}
+                {warning}
+              </div>
+            </div>
+          )}
 
           {/* 🔊 Audio Visualizer (Overlay when speaking) */}
           {isSpeaking && (
