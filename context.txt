@@ -1,4 +1,7 @@
 InterviewMinds
+├── .github
+│   └── workflows
+│       └── main.yml
 ├── .turbo
 │   └── daemon
 │       └── b740e4c89c5e5a93-turbo.log.2026-01-17
@@ -70,6 +73,7 @@ InterviewMinds
 │       │   ├── index.css
 │       │   └── main.tsx
 │       ├── .env
+│       ├── .gitignore
 │       ├── README.md
 │       ├── components.json
 │       ├── eslint.config.js
@@ -88,6 +92,7 @@ InterviewMinds
 │       ├── index.ts
 │       ├── package.json
 │       └── tsconfig.json
+├── .gitignore
 ├── context.txt
 ├── package-lock.json
 ├── package.json

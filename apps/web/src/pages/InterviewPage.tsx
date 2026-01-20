@@ -18,6 +18,7 @@ import CodeEditor from "@/components/CodeEditor";
 import { OutputConsole } from "@/components/OutputConsole";
 import { executeCode } from "@/services/compiler";
 import { useSpeech } from "@/hooks/useSpeech";
+import WebcamAnalysis from "@/components/WebcamAnalysis"; // ✅ Phase 6: Import Webcam
 
 interface Message {
   role: "user" | "ai";
@@ -29,9 +30,9 @@ const PERSONA_DETAILS: Record<
   string,
   { name: string; gender: "male" | "female" }
 > = {
-  strict: { name: "Vikram", gender: "male" }, // Azure: Prabhat
-  friendly: { name: "Neha", gender: "female" }, // Azure: Neerja
-  system: { name: "Sam", gender: "male" }, // Azure: Prabhat
+  strict: { name: "Vikram", gender: "male" },
+  friendly: { name: "Neha", gender: "female" },
+  system: { name: "Sam", gender: "male" },
 };
 
 export default function InterviewPage() {
@@ -43,10 +44,13 @@ export default function InterviewPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   // ⚙️ CONTROLS STATE
-  const [persona, setPersona] = useState("strict"); // Default: Vikram
+  const [persona, setPersona] = useState("strict");
   const [difficulty, setDifficulty] = useState("medium");
 
-  // 🔒 STRICT LOCKS (To prevent double audio/requests)
+  // 🎥 Phase 6: Emotion State
+  const [userEmotion, setUserEmotion] = useState("Neutral");
+
+  // 🔒 STRICT LOCKS
   const isProcessing = useRef(false);
   const hasInitialized = useRef(false);
 
@@ -56,7 +60,7 @@ export default function InterviewPage() {
     transcript,
     startListening,
     stopListening,
-    speak, // Now accepts (text, gender)
+    speak,
     cancelSpeech,
     setTranscript,
   } = useSpeech();
@@ -72,10 +76,9 @@ export default function InterviewPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 🧠 HELPER: Get Current Gender based on Persona
   const getCurrentGender = () => PERSONA_DETAILS[persona]?.gender || "female";
 
-  // --- 1. STRICT INITIALIZATION (Run Once) ---
+  // --- 1. INITIALIZATION ---
   useEffect(() => {
     const resumeId = localStorage.getItem("resumeId");
     if (!resumeId) {
@@ -84,10 +87,8 @@ export default function InterviewPage() {
       return;
     }
 
-    // ✅ Only run if not already initialized
     if (!hasInitialized.current) {
       hasInitialized.current = true;
-      // Start the interview
       handleAIResponse(
         "Start the technical interview based on my resume.",
         true,
@@ -95,14 +96,14 @@ export default function InterviewPage() {
     }
   }, []);
 
-  // --- 2. VOICE SYNC (Transcript -> Input) ---
+  // --- 2. VOICE SYNC ---
   useEffect(() => {
     if (transcript) {
       setInput(transcript);
     }
   }, [transcript]);
 
-  // --- 3. AUTO-SUBMIT LOGIC ---
+  // --- 3. AUTO-SUBMIT ---
   useEffect(() => {
     if (
       !isListening &&
@@ -115,7 +116,7 @@ export default function InterviewPage() {
           handleAIResponse(transcript);
           setTranscript("");
         }
-      }, 800); // 800ms silence detection
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [isListening, transcript, isLoading]);
@@ -127,7 +128,7 @@ export default function InterviewPage() {
     }
   }, [messages]);
 
-  // --- 5. RUN CODE LOGIC ---
+  // --- 5. RUN CODE ---
   const handleRunCode = async () => {
     if (!code) return;
     setIsCompiling(true);
@@ -156,16 +157,12 @@ export default function InterviewPage() {
     const trimmedMsg = userMessage.trim();
     if (!trimmedMsg) return;
 
-    // 🔒 Lock Check
     if (isProcessing.current) return;
-
-    // 🔒 Set Lock
     isProcessing.current = true;
     setIsLoading(true);
 
     const resumeId = localStorage.getItem("resumeId");
 
-    // UI Update (User Message)
     if (!isInit) {
       setMessages((prev) => [...prev, { role: "user", content: trimmedMsg }]);
       setInput("");
@@ -173,7 +170,6 @@ export default function InterviewPage() {
     }
 
     try {
-      // 📡 Backend Call
       const res = await api.post("/chat", {
         message: trimmedMsg,
         resumeId,
@@ -181,24 +177,19 @@ export default function InterviewPage() {
           role: m.role === "ai" ? "model" : "user",
           text: m.content,
         })),
-        mode: persona, // "strict" | "friendly" | "system"
-        difficulty: difficulty, // "easy" | "medium" | "hard"
+        mode: persona,
+        difficulty: difficulty,
+        // emotion: userEmotion // Future: Send emotion to backend
       });
 
       const aiReply = res.data.reply;
-
-      // UI Update (AI Message)
       setMessages((prev) => [...prev, { role: "ai", content: aiReply }]);
-
-      // 🔊 SPEAK with Correct Gender
-      // Is function mein hum text aur gender dono bhej rahe hain
       speak(aiReply, getCurrentGender());
     } catch (error) {
       console.error(error);
       toast.error("Failed to connect to AI.");
     } finally {
       setIsLoading(false);
-      // 🔓 Release Lock (with slight delay for safety)
       setTimeout(() => {
         isProcessing.current = false;
       }, 500);
@@ -225,10 +216,10 @@ export default function InterviewPage() {
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full bg-black text-white overflow-hidden">
-      {/* --- LEFT PANEL: Chat & Controls --- */}
+      {/* --- LEFT PANEL: Chat & Video Controls --- */}
       <div className="w-full lg:w-[40%] h-[45%] lg:h-full flex flex-col border-r border-white/10 bg-slate-950/50 relative order-1">
         {/* Header Section */}
-        <div className="p-3 border-b border-white/10 flex flex-col gap-3 bg-slate-900/50">
+        <div className="p-3 border-b border-white/10 flex flex-col gap-3 bg-slate-900/50 shrink-0">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-blue-400" />
@@ -246,9 +237,8 @@ export default function InterviewPage() {
             </Button>
           </div>
 
-          {/* 🎛️ CONTROLS: Persona & Difficulty */}
+          {/* 🎛️ CONTROLS */}
           <div className="flex gap-2">
-            {/* Persona Selector */}
             <div className="flex-1 flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-md px-2 py-1 hover:border-blue-500/50 transition-colors">
               <Settings2 className="w-3 h-3 text-slate-400" />
               <select
@@ -263,7 +253,6 @@ export default function InterviewPage() {
               </select>
             </div>
 
-            {/* Difficulty Selector */}
             <div className="w-[100px] flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-md px-2 py-1 hover:border-blue-500/50 transition-colors">
               <select
                 value={difficulty}
@@ -279,25 +268,21 @@ export default function InterviewPage() {
           </div>
         </div>
 
-        {/* Visualizer (The Glowing Circle) */}
-        <div className="flex justify-center py-4 bg-slate-950/30">
-          <div
-            className={`relative w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
-              isSpeaking
-                ? "border-blue-500 shadow-lg shadow-blue-500/20 scale-110"
-                : "border-slate-700"
-            }`}
-          >
-            {isLoading ? (
-              <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
-            ) : isSpeaking ? (
-              <Volume2 className="w-6 h-6 text-blue-400 animate-pulse" />
-            ) : (
-              <div className="w-3 h-3 bg-slate-600 rounded-full" />
-            )}
-          </div>
-        </div>
+        {/* 🎥 NEW: Webcam Analysis Section */}
+        <div className="relative p-4 bg-slate-950/30 border-b border-white/10 shrink-0">
+          <WebcamAnalysis onEmotionUpdate={setUserEmotion} />
 
+          {/* 🔊 Audio Visualizer (Overlay when speaking) */}
+          {isSpeaking && (
+            // 'top-[280px]' hata kar 'bottom-6 right-6' kar diya
+            // Isse ye hamesha Webcam ke bottom-right corner mein chipka rahega
+            <div className="absolute bottom-6 right-6 z-20 pointer-events-none">
+              <div className="w-10 h-10 rounded-full bg-slate-900/80 backdrop-blur-md border border-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20 animate-pulse">
+                <Volume2 className="w-5 h-5 text-blue-400" />
+              </div>
+            </div>
+          )}
+        </div>
         {/* Chat Messages Area */}
         <ScrollArea className="flex-1 p-4">
           <div className="space-y-4 pb-4">
@@ -322,7 +307,7 @@ export default function InterviewPage() {
         </ScrollArea>
 
         {/* Input & Mic Controls */}
-        <div className="p-4 border-t border-white/10 bg-slate-900">
+        <div className="p-4 border-t border-white/10 bg-slate-900 shrink-0">
           <div className="flex gap-2">
             <Button
               variant="outline"
