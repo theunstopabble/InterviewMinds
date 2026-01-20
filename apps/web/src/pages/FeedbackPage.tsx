@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
+import { api } from "@/lib/api";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   Trophy,
   Target,
   Download,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,14 +32,13 @@ import {
   Tooltip,
 } from "recharts";
 
+// ✅ Interface matching Phase 4 Backend (Interview.ts)
 interface InterviewData {
-  feedback: {
-    rating: number;
-    strengths: string[];
-    improvements: string[];
-    summary: string;
-  };
-  conversation: { role: string; text: string }[];
+  score: number; // 0-100
+  feedback: string;
+  metrics: { subject: string; A: number; fullMark: number }[];
+  messages: { role: string; text: string }[];
+  createdAt: string;
 }
 
 export default function FeedbackPage() {
@@ -50,6 +50,7 @@ export default function FeedbackPage() {
   useEffect(() => {
     const fetchFeedback = async () => {
       try {
+        // Backend GET /api/interview/:id
         const res = await api.get(`/interview/${id}`);
         setData(res.data);
       } catch (error) {
@@ -64,35 +65,58 @@ export default function FeedbackPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+        <span className="ml-3 text-white text-lg font-medium">
+          Generating Analysis...
+        </span>
       </div>
     );
   }
 
   if (!data)
-    return <div className="text-white text-center mt-20">No Data Found</div>;
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        No Data Found
+      </div>
+    );
 
-  // 📊 Chart Data Logic (Mocking breakdown based on overall rating)
-  const chartData = [
-    { subject: "Technical", A: data.feedback.rating * 10 + 5, fullMark: 100 },
-    { subject: "Communication", A: data.feedback.rating * 10, fullMark: 100 },
-    {
-      subject: "Problem Solving",
-      A: data.feedback.rating * 10 - 5,
-      fullMark: 100,
-    },
-    { subject: "Confidence", A: data.feedback.rating * 10 + 2, fullMark: 100 },
-    { subject: "Resume Match", A: 90, fullMark: 100 },
-  ];
+  // 🧠 DERIVED DATA LOGIC
+  const ratingOutOf10 = Math.round(data.score / 10); // Convert 0-100 to 0-10
+
+  // Use real metrics from backend, or fallback if empty
+  const chartData =
+    data.metrics.length > 0
+      ? data.metrics
+      : [
+          { subject: "Technical", A: 0, fullMark: 100 },
+          { subject: "Communication", A: 0, fullMark: 100 },
+          { subject: "Problem Solving", A: 0, fullMark: 100 },
+        ];
+
+  // Dynamic Strengths based on Metrics (> 70 is strong)
+  const strengths = data.metrics
+    .filter((m) => m.A >= 70)
+    .map((m) => `Strong proficiency in ${m.subject}`);
+
+  // Dynamic Improvements based on Metrics (< 70 needs work)
+  const improvements = data.metrics
+    .filter((m) => m.A < 70)
+    .map((m) => `Needs focus on ${m.subject}`);
+
+  // Fallbacks if lists are empty
+  if (strengths.length === 0)
+    strengths.push("Consistent performance across board");
+  if (improvements.length === 0)
+    improvements.push("Keep practicing to maintain edge");
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6 md:p-12 font-sans">
+    <div className="min-h-screen bg-black text-white p-4 md:p-10 font-sans">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* 🟢 Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
           <div>
-            <h1 className="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+            <h1 className="text-3xl md:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
               Performance Analysis
             </h1>
             <p className="text-slate-400 mt-2">
@@ -102,15 +126,23 @@ export default function FeedbackPage() {
           <div className="flex gap-3">
             <Button
               variant="outline"
-              className="gap-2 border-slate-700 text-slate-300 hover:bg-slate-800"
+              className="gap-2 border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
+              onClick={() => toast.info("PDF Export coming soon!")}
             >
               <Download className="w-4 h-4" /> Export PDF
             </Button>
             <Button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/interview")}
               className="gap-2 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20"
             >
-              <Home className="w-4 h-4" /> Dashboard
+              <RotateCcw className="w-4 h-4" /> Retry
+            </Button>
+            <Button
+              onClick={() => navigate("/dashboard")}
+              variant="secondary"
+              className="gap-2"
+            >
+              <Home className="w-4 h-4" /> Home
             </Button>
           </div>
         </div>
@@ -147,20 +179,20 @@ export default function FeedbackPage() {
                       strokeWidth="12"
                       fill="transparent"
                       className={`${
-                        data.feedback.rating >= 7
+                        ratingOutOf10 >= 7
                           ? "text-green-500"
-                          : data.feedback.rating >= 4
-                          ? "text-yellow-500"
-                          : "text-red-500"
+                          : ratingOutOf10 >= 4
+                            ? "text-yellow-500"
+                            : "text-red-500"
                       } transition-all duration-1000 ease-out`}
                       strokeDasharray={502}
-                      strokeDashoffset={502 - (502 * data.feedback.rating) / 10}
+                      strokeDashoffset={502 - (502 * ratingOutOf10) / 10}
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute flex flex-col items-center animate-in zoom-in duration-500">
                     <span className="text-6xl font-bold text-white">
-                      {data.feedback.rating}
+                      {ratingOutOf10}
                     </span>
                     <span className="text-sm text-slate-400 uppercase font-semibold tracking-wider">
                       out of 10
@@ -169,19 +201,19 @@ export default function FeedbackPage() {
                 </div>
 
                 <Badge
-                  className={`mt-6 px-6 py-2 text-lg font-medium ${
-                    data.feedback.rating >= 8
-                      ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
-                      : data.feedback.rating >= 5
-                      ? "bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"
-                      : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                  className={`mt-6 px-6 py-2 text-lg font-medium border-0 ${
+                    ratingOutOf10 >= 8
+                      ? "bg-green-500/20 text-green-400"
+                      : ratingOutOf10 >= 5
+                        ? "bg-yellow-500/20 text-yellow-400"
+                        : "bg-red-500/20 text-red-400"
                   }`}
                 >
-                  {data.feedback.rating >= 8
+                  {ratingOutOf10 >= 8
                     ? "Excellent"
-                    : data.feedback.rating >= 5
-                    ? "Good"
-                    : "Needs Improvement"}
+                    : ratingOutOf10 >= 5
+                      ? "Good"
+                      : "Needs Improvement"}
                 </Badge>
               </CardContent>
             </Card>
@@ -251,7 +283,7 @@ export default function FeedbackPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-slate-300 leading-relaxed text-lg font-light">
-                  "{data.feedback.summary}"
+                  "{data.feedback}"
                 </p>
               </CardContent>
             </Card>
@@ -267,7 +299,7 @@ export default function FeedbackPage() {
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-4">
-                    {data.feedback.strengths.map((item, i) => (
+                    {strengths.map((item, i) => (
                       <li
                         key={i}
                         className="flex gap-3 text-slate-300 items-start"
@@ -291,7 +323,7 @@ export default function FeedbackPage() {
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-4">
-                    {data.feedback.improvements.map((item, i) => (
+                    {improvements.map((item, i) => (
                       <li
                         key={i}
                         className="flex gap-3 text-slate-300 items-start"
@@ -305,7 +337,7 @@ export default function FeedbackPage() {
               </Card>
             </div>
 
-            {/* 5. Transcript Area (Scrollable) */}
+            {/* 5. Transcript Area */}
             <Card className="bg-slate-900/50 border-slate-800 shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl">Interview Transcript</CardTitle>
@@ -315,33 +347,39 @@ export default function FeedbackPage() {
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px] w-full rounded-xl border border-slate-800 p-6 bg-slate-950/30">
-                  {data.conversation.map((msg, i) => (
-                    <div
-                      key={i}
-                      className={`mb-6 flex ${
-                        msg.role === "user" ? "justify-end" : "justify-start"
-                      }`}
-                    >
+                  {data.messages &&
+                    data.messages.map((msg, i) => (
                       <div
-                        className={`flex flex-col max-w-[80%] ${
-                          msg.role === "user" ? "items-end" : "items-start"
+                        key={i}
+                        className={`mb-6 flex ${
+                          msg.role === "user" ? "justify-end" : "justify-start"
                         }`}
                       >
-                        <span className="text-xs text-slate-500 mb-1 uppercase font-bold tracking-wider">
-                          {msg.role === "user" ? "You" : "AI Interviewer"}
-                        </span>
                         <div
-                          className={`p-4 rounded-2xl text-sm leading-relaxed ${
-                            msg.role === "user"
-                              ? "bg-blue-600 text-white rounded-tr-none shadow-lg shadow-blue-900/20"
-                              : "bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700"
+                          className={`flex flex-col max-w-[80%] ${
+                            msg.role === "user" ? "items-end" : "items-start"
                           }`}
                         >
-                          {msg.text}
+                          <span className="text-xs text-slate-500 mb-1 uppercase font-bold tracking-wider">
+                            {msg.role === "user" ? "You" : "AI Interviewer"}
+                          </span>
+                          <div
+                            className={`p-4 rounded-2xl text-sm leading-relaxed ${
+                              msg.role === "user"
+                                ? "bg-blue-600 text-white rounded-tr-none shadow-lg shadow-blue-900/20"
+                                : "bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700"
+                            }`}
+                          >
+                            {msg.text}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  {(!data.messages || data.messages.length === 0) && (
+                    <p className="text-center text-slate-500">
+                      No transcript available.
+                    </p>
+                  )}
                 </ScrollArea>
               </CardContent>
             </Card>
