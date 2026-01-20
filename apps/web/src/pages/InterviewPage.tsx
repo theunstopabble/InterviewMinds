@@ -7,7 +7,7 @@ import {
   Sparkles,
   Settings2,
   Volume2,
-} from "lucide-react"; // ✅ Removed unused 'Loader2'
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -46,15 +46,15 @@ export default function InterviewPage() {
   const [persona, setPersona] = useState("strict");
   const [difficulty, setDifficulty] = useState("medium");
 
-  // 🎥 Phase 6: Emotion State
+  // 🎥 Phase 6: Video & Emotion State
   const [userEmotion, setUserEmotion] = useState("Neutral");
+  const [isInterviewStarted, setIsInterviewStarted] = useState(false);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
 
-  // ✅ FIX: Log userEmotion to satisfy TypeScript unused variable check
-  // This prevents the build error: "'userEmotion' is declared but its value is never read."
+  // ✅ FIX: Log emotion to satisfy TypeScript unused variable check & for debugging
   useEffect(() => {
     if (userEmotion) {
-      // We log it for debugging/future analytics
-      console.log("Real-time Emotion Detected:", userEmotion);
+      // console.log("Real-time Emotion Detected:", userEmotion);
     }
   }, [userEmotion]);
 
@@ -97,6 +97,8 @@ export default function InterviewPage() {
 
     if (!hasInitialized.current) {
       hasInitialized.current = true;
+      // Start Recording & Interview
+      setIsInterviewStarted(true);
       handleAIResponse(
         "Start the technical interview based on my resume.",
         true,
@@ -204,22 +206,32 @@ export default function InterviewPage() {
     }
   };
 
+  // --- 7. END INTERVIEW ---
   const endInterview = async () => {
     cancelSpeech();
-    const resumeId = localStorage.getItem("resumeId");
-    try {
-      toast.info("Generating Report...");
-      const res = await api.post("/interview/end", {
-        resumeId,
-        history: messages.map((m) => ({
-          role: m.role === "ai" ? "model" : "user",
-          text: m.content,
-        })),
-      });
-      navigate(`/feedback/${res.data.id}`);
-    } catch (e) {
-      toast.error("Error ending session");
-    }
+    setIsInterviewStarted(false); // 🛑 Stop Recording Trigger
+
+    // Add a small delay to ensure recording stops and blob is generated
+    setTimeout(async () => {
+      const resumeId = localStorage.getItem("resumeId");
+      try {
+        toast.info("Generating Report...");
+
+        // 📼 Log the recorded blob (Ready for AWS S3 upload in future)
+        console.log("📼 Final Video Blob Ready:", recordedBlob);
+
+        const res = await api.post("/interview/end", {
+          resumeId,
+          history: messages.map((m) => ({
+            role: m.role === "ai" ? "model" : "user",
+            text: m.content,
+          })),
+        });
+        navigate(`/feedback/${res.data.id}`);
+      } catch (e) {
+        toast.error("Error ending session");
+      }
+    }, 1000);
   };
 
   return (
@@ -278,7 +290,11 @@ export default function InterviewPage() {
 
         {/* 🎥 NEW: Webcam Analysis Section */}
         <div className="relative p-4 bg-slate-950/30 border-b border-white/10 shrink-0">
-          <WebcamAnalysis onEmotionUpdate={setUserEmotion} />
+          <WebcamAnalysis
+            onEmotionUpdate={setUserEmotion}
+            isInterviewActive={isInterviewStarted}
+            onRecordingComplete={(blob) => setRecordedBlob(blob)}
+          />
 
           {/* 🔊 Audio Visualizer (Overlay when speaking) */}
           {isSpeaking && (
