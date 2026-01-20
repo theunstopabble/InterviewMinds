@@ -21,6 +21,7 @@
     "axios": "^1.6.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "face-api.js": "^0.22.2",
     "lucide-react": "^0.300.0",
     "next-themes": "^0.2.1",
     "react": "^18.2.0",

@@ -1,17 +1,24 @@
 import { Link, useLocation } from "react-router-dom";
-import { UserButton, useAuth } from "@clerk/clerk-react"; // ✅ Auth Hook Added
+import { UserButton, useAuth } from "@clerk/clerk-react";
 import { LayoutDashboard, PlusCircle, Download, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 
+// ✅ TypeScript definition for Global Window Variable
+declare global {
+  interface Window {
+    deferredPrompt: any;
+  }
+}
+
 export default function Navbar() {
-  const { isSignedIn } = useAuth(); // ✅ Check if user is logged in
+  const { isSignedIn } = useAuth();
   const location = useLocation();
   const isActive = (path: string) => location.pathname === path;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // ===========================================================================
-  // 📱 PWA INSTALL LOGIC (Start)
+  // 📱 PWA INSTALL LOGIC (Fixed for Mobile Race Conditions)
   // ===========================================================================
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -22,13 +29,22 @@ export default function Navbar() {
       setIsInstalled(true);
     }
 
-    // 2. Listen for "beforeinstallprompt" event
+    // 2. ⚡ CHECK GLOBAL VARIABLE (Mobile Fix)
+    // Agar React load hone se pehle event fire ho gaya tha (index.html me), to yahan se utha lo.
+    if (window.deferredPrompt) {
+      console.log("✅ Found global PWA event captured in index.html");
+      setDeferredPrompt(window.deferredPrompt);
+      window.deferredPrompt = null; // Clear global to avoid duplicates
+    }
+
+    // 3. Listen for "beforeinstallprompt" event (Future events)
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault(); // Prevent default mini-infobar
+      console.log("📢 PWA Event Fired inside React!");
       setDeferredPrompt(e); // Save event for later
     };
 
-    // 3. Listen for successful installation
+    // 4. Listen for successful installation
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
@@ -69,7 +85,6 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* ================= LEFT: LOGO ================= */}
         <Link to="/" className="flex items-center gap-3 group shrink-0">
-          {/* ✅ PWA Icon as Logo */}
           <img
             src="/pwa-192x192.png"
             alt="InterviewMinds Logo"
@@ -111,8 +126,6 @@ export default function Navbar() {
               </Link>
 
               <Link to="/interview">
-                {" "}
-                {/* Updated to point to Interview Page explicitly if needed, or keep '/' */}
                 <Button
                   className={`gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 border-0 ${
                     isActive("/interview")
@@ -190,6 +203,17 @@ export default function Navbar() {
         <div className="md:hidden bg-slate-950 border-b border-white/10 p-4 space-y-3 animate-in slide-in-from-top-2 shadow-2xl">
           {isSignedIn ? (
             <>
+              {/* Fallback Install Button inside Menu */}
+              {!isInstalled && deferredPrompt && (
+                <Button
+                  onClick={handleInstallClick}
+                  variant="outline"
+                  className="w-full justify-start gap-2 border-green-500/30 text-green-400 mb-2"
+                >
+                  <Download className="w-4 h-4" /> Install App
+                </Button>
+              )}
+
               <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
                 <Button
                   variant="ghost"
