@@ -3,12 +3,12 @@ import * as faceapi from "face-api.js";
 import { Loader2, VideoOff, BrainCircuit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner"; // ✅ Import Toast for notifications
+import { toast } from "sonner";
 
 export default function WebcamAnalysis({
   onEmotionUpdate,
-  isInterviewActive, // ✅ New Prop: Controls Recording
-  onRecordingComplete, // ✅ New Prop: Returns Video Blob
+  isInterviewActive, // ✅ Controls Recording
+  onRecordingComplete, // ✅ Returns Video Blob
 }: {
   onEmotionUpdate?: (emotion: string) => void;
   isInterviewActive?: boolean;
@@ -23,15 +23,15 @@ export default function WebcamAnalysis({
 
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(false);
-  const [isRecording, setIsRecording] = useState(false); // ✅ Recording State
+  const [isRecording, setIsRecording] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState<string>("Neutral");
 
   // Timer Ref
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 1. Load AI Models
+  // 1. Load AI Models & Auto-Start Camera
   useEffect(() => {
-    const loadModels = async () => {
+    const initCamera = async () => {
       const MODEL_URL = "/models";
       try {
         await Promise.all([
@@ -40,11 +40,15 @@ export default function WebcamAnalysis({
         ]);
         setIsModelLoaded(true);
         console.log("✅ AI Models Loaded");
+
+        // 🚀 AUTO-START: Models load hote hi camera start karo
+        startVideo();
       } catch (err) {
         console.error("❌ Model Load Error:", err);
+        toast.error("Failed to load AI Models");
       }
     };
-    loadModels();
+    initCamera();
   }, []);
 
   // 2. Control Recording based on Interview Status
@@ -73,7 +77,7 @@ export default function WebcamAnalysis({
       setIsVideoOn(true);
     } catch (err) {
       console.error("Camera Error:", err);
-      toast.error("Camera/Mic access denied");
+      toast.error("Camera/Mic access denied. Please allow permissions.");
     }
   };
 
@@ -82,7 +86,7 @@ export default function WebcamAnalysis({
     if (!videoRef.current || !videoRef.current.srcObject) return;
 
     const stream = videoRef.current.srcObject as MediaStream;
-    // Use supported mime type
+    // Use supported mime type (Prioritize VP9 for quality)
     const mimeType = MediaRecorder.isTypeSupported("video/webm; codecs=vp9")
       ? "video/webm; codecs=vp9"
       : "video/webm";
@@ -121,7 +125,7 @@ export default function WebcamAnalysis({
     }
   };
 
-  // 6. Stop Everything (Robust Stop)
+  // 6. Stop Everything (Robust Cleanup)
   const stopTracks = () => {
     // Stop recording first
     if (isRecording) stopRecording();
@@ -212,7 +216,7 @@ export default function WebcamAnalysis({
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
           )}
           <span className="text-xs">
-            {isModelLoaded ? "Camera Off" : "Loading AI Models..."}
+            {isModelLoaded ? "Starting Camera..." : "Loading AI Models..."}
           </span>
         </div>
       )}
@@ -238,7 +242,7 @@ export default function WebcamAnalysis({
         </div>
       )}
 
-      {/* Controls */}
+      {/* Manual Controls (Hidden by default, visible on hover) */}
       <div className="absolute bottom-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button
           size="sm"

@@ -32,6 +32,11 @@ InterviewMinds
 │       │   ├── sw.js
 │       │   └── workbox-6d1fb45c.js
 │       ├── public
+│       │   ├── models
+│       │   │   ├── face_expression_model-shard1
+│       │   │   ├── face_expression_model-weights_manifest.json
+│       │   │   ├── tiny_face_detector_model-shard1
+│       │   │   └── tiny_face_detector_model-weights_manifest.json
 │       │   ├── favicon.ico
 │       │   ├── pwa-192x192.png
 │       │   └── pwa-512x512.png
@@ -55,8 +60,10 @@ InterviewMinds
 │       │   │   ├── CodeEditor.tsx
 │       │   │   ├── Navbar.tsx
 │       │   │   ├── OutputConsole.tsx
-│       │   │   └── ResumeUpload.tsx
+│       │   │   ├── ResumeUpload.tsx
+│       │   │   └── WebcamAnalysis.tsx
 │       │   ├── hooks
+│       │   │   ├── useAudioAnalysis.ts
 │       │   │   └── useSpeech.ts
 │       │   ├── lib
 │       │   │   ├── api.ts
