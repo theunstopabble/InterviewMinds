@@ -52,7 +52,10 @@ export default function InterviewPage() {
   // 🎥 Phase 6: Video & Emotion State
   const [userEmotion, setUserEmotion] = useState("Neutral");
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
+
+  // ✅ FIX: Ref use kar rahe hain taaki endInterview me latest value mile
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const recordedBlobRef = useRef<Blob | null>(null);
 
   // ✅ Log emotion to satisfy TypeScript unused variable check
   useEffect(() => {
@@ -255,15 +258,13 @@ export default function InterviewPage() {
     cancelSpeech();
     setIsInterviewStarted(false); // 🛑 Stop Recording Trigger
 
-    // Add a small delay to ensure recording stops and blob is generated
+    // ⏳ Wait 2 seconds for blob to generate and Ref to update
     setTimeout(async () => {
       const resumeId = localStorage.getItem("resumeId");
       try {
         toast.info("Generating Report...");
 
-        // 📼 Log the recorded blob (Ready for AWS S3 upload in future)
-        console.log("📼 Final Video Blob Ready:", recordedBlob);
-
+        // 1. Save Text Chat
         const res = await api.post("/interview/end", {
           resumeId,
           history: messages.map((m) => ({
@@ -271,11 +272,34 @@ export default function InterviewPage() {
             text: m.content,
           })),
         });
-        navigate(`/feedback/${res.data.id}`);
+
+        const interviewId = res.data.id;
+
+        // 2. Upload Video using REF (Closure-Safe)
+        const blobToUpload = recordedBlobRef.current; // ✅ Fresh Value
+
+        console.log("📼 Blob Status:", blobToUpload ? "Ready" : "Missing");
+
+        if (blobToUpload) {
+          const videoData = new FormData();
+          videoData.append("video", blobToUpload, "interview.webm");
+          videoData.append("interviewId", interviewId);
+
+          toast.info("Uploading Video...");
+          await api.post("/interview/upload-video", videoData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          console.log("✅ Video Uploaded!");
+        } else {
+          console.warn("⚠️ No video recorded to upload.");
+        }
+
+        navigate(`/feedback/${interviewId}`);
       } catch (e) {
+        console.error(e);
         toast.error("Error ending session");
       }
-    }, 1000);
+    }, 2000); // 2 seconds safety buffer
   };
 
   return (
@@ -338,18 +362,19 @@ export default function InterviewPage() {
           <WebcamAnalysis
             onEmotionUpdate={setUserEmotion}
             isInterviewActive={isInterviewStarted}
-            onRecordingComplete={(blob) => setRecordedBlob(blob)}
+            onRecordingComplete={(blob) => {
+              setRecordedBlob(blob);
+              recordedBlobRef.current = blob; // ✅ Update Ref for immediate access
+            }}
           />
 
-          {/* 2. Proctoring UI (Warnings) - ✅ Separate Component */}
+          {/* 2. Proctoring UI (Warnings) */}
           <ProctoringUI
             violationCount={violationCount}
             lastViolation={lastViolation}
           />
 
-          {/* 3. Audio Coach UI (Existing) */}
-
-          {/* 🎤 AUDIO COACH (Phase 7) */}
+          {/* 3. Audio Coach UI */}
           {isListening && warning && (
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
               <div
@@ -369,7 +394,7 @@ export default function InterviewPage() {
             </div>
           )}
 
-          {/* 🔊 Audio Visualizer (Overlay when speaking) */}
+          {/* 🔊 Audio Visualizer */}
           {isSpeaking && (
             <div className="absolute bottom-6 right-6 z-20 pointer-events-none">
               <div className="w-10 h-10 rounded-full bg-slate-900/80 backdrop-blur-md border border-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20 animate-pulse">

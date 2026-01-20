@@ -3,6 +3,9 @@ import { InterviewModel } from "../models/Interview";
 import { requireAuth } from "../middleware/auth";
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
 
@@ -171,6 +174,44 @@ router.get("/:id", requireAuth, async (req: any, res: any) => {
   } catch (error) {
     console.error("Fetch Error:", error);
     res.status(500).json({ error: "Server Error" });
+  }
+});
+
+// 1. Storage Configuration (Local Disk)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = "uploads/videos";
+    // Folder nahi hai to banao
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    // Filename: interviewId_timestamp.webm
+    cb(null, `${req.body.interviewId}_${Date.now()}.webm`);
+  },
+});
+
+const uploadVideo = multer({ storage });
+
+// 2. Upload Route
+router.post("/upload-video", requireAuth, uploadVideo.single("video"), async (req: any, res: any) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No video file" });
+
+    const { interviewId } = req.body;
+    console.log(`📼 Video Saved for Interview ${interviewId}: ${req.file.path}`);
+
+    // TODO: Future mein yahan se Python Service ko call karenge analyze karne ke liye
+    
+    // Database mein video path update kar sakte ho (Optional abhi ke liye)
+    // await InterviewModel.findByIdAndUpdate(interviewId, { videoPath: req.file.path });
+
+    res.json({ message: "Video uploaded successfully", path: req.file.path });
+  } catch (error) {
+    console.error("Upload Error:", error);
+    res.status(500).json({ error: "Video upload failed" });
   }
 });
 

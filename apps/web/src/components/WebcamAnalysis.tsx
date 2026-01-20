@@ -166,6 +166,14 @@ export default function WebcamAnalysis({
         .detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions())
         .withFaceExpressions();
 
+      // 🚨 NEW: MULTIPLE FACE DETECTION LOGIC
+      if (detections.length > 1) {
+        toast.error("⚠️ Multiple Faces Detected!", {
+          description: "Only the candidate should be visible.",
+          duration: 2000, // Jaldi hatega taaki spam na ho
+        });
+      }
+
       if (detections.length > 0) {
         const expressions = detections[0].expressions;
         const maxEmotion = Object.keys(expressions).reduce((a, b) =>
