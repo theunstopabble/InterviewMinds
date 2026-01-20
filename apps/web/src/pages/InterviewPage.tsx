@@ -54,7 +54,7 @@ export default function InterviewPage() {
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
 
   // ✅ FIX: Ref use kar rahe hain taaki endInterview me latest value mile
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+
   const recordedBlobRef = useRef<Blob | null>(null);
 
   // ✅ Log emotion to satisfy TypeScript unused variable check
@@ -363,7 +363,7 @@ export default function InterviewPage() {
             onEmotionUpdate={setUserEmotion}
             isInterviewActive={isInterviewStarted}
             onRecordingComplete={(blob) => {
-              setRecordedBlob(blob);
+
               recordedBlobRef.current = blob; // ✅ Update Ref for immediate access
             }}
           />
