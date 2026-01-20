@@ -18,7 +18,7 @@ import { OutputConsole } from "@/components/OutputConsole";
 import { executeCode } from "@/services/compiler";
 import { useSpeech } from "@/hooks/useSpeech";
 import WebcamAnalysis from "@/components/WebcamAnalysis";
-import { useAudioAnalysis } from "@/hooks/useAudioAnalysis"; // ✅ Phase 7 Import
+import { useAudioAnalysis } from "@/hooks/useAudioAnalysis";
 
 interface Message {
   role: "user" | "ai";
@@ -52,10 +52,10 @@ export default function InterviewPage() {
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
 
-  // ✅ Log emotion to satisfy TypeScript unused variable check & for debugging
+  // ✅ Log emotion to satisfy TypeScript unused variable check
   useEffect(() => {
     if (userEmotion) {
-      // console.log("Real-time Emotion Detected:", userEmotion);
+      // console.log("Emotion:", userEmotion);
     }
   }, [userEmotion]);
 
@@ -101,7 +101,7 @@ export default function InterviewPage() {
 
     if (!hasInitialized.current) {
       hasInitialized.current = true;
-      // Start Recording & Interview
+      // Start Recording & Interview immediately
       setIsInterviewStarted(true);
       handleAIResponse(
         "Start the technical interview based on my resume.",
@@ -142,7 +142,44 @@ export default function InterviewPage() {
     }
   }, [messages]);
 
-  // --- 5. RUN CODE ---
+  // --- 5. SPACEBAR MIC TOGGLE (UX Improvement) ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input/textarea or editor
+      const tagName = document.activeElement?.tagName.toLowerCase();
+      const isEditable =
+        document.activeElement?.getAttribute("contenteditable") === "true";
+      if (tagName === "input" || tagName === "textarea" || isEditable) return;
+
+      if (e.code === "Space") {
+        e.preventDefault(); // Prevent scrolling
+        if (!isListening && !isLoading) startListening();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      // Ignore if typing
+      const tagName = document.activeElement?.tagName.toLowerCase();
+      const isEditable =
+        document.activeElement?.getAttribute("contenteditable") === "true";
+      if (tagName === "input" || tagName === "textarea" || isEditable) return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (isListening) stopListening();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [isListening, isLoading, startListening, stopListening]);
+
+  // --- 6. RUN CODE ---
   const handleRunCode = async () => {
     if (!code) return;
     setIsCompiling(true);
@@ -166,7 +203,7 @@ export default function InterviewPage() {
     }
   };
 
-  // --- 6. CORE CHAT LOGIC ---
+  // --- 7. CORE CHAT LOGIC ---
   const handleAIResponse = async (userMessage: string, isInit = false) => {
     const trimmedMsg = userMessage.trim();
     if (!trimmedMsg) return;
@@ -210,7 +247,7 @@ export default function InterviewPage() {
     }
   };
 
-  // --- 7. END INTERVIEW ---
+  // --- 8. END INTERVIEW ---
   const endInterview = async () => {
     cancelSpeech();
     setIsInterviewStarted(false); // 🛑 Stop Recording Trigger
@@ -300,7 +337,7 @@ export default function InterviewPage() {
             onRecordingComplete={(blob) => setRecordedBlob(blob)}
           />
 
-          {/* 🎤 AUDIO COACH (New Feature) */}
+          {/* 🎤 AUDIO COACH (Phase 7) */}
           {isListening && warning && (
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
               <div
@@ -365,6 +402,7 @@ export default function InterviewPage() {
                   ? "text-red-500 border-red-500 animate-pulse"
                   : "text-slate-400"
               }`}
+              title="Hold Spacebar to speak"
             >
               {isListening ? (
                 <MicOff className="w-4 h-4" />
@@ -375,7 +413,7 @@ export default function InterviewPage() {
 
             <input
               className="flex-1 bg-slate-950 border border-slate-800 rounded-md px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
-              placeholder="Type or speak..."
+              placeholder="Type or hold Space to speak..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAIResponse(input)}

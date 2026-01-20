@@ -45,17 +45,22 @@ const PERSONAS: any = {
 
 router.post("/", async (req: any, res: any) => {
   try {
-    // ✅ Extract 'mode' (default to 'strict' if not provided)
-    const { message, resumeId, history, mode = "strict" } = req.body;
+    // ✅ Extract fields including 'difficulty' and 'mode'
+    const {
+      message,
+      resumeId,
+      history,
+      mode = "strict",
+      difficulty = "medium",
+    } = req.body;
 
     if (!message || !resumeId)
       return res.status(400).json({ error: "Required fields missing" });
 
     let contextText = "";
 
-    // --- STEP 1: CONTEXT RETRIEVAL ---
+    // --- STEP 1: CONTEXT RETRIEVAL (Vector Search) ---
     try {
-      // console.log("🔍 Vector Search...");
       const queryVector = await embeddings.embedQuery(message);
 
       const resumes = await ResumeModel.aggregate([
@@ -78,7 +83,6 @@ router.post("/", async (req: any, res: any) => {
 
       if (resumes.length > 0) {
         contextText = resumes[0].content?.substring(0, 5000) || "";
-        // console.log("✅ Vector Search Success");
       } else {
         throw new Error("No vectors found");
       }
@@ -91,26 +95,29 @@ router.post("/", async (req: any, res: any) => {
     }
 
     // --- STEP 2: SELECT PERSONA ---
-    // User ne jo mode bheja hai (strict/friendly/system), wo load karo
     const persona = PERSONAS[mode] || PERSONAS["strict"];
 
-    // --- STEP 3: DYNAMIC PROMPT GENERATION ---
+    // --- STEP 3: DYNAMIC PROMPT GENERATION (Updated for Strictness) ---
     const systemPrompt = `
       You are '${persona.name}', a ${persona.role}.
+      Your goal is to conduct a technical interview based on the candidate's resume.
       
       --- YOUR STYLE ---
       ${persona.style}
       Tone: ${persona.tone}
+      Current Difficulty Level: ${difficulty}
 
       --- RESUME CONTEXT ---
       ${contextText}
 
-      --- INSTRUCTIONS ---
-      1. Language: **Hinglish** (Indian Tech style). Natural & Professional.
-         - Example: "React mein Virtual DOM kaise kaam karta hai?" 
-      2. Length: **Max 1-2 sentences**. Keep it extremely short for real-time voice latency.
-      3. Task: Ask exactly **ONE** follow-up or new technical question based on the resume.
-      4. If the user greets, introduce yourself as ${persona.name} and start immediately.
+      --- CRITICAL INSTRUCTIONS ---
+      1. **FACT CHECK (Priority #1):** If the candidate gives a WRONG, VAGUE, or HALLUCINATED answer, DO NOT move to the next question. Immediately point out the mistake strictly.
+         - Example: "No, that's incorrect. React state is not shared between components by default. Try again."
+      2. **Language:** **Hinglish** (Indian Tech style). Keep it Natural & Professional.
+      3. **Length:** **Max 2-3 sentences**. Keep it extremely short for real-time voice latency.
+      4. **No Fluff:** Don't say "Great answer" unless it is actually correct. If it's average, just move to the next question.
+      5. **Task:** Ask exactly **ONE** follow-up or new technical question.
+      6. If the user greets, introduce yourself as ${persona.name} and start immediately.
     `;
 
     const messages: any[] = [{ role: "system", content: systemPrompt }];
