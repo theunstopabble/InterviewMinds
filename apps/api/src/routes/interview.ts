@@ -137,7 +137,26 @@ router.post("/end", requireAuth, async (req: any, res: any) => {
 });
 
 // ============================================================================
-// 2. GET INTERVIEW DETAILS (For Feedback Page)
+// 2. GET USER HISTORY (NEW ROUTE FOR DASHBOARD) 🕒
+// ============================================================================
+router.get("/history", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.user?.userId || req.auth?.userId;
+
+    // Fetch interviews for this user, sorted by newest first
+    const interviews = await InterviewModel.find({ userId })
+      .select("score feedback createdAt metrics") // Optimize: Don't fetch full chat history
+      .sort({ createdAt: -1 });
+
+    res.json(interviews);
+  } catch (error: any) {
+    console.error("History Fetch Error:", error.message);
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+});
+
+// ============================================================================
+// 3. GET INTERVIEW DETAILS (For Feedback Page)
 // ============================================================================
 router.get("/:id", requireAuth, async (req: any, res: any) => {
   try {
