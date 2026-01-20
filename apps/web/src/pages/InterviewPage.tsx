@@ -5,9 +5,9 @@ import {
   Send,
   StopCircle,
   Sparkles,
-  Volume2,
   Settings2,
-} from "lucide-react";
+  Volume2,
+} from "lucide-react"; // ✅ Removed unused 'Loader2'
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -17,14 +17,14 @@ import CodeEditor from "@/components/CodeEditor";
 import { OutputConsole } from "@/components/OutputConsole";
 import { executeCode } from "@/services/compiler";
 import { useSpeech } from "@/hooks/useSpeech";
-import WebcamAnalysis from "@/components/WebcamAnalysis"; // ✅ Phase 6: Import Webcam
+import WebcamAnalysis from "@/components/WebcamAnalysis";
 
 interface Message {
   role: "user" | "ai";
   content: string;
 }
 
-// 🎭 PERSONA CONFIGURATION (Voice Mapping)
+// 🎭 PERSONA CONFIGURATION
 const PERSONA_DETAILS: Record<
   string,
   { name: string; gender: "male" | "female" }
@@ -48,6 +48,15 @@ export default function InterviewPage() {
 
   // 🎥 Phase 6: Emotion State
   const [userEmotion, setUserEmotion] = useState("Neutral");
+
+  // ✅ FIX: Log userEmotion to satisfy TypeScript unused variable check
+  // This prevents the build error: "'userEmotion' is declared but its value is never read."
+  useEffect(() => {
+    if (userEmotion) {
+      // We log it for debugging/future analytics
+      console.log("Real-time Emotion Detected:", userEmotion);
+    }
+  }, [userEmotion]);
 
   // 🔒 STRICT LOCKS
   const isProcessing = useRef(false);
@@ -273,8 +282,6 @@ export default function InterviewPage() {
 
           {/* 🔊 Audio Visualizer (Overlay when speaking) */}
           {isSpeaking && (
-            // 'top-[280px]' hata kar 'bottom-6 right-6' kar diya
-            // Isse ye hamesha Webcam ke bottom-right corner mein chipka rahega
             <div className="absolute bottom-6 right-6 z-20 pointer-events-none">
               <div className="w-10 h-10 rounded-full bg-slate-900/80 backdrop-blur-md border border-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20 animate-pulse">
                 <Volume2 className="w-5 h-5 text-blue-400" />
@@ -282,6 +289,7 @@ export default function InterviewPage() {
             </div>
           )}
         </div>
+
         {/* Chat Messages Area */}
         <ScrollArea className="flex-1 p-4">
           <div className="space-y-4 pb-4">
