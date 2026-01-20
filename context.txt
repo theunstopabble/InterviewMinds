@@ -1,7 +1,5 @@
 InterviewMinds
 ├── .turbo
-│   ├── cache
-│   ├── cookies
 │   └── daemon
 │       └── b740e4c89c5e5a93-turbo.log.2026-01-17
 ├── apps
@@ -18,7 +16,6 @@ InterviewMinds
 │   │   │   │   ├── interview.ts
 │   │   │   │   └── resume.ts
 │   │   │   ├── index.ts
-│   │   │   ├── test-models.ts
 │   │   │   └── types.d.ts
 │   │   ├── .env
 │   │   ├── package-lock.json
@@ -54,6 +51,8 @@ InterviewMinds
 │       │   │   ├── Navbar.tsx
 │       │   │   ├── OutputConsole.tsx
 │       │   │   └── ResumeUpload.tsx
+│       │   ├── hooks
+│       │   │   └── useSpeech.ts
 │       │   ├── lib
 │       │   │   ├── api.ts
 │       │   │   └── utils.ts
@@ -84,6 +83,9 @@ InterviewMinds
 │       └── vite.config.ts
 ├── packages
 │   └── shared
+│       ├── index.ts
+│       ├── package.json
+│       └── tsconfig.json
 ├── context.txt
 ├── package-lock.json
 ├── package.json

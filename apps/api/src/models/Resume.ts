@@ -1,17 +1,22 @@
 import mongoose from "mongoose";
+import { IResume } from "@interview-minds/shared"; // ✅ Using Shared Types
 
-const ResumeSchema = new mongoose.Schema({
+const ResumeSchema = new mongoose.Schema<IResume>({
+  // ✅ New Field: UserId (Required for Multi-user SaaS)
+  userId: { type: String, required: true, index: true },
+
   fileName: { type: String, required: true },
-  content: { type: String, required: true }, // Full text backup ke liye
-  // RAG ke liye hum text ko chunks mein todenge
+  content: { type: String, required: true }, // Full text backup
+
+  // RAG Chunks
   chunks: [
     {
-      text: { type: String },
-      // Vectors store karne ke liye (Numbers ka array)
-      embedding: { type: [Number], index: "vector" },
+      text: { type: String, required: true },
+      embedding: { type: [Number], required: true }, // Vectors
     },
   ],
+
   createdAt: { type: Date, default: Date.now },
 });
 
-export const ResumeModel = mongoose.model("Resume", ResumeSchema);
+export const ResumeModel = mongoose.model<IResume>("Resume", ResumeSchema);
