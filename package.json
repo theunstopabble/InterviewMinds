@@ -1,8 +1,9 @@
 {
-  "name": "interviewminds",
+  "name": "interview-minds",
   "private": true,
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "build": "turbo run build",
