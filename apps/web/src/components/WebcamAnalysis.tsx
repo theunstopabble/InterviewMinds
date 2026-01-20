@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import * as faceapi from "face-api.js";
-import { Loader2, Video, VideoOff, BrainCircuit } from "lucide-react";
+import { Loader2, VideoOff, BrainCircuit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 

@@ -4,7 +4,6 @@ import {
   MicOff,
   Send,
   StopCircle,
-  Loader2,
   Sparkles,
   Volume2,
   Settings2,
