@@ -8,38 +8,61 @@ dotenv.config();
 
 const router = express.Router();
 
-// ✅ 1. SETUP GROQ (Chat ke liye - Free & Fast)
+// ✅ 1. SETUP GROQ (Chat - Free & Fast)
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// ✅ 2. SETUP GEMINI EMBEDDINGS (Context search ke liye - Matches Upload Logic)
+// ✅ 2. SETUP GEMINI EMBEDDINGS (Context search)
 const embeddings = new GoogleGenerativeAIEmbeddings({
-  modelName: "text-embedding-004", // Must match 'resume.ts'
+  modelName: "text-embedding-004",
   apiKey: process.env.GEMINI_API_KEY,
   maxRetries: 0,
 });
 
+// 🎭 PERSONA DEFINITIONS (The Brain)
+const PERSONAS: any = {
+  strict: {
+    name: "Vikram",
+    role: "Senior Staff Engineer (Strict & Technical)",
+    style:
+      "Direct, skeptical, asks deep 'Why' questions. No fluff. Cuts off vague answers.",
+    tone: "Professional, slightly intimidating but fair.",
+  },
+  friendly: {
+    name: "Neha",
+    role: "Engineering Manager (Supportive)",
+    style:
+      "Encouraging, focuses on potential, asks about collaboration and projects.",
+    tone: "Warm, professional, uses 'Great!', 'Interesting'.",
+  },
+  system: {
+    name: "Sam",
+    role: "System Architect",
+    style:
+      "Obsessed with scalability, databases, and tradeoffs (CAP theorem, Sharding).",
+    tone: "Analytical, thoughtful.",
+  },
+};
+
 router.post("/", async (req: any, res: any) => {
   try {
-    const { message, resumeId, history } = req.body;
+    // ✅ Extract 'mode' (default to 'strict' if not provided)
+    const { message, resumeId, history, mode = "strict" } = req.body;
 
     if (!message || !resumeId)
       return res.status(400).json({ error: "Required fields missing" });
 
     let contextText = "";
 
-    // --- STEP 1: CONTEXT RETRIEVAL (Gemini Embeddings + MongoDB) ---
+    // --- STEP 1: CONTEXT RETRIEVAL ---
     try {
-      console.log("🔍 Attempting Vector Search...");
-
-      // 1. User ke message ko vector mein badlo
+      // console.log("🔍 Vector Search...");
       const queryVector = await embeddings.embedQuery(message);
 
-      // 2. MongoDB mein search karo
       const resumes = await ResumeModel.aggregate([
         {
           $vectorSearch: {
-            index: "vector_index", // Atlas Index Name
-            path: "chunks.embedding", // Path to vector
+            index: "vector_index",
+            path: "chunks.embedding",
             queryVector: queryVector,
             numCandidates: 50,
             limit: 3,
@@ -54,41 +77,42 @@ router.post("/", async (req: any, res: any) => {
       ]);
 
       if (resumes.length > 0) {
-        // Top match ka content uthao
         contextText = resumes[0].content?.substring(0, 5000) || "";
-        console.log("✅ Vector Search Success");
+        // console.log("✅ Vector Search Success");
       } else {
-        throw new Error("No vectors found (Similarity too low or Indexing)");
+        throw new Error("No vectors found");
       }
     } catch (err: any) {
-      console.error("🔴 Vector Search Warning:", err.message);
-      console.warn("⚠️ Switching to Basic Mode (Reading raw resume from DB).");
-
-      // Fallback: Agar vector search fail ho, toh seedha ID se utha lo
+      console.warn("⚠️ Vector Search failed, switching to fallback.");
       const r = await ResumeModel.findById(resumeId);
       if (r) {
         contextText = r.content.substring(0, 8000);
       }
     }
 
-    // --- STEP 2: GENERATE RESPONSE (Groq - Llama 3) ---
-    // Gemini ka quota khatam ho gaya tha, isliye Groq use kar rahe hain
+    // --- STEP 2: SELECT PERSONA ---
+    // User ne jo mode bheja hai (strict/friendly/system), wo load karo
+    const persona = PERSONAS[mode] || PERSONAS["strict"];
 
+    // --- STEP 3: DYNAMIC PROMPT GENERATION ---
     const systemPrompt = `
-      You are an expert Technical Interviewer for InterviewMinds.ai.
+      You are '${persona.name}', a ${persona.role}.
       
+      --- YOUR STYLE ---
+      ${persona.style}
+      Tone: ${persona.tone}
+
       --- RESUME CONTEXT ---
       ${contextText}
-      
+
       --- INSTRUCTIONS ---
-      1. Reply in HINGLISH (Mix of Hindi & English).
-      2. Ask exactly ONE technical question based on the Resume Context.
-      3. Keep it professional but conversational.
-      4. Do not provide the answer, just ask the question.
-      5. If the user says "Hi" or "Intro", start with a welcome message referencing their resume skills.
+      1. Language: **Hinglish** (Indian Tech style). Natural & Professional.
+         - Example: "React mein Virtual DOM kaise kaam karta hai?" 
+      2. Length: **Max 1-2 sentences**. Keep it extremely short for real-time voice latency.
+      3. Task: Ask exactly **ONE** follow-up or new technical question based on the resume.
+      4. If the user greets, introduce yourself as ${persona.name} and start immediately.
     `;
 
-    // History format karna Groq ke liye
     const messages: any[] = [{ role: "system", content: systemPrompt }];
 
     if (history && Array.isArray(history)) {
@@ -100,19 +124,17 @@ router.post("/", async (req: any, res: any) => {
       });
     }
 
-    // Current message add karo
     messages.push({ role: "user", content: message });
 
-    // AI ko call karo
+    // AI Call
     const completion = await groq.chat.completions.create({
       messages: messages,
-      model: "llama-3.3-70b-versatile", // Super Fast & Free Limit
-      temperature: 0.7,
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.6,
+      max_tokens: 150, // Short answers for speed
     });
 
-    const aiText =
-      completion.choices[0]?.message?.content ||
-      "Server Error: No response from AI.";
+    const aiText = completion.choices[0]?.message?.content || "Server Error.";
 
     res.json({ reply: aiText });
   } catch (error: any) {

@@ -7,6 +7,7 @@ import {
   Loader2,
   Sparkles,
   Volume2,
+  Settings2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
@@ -16,12 +17,22 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import CodeEditor from "@/components/CodeEditor";
 import { OutputConsole } from "@/components/OutputConsole";
 import { executeCode } from "@/services/compiler";
-import { useSpeech } from "@/hooks/useSpeech"; // ✅ Import Custom Hook
+import { useSpeech } from "@/hooks/useSpeech";
 
 interface Message {
   role: "user" | "ai";
   content: string;
 }
+
+// 🎭 PERSONA CONFIGURATION (Voice Mapping)
+const PERSONA_DETAILS: Record<
+  string,
+  { name: string; gender: "male" | "female" }
+> = {
+  strict: { name: "Vikram", gender: "male" }, // Azure: Prabhat
+  friendly: { name: "Neha", gender: "female" }, // Azure: Neerja
+  system: { name: "Sam", gender: "male" }, // Azure: Prabhat
+};
 
 export default function InterviewPage() {
   const navigate = useNavigate();
@@ -31,19 +42,26 @@ export default function InterviewPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // ✅ USE CUSTOM HOOK (No more manual logic here)
+  // ⚙️ CONTROLS STATE
+  const [persona, setPersona] = useState("strict"); // Default: Vikram
+  const [difficulty, setDifficulty] = useState("medium");
+
+  // 🔒 STRICT LOCKS (To prevent double audio/requests)
+  const isProcessing = useRef(false);
+  const hasInitialized = useRef(false);
+
   const {
     isListening,
     isSpeaking,
     transcript,
     startListening,
     stopListening,
-    speak,
-    cancelSpeech, // <--- YE RAHA
+    speak, // Now accepts (text, gender)
+    cancelSpeech,
     setTranscript,
   } = useSpeech();
 
-  // --- EDITOR & COMPILER STATE ---
+  // --- EDITOR STATE ---
   const [code, setCode] = useState<string | undefined>(
     "// Technical Interview Session\n// Problem: Write a function to reverse a string.\n\nfunction solution() {\n  // Write your code here\n  console.log('Hello from InterviewMinds!');\n}\n\nsolution();",
   );
@@ -54,7 +72,10 @@ export default function InterviewPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // --- 1. INITIALIZATION ---
+  // 🧠 HELPER: Get Current Gender based on Persona
+  const getCurrentGender = () => PERSONA_DETAILS[persona]?.gender || "female";
+
+  // --- 1. STRICT INITIALIZATION (Run Once) ---
   useEffect(() => {
     const resumeId = localStorage.getItem("resumeId");
     if (!resumeId) {
@@ -62,7 +83,11 @@ export default function InterviewPage() {
       navigate("/");
       return;
     }
-    if (messages.length === 0) {
+
+    // ✅ Only run if not already initialized
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      // Start the interview
       handleAIResponse(
         "Start the technical interview based on my resume.",
         true,
@@ -70,29 +95,39 @@ export default function InterviewPage() {
     }
   }, []);
 
-  // --- 2. VOICE SYNC (Hook -> Input State) ---
-  // Jab User bolega, Transcript update hoga -> Hum Input update karenge
+  // --- 2. VOICE SYNC (Transcript -> Input) ---
   useEffect(() => {
     if (transcript) {
       setInput(transcript);
     }
   }, [transcript]);
 
-  // ✅ NEW: AUTO-SUBMIT LOGIC (Jaise hi Mic off ho, bhej do)
+  // --- 3. AUTO-SUBMIT LOGIC ---
   useEffect(() => {
-    // Shart: Mic band ho chuka ho + Transcript mein kuch likha ho + AI abhi load na le raha ho
-    if (!isListening && transcript.trim().length > 0 && !isLoading) {
-      // Thoda sa delay (1 second) taaki user ko "Stop" feel ho, phir bhejein
+    if (
+      !isListening &&
+      transcript.trim().length > 0 &&
+      !isLoading &&
+      !isProcessing.current
+    ) {
       const timer = setTimeout(() => {
-        handleAIResponse(transcript);
-        setTranscript(""); // Hook ka transcript saaf karo
-      }, 800);
-
+        if (!isProcessing.current) {
+          handleAIResponse(transcript);
+          setTranscript("");
+        }
+      }, 800); // 800ms silence detection
       return () => clearTimeout(timer);
     }
-  }, [isListening, transcript]);
+  }, [isListening, transcript, isLoading]);
 
-  // --- 4. RUN CODE LOGIC ---
+  // --- 4. AUTO SCROLL ---
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  // --- 5. RUN CODE LOGIC ---
   const handleRunCode = async () => {
     if (!code) return;
     setIsCompiling(true);
@@ -116,46 +151,62 @@ export default function InterviewPage() {
     }
   };
 
-  // --- 5. CHAT LOGIC ---
+  // --- 6. CORE CHAT LOGIC ---
   const handleAIResponse = async (userMessage: string, isInit = false) => {
-    if (!userMessage.trim()) return;
+    const trimmedMsg = userMessage.trim();
+    if (!trimmedMsg) return;
+
+    // 🔒 Lock Check
+    if (isProcessing.current) return;
+
+    // 🔒 Set Lock
+    isProcessing.current = true;
+    setIsLoading(true);
 
     const resumeId = localStorage.getItem("resumeId");
 
+    // UI Update (User Message)
     if (!isInit) {
-      setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+      setMessages((prev) => [...prev, { role: "user", content: trimmedMsg }]);
       setInput("");
-      setTranscript(""); // ✅ Clear voice transcript after sending
+      setTranscript("");
     }
 
-    setIsLoading(true);
-
     try {
+      // 📡 Backend Call
       const res = await api.post("/chat", {
-        message: userMessage,
+        message: trimmedMsg,
         resumeId,
         history: messages.map((m) => ({
           role: m.role === "ai" ? "model" : "user",
           text: m.content,
         })),
+        mode: persona, // "strict" | "friendly" | "system"
+        difficulty: difficulty, // "easy" | "medium" | "hard"
       });
 
       const aiReply = res.data.reply;
+
+      // UI Update (AI Message)
       setMessages((prev) => [...prev, { role: "ai", content: aiReply }]);
 
-      // ✅ SPEAK AI RESPONSE
-      speak(aiReply);
+      // 🔊 SPEAK with Correct Gender
+      // Is function mein hum text aur gender dono bhej rahe hain
+      speak(aiReply, getCurrentGender());
     } catch (error) {
+      console.error(error);
       toast.error("Failed to connect to AI.");
     } finally {
       setIsLoading(false);
+      // 🔓 Release Lock (with slight delay for safety)
+      setTimeout(() => {
+        isProcessing.current = false;
+      }, 500);
     }
   };
 
   const endInterview = async () => {
-    // ✅ STEP 1: Sabse pehle AI ko chup karao
-    cancelSpeech(); 
-
+    cancelSpeech();
     const resumeId = localStorage.getItem("resumeId");
     try {
       toast.info("Generating Report...");
@@ -174,25 +225,61 @@ export default function InterviewPage() {
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full bg-black text-white overflow-hidden">
-      {/* ================= LEFT SIDE: AI AVATAR & CHAT (40%) ================= */}
+      {/* --- LEFT PANEL: Chat & Controls --- */}
       <div className="w-full lg:w-[40%] h-[45%] lg:h-full flex flex-col border-r border-white/10 bg-slate-950/50 relative order-1">
-        {/* Header */}
-        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-900/50">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-blue-400" />
-            <span className="font-semibold text-slate-200">AI Interviewer</span>
+        {/* Header Section */}
+        <div className="p-3 border-b border-white/10 flex flex-col gap-3 bg-slate-900/50">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-blue-400" />
+              <span className="font-semibold text-slate-200">
+                AI Interviewer
+              </span>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={endInterview}
+              className="h-7 gap-2 text-xs"
+            >
+              <StopCircle className="w-3 h-3" /> End
+            </Button>
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={endInterview}
-            className="h-8 gap-2 text-xs"
-          >
-            <StopCircle className="w-3 h-3" /> End Session
-          </Button>
+
+          {/* 🎛️ CONTROLS: Persona & Difficulty */}
+          <div className="flex gap-2">
+            {/* Persona Selector */}
+            <div className="flex-1 flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-md px-2 py-1 hover:border-blue-500/50 transition-colors">
+              <Settings2 className="w-3 h-3 text-slate-400" />
+              <select
+                value={persona}
+                onChange={(e) => setPersona(e.target.value)}
+                className="bg-transparent text-xs text-white outline-none w-full cursor-pointer"
+                disabled={isLoading || isSpeaking}
+              >
+                <option value="strict">Vikram (Strict)</option>
+                <option value="friendly">Neha (HR)</option>
+                <option value="system">Sam (System Design)</option>
+              </select>
+            </div>
+
+            {/* Difficulty Selector */}
+            <div className="w-[100px] flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-md px-2 py-1 hover:border-blue-500/50 transition-colors">
+              <select
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value)}
+                className="bg-transparent text-xs text-white outline-none w-full cursor-pointer"
+                disabled={isLoading || isSpeaking}
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+          </div>
         </div>
 
-        {/* AI Visualizer (Now connected to Hook) */}
+        {/* Visualizer (The Glowing Circle) */}
         <div className="flex justify-center py-4 bg-slate-950/30">
           <div
             className={`relative w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
@@ -211,7 +298,7 @@ export default function InterviewPage() {
           </div>
         </div>
 
-        {/* Chat History */}
+        {/* Chat Messages Area */}
         <ScrollArea className="flex-1 p-4">
           <div className="space-y-4 pb-4">
             {messages.map((msg, i) => (
@@ -234,10 +321,9 @@ export default function InterviewPage() {
           </div>
         </ScrollArea>
 
-        {/* Input Area */}
+        {/* Input & Mic Controls */}
         <div className="p-4 border-t border-white/10 bg-slate-900">
           <div className="flex gap-2">
-            {/* ✅ MIC BUTTON (Connected to Hook) */}
             <Button
               variant="outline"
               size="icon"
@@ -259,11 +345,7 @@ export default function InterviewPage() {
               className="flex-1 bg-slate-950 border border-slate-800 rounded-md px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
               placeholder="Type or speak..."
               value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                // Agar user manually type kare, toh hook ka transcript update mat karo
-                // (Optional: Depends on logic, but currently safe)
-              }}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAIResponse(input)}
               disabled={isLoading}
             />
@@ -280,7 +362,7 @@ export default function InterviewPage() {
         </div>
       </div>
 
-      {/* ================= RIGHT SIDE: CODE EDITOR + CONSOLE (60%) ================= */}
+      {/* --- RIGHT PANEL: Code Editor --- */}
       <div className="w-full lg:w-[60%] h-[55%] lg:h-full flex flex-col bg-[#1e1e1e] order-2">
         <div className="flex-1 overflow-hidden">
           <CodeEditor

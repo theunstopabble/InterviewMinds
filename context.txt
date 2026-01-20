@@ -14,12 +14,14 @@ InterviewMinds
 │   │   │   │   ├── chat.ts
 │   │   │   │   ├── compiler.ts
 │   │   │   │   ├── interview.ts
-│   │   │   │   └── resume.ts
+│   │   │   │   ├── resume.ts
+│   │   │   │   └── tts.ts
 │   │   │   ├── index.ts
 │   │   │   └── types.d.ts
 │   │   ├── .env
 │   │   ├── package-lock.json
 │   │   ├── package.json
+│   │   ├── test-deepgram.ts
 │   │   └── tsconfig.json
 │   └── web
 │       ├── dev-dist
