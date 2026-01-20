@@ -7,6 +7,7 @@ import chatRoutes from "./routes/chat";
 import interviewRoutes from "./routes/interview";
 import { requireAuth } from "./middleware/auth";
 import compilerRoutes from "./routes/compiler";
+import ttsRoutes from "./routes/tts";
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use("/api/resume", requireAuth, resumeRoutes);
 app.use("/api/chat", requireAuth, chatRoutes);
 app.use("/api/interview", requireAuth, interviewRoutes);
 app.use("/api/compiler", requireAuth, compilerRoutes);
+app.use("/api/tts", ttsRoutes);
 
 // 5. Database Connection
 if (!MONGO_URI) {
