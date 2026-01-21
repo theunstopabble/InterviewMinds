@@ -1,6 +1,5 @@
 import express from "express";
 import { ResumeModel } from "../models/Resume";
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
 
@@ -8,15 +7,8 @@ dotenv.config();
 
 const router = express.Router();
 
-// ✅ 1. SETUP GROQ (Chat - Fast Llama 3)
+// ✅ 1. SETUP GROQ (Using Llama 3 70B for Deep Analysis)
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-// ✅ 2. SETUP GEMINI EMBEDDINGS (Context search)
-const embeddings = new GoogleGenerativeAIEmbeddings({
-  modelName: "text-embedding-004",
-  apiKey: process.env.GEMINI_API_KEY,
-  maxRetries: 1,
-});
 
 // 🎭 PERSONA DEFINITIONS
 const PERSONAS: any = {
@@ -24,22 +16,22 @@ const PERSONAS: any = {
     name: "Vikram",
     role: "Senior Staff Engineer (Strict & Technical)",
     style:
-      "Direct, skeptical. Focuses on efficient code, time complexity, and edge cases.",
-    tone: "Professional, demanding.",
+      "Direct, skeptical. Drills down into specific implementation details of projects. Hates surface-level answers.",
+    tone: "Professional, demanding, no-nonsense.",
   },
   friendly: {
     name: "Neha",
     role: "Engineering Manager (Supportive)",
     style:
-      "Encouraging. Focuses on code readability, logic building, and collaboration.",
-    tone: "Warm, constructive.",
+      "Curious about problem-solving approaches in your projects. Focuses on 'How' and 'Why'.",
+    tone: "Warm, constructive, engaging.",
   },
   system: {
     name: "Sam",
     role: "System Architect",
     style:
-      "Obsessed with scalability, API design, database structures, and clean code.",
-    tone: "Analytical, thoughtful.",
+      "Focuses on the architecture of your projects. Asks about database choices, scalability, and trade-offs.",
+    tone: "Analytical, thoughtful, detail-oriented.",
   },
 };
 
@@ -57,40 +49,21 @@ router.post("/", async (req: any, res: any) => {
     if (!message || !resumeId)
       return res.status(400).json({ error: "Required fields missing" });
 
+    // --- STEP 1: LOAD FULL RESUME CONTEXT (No Vector Search) ---
+    // Why? Resumes are small enough for Llama 3's context window.
+    // Sending the full text ensures the AI knows EVERYTHING (Projects, Skills, Experience).
     let contextText = "";
-
-    // --- STEP 1: CONTEXT RETRIEVAL (Vector Search) ---
     try {
-      const queryVector = await embeddings.embedQuery(message);
-      const resumes = await ResumeModel.aggregate([
-        {
-          $vectorSearch: {
-            index: "vector_index",
-            path: "chunks.embedding",
-            queryVector: queryVector,
-            numCandidates: 50,
-            limit: 3,
-          },
-        },
-        {
-          $project: {
-            content: 1,
-            score: { $meta: "vectorSearchScore" },
-          },
-        },
-      ]);
-
-      if (resumes.length > 0) {
-        contextText = resumes[0].content?.substring(0, 5000) || "";
+      const r = await ResumeModel.findById(resumeId);
+      if (r && r.content) {
+        // Limit to ~15,000 chars to be safe, but usually resumes are much smaller.
+        contextText = r.content.substring(0, 15000);
       } else {
-        // Fallback to full resume if vector search fails
-        const r = await ResumeModel.findById(resumeId);
-        if (r) contextText = r.content.substring(0, 8000);
+        throw new Error("Resume content not found");
       }
     } catch (err: any) {
-      console.warn("⚠️ Vector Search failed, switching to fallback.");
-      const r = await ResumeModel.findById(resumeId);
-      if (r) contextText = r.content.substring(0, 8000);
+      console.error("❌ Resume Fetch Error:", err.message);
+      return res.status(404).json({ error: "Resume not found" });
     }
 
     // --- STEP 2: SELECT PERSONA ---
@@ -101,47 +74,55 @@ router.post("/", async (req: any, res: any) => {
     if (language === "hinglish") {
       languageInstruction = `
       - **Language Mode:** HINGLISH (Mix of Hindi & English).
-      - **Rule:** Speak naturally like an Indian Tech Interviewer. Use English for technical terms (e.g., "Function", "Array", "Compile") but use Hindi for connecting verbs.
-      - **Example:** "Is problem ke liye ek function likho jo array ko sort kare aur run karke dikhao."
+      - **Rule:** Speak naturally like an Indian Tech Interviewer. Use English for technical terms (e.g., "Dependency Injection", "Scalability", "Latency") but use Hindi for connecting verbs/grammar.
+      - **Example:** "Tumne jo 'SwadKart' project banaya hai, usme Redux kyu use kiya Context API ke jagah?"
       - **Avoid:** Do not use pure Shuddh Hindi. Keep it casual professional.
       `;
     } else {
       languageInstruction = `
-      - **Language Mode:** Professional English (US/Global Standard).
+      - **Language Mode:** Professional English.
       - **Rule:** Use clear, concise, and professional grammar.
       `;
     }
 
-    // --- STEP 4: SYSTEM PROMPT (The Brain - Updated for Coding) ---
+    // --- STEP 4: SYSTEM PROMPT (PROFESSIONAL TRAINING 🧠) ---
     const systemPrompt = `
       You are '${persona.name}', a ${persona.role}.
-      Your goal is to conduct a **Hands-on Technical Interview**.
+      You are conducting a high-stakes technical interview.
 
-      --- INTERVIEW ENVIRONMENT ---
-      **IMPORTANT:** The candidate has a live **Code Editor** and **Compiler** on their screen.
-      **DO NOT just ask theoretical questions.** You MUST verify their coding skills.
-
-      --- YOUR STYLE ---
-      ${persona.style}
-      Tone: ${persona.tone}
-      Difficulty: ${difficulty}
-
-      --- LANGUAGE INSTRUCTIONS (STRICTLY FOLLOW) ---
-      ${languageInstruction}
+      --- 🧠 DEEP RESUME ANALYSIS MODE ---
+      **CONTEXT:** You have the candidate's FULL resume below.
+      **GOAL:** Do NOT ask generic questions (e.g., "Tell me about yourself"). Instead, pick a SPECIFIC project or skill from the resume and drill down immediately.
 
       --- RESUME CONTEXT ---
       ${contextText}
 
-      --- INTERVIEW GUIDELINES ---
-      1. **Mix Theory & Practice:** Start with 1-2 questions about their projects/resume to break the ice.
-      2. **THE CODING CHALLENGE (CRITICAL):** After the intro, explicitly ask them to **Write Code** in the editor.
-         - Example: "Okay, let's test your logic. Please write a function in the editor to reverse a string without using built-in methods, and run it."
-         - Example: "Open the editor and create a simple API endpoint logic..."
-      3. **Verify Execution:** Ask them: "Did the code run successfully? What was the output?"
-      4. **Verify Facts:** If the candidate is wrong or vague, call them out immediately.
-      5. **Short Responses:** Keep your speaking output under **3 sentences**. Long monologues are bad for voice chat.
+      --- INTERVIEW ENVIRONMENT ---
+      **IMPORTANT:** The candidate has a live **Code Editor** & **Compiler**.
+      **TASK:** You MUST test their coding skills.
+
+      --- YOUR BEHAVIOR & RULES ---
+      1. **Cite Specifics:** When asking a question, reference the resume explicitly.
+         - ❌ Bad: "How do you handle state management?"
+         - ✅ Good: "I see you used **Redux Toolkit** in your **SwadKart** project. Why did you choose that over Context API for this specific use case?"
       
-      If the user says "Hello" or "Start", introduce yourself briefly as ${persona.name} and ask the first question based on their Resume Projects/Skills.
+      2. **The Coding Challenge (MANDATORY):**
+         - After 1-2 initial theory questions, you MUST ask them to write code.
+         - Say: "Okay, let's see how you implement this. Open the editor and write a function to..."
+         - Ask them to **Run the code** and explain the output.
+
+      3. **Strictness:**
+         - If they give a vague answer, cut them off: "That's too generic. Give me a concrete example."
+         - If they are wrong, correct them immediately.
+
+      4. **Response Format:**
+         - Keep it **short (2-3 sentences max)**. This is a voice conversation.
+         - Current Difficulty: ${difficulty}
+      
+      --- LANGUAGE ---
+      ${languageInstruction}
+
+      If the user says "Hello" or "Start", introduce yourself as ${persona.name}, mention a specific project you found interesting in their resume, and ask a deep technical question about it immediately.
     `;
 
     const messages: any[] = [{ role: "system", content: systemPrompt }];
@@ -161,9 +142,9 @@ router.post("/", async (req: any, res: any) => {
     // AI Call
     const completion = await groq.chat.completions.create({
       messages: messages,
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.6,
-      max_tokens: 150, // Keep short for TTS speed
+      model: "llama-3.3-70b-versatile", // Using the smartest model for deep reasoning
+      temperature: 0.5, // Slightly lower temp for more focused/professional answers
+      max_tokens: 200,
     });
 
     const aiText = completion.choices[0]?.message?.content || "Server Error.";

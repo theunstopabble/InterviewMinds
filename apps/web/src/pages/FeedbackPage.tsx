@@ -10,6 +10,7 @@ import {
   Target,
   Download,
   RotateCcw,
+  Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,13 +33,13 @@ import {
   Tooltip,
 } from "recharts";
 
-// ✅ Interface matching Phase 4 Backend (Interview.ts)
 interface InterviewData {
-  score: number; // 0-100
+  score: number;
   feedback: string;
   metrics: { subject: string; A: number; fullMark: number }[];
   messages: { role: string; text: string }[];
   createdAt: string;
+  videoUrl?: string; // ✅ Added Video URL field
 }
 
 export default function FeedbackPage() {
@@ -50,7 +51,6 @@ export default function FeedbackPage() {
   useEffect(() => {
     const fetchFeedback = async () => {
       try {
-        // Backend GET /api/interview/:id
         const res = await api.get(`/interview/${id}`);
         setData(res.data);
       } catch (error) {
@@ -81,39 +81,35 @@ export default function FeedbackPage() {
       </div>
     );
 
-  // 🧠 DERIVED DATA LOGIC
-  const ratingOutOf10 = Math.round(data.score / 10); // Convert 0-100 to 0-10
+  const ratingOutOf10 = Math.round(data.score / 10);
 
-  // Use real metrics from backend, or fallback if empty
+  // 4 Parameters for Radar Chart
   const chartData =
     data.metrics.length > 0
       ? data.metrics
       : [
-          { subject: "Technical", A: 0, fullMark: 100 },
+          { subject: "Content", A: 0, fullMark: 100 },
           { subject: "Communication", A: 0, fullMark: 100 },
-          { subject: "Problem Solving", A: 0, fullMark: 100 },
+          { subject: "Behavior", A: 0, fullMark: 100 },
+          { subject: "Domain", A: 0, fullMark: 100 },
         ];
 
-  // Dynamic Strengths based on Metrics (> 70 is strong)
   const strengths = data.metrics
     .filter((m) => m.A >= 70)
-    .map((m) => `Strong proficiency in ${m.subject}`);
+    .map((m) => `Strong in ${m.subject}`);
 
-  // Dynamic Improvements based on Metrics (< 70 needs work)
   const improvements = data.metrics
     .filter((m) => m.A < 70)
-    .map((m) => `Needs focus on ${m.subject}`);
+    .map((m) => `Improve ${m.subject}`);
 
-  // Fallbacks if lists are empty
-  if (strengths.length === 0)
-    strengths.push("Consistent performance across board");
+  if (strengths.length === 0) strengths.push("Consistent effort shown");
   if (improvements.length === 0)
-    improvements.push("Keep practicing to maintain edge");
+    improvements.push("Practice more to improve score");
 
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-10 font-sans">
       <div className="max-w-6xl mx-auto space-y-8">
-        {/* 🟢 Header Section */}
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
           <div>
             <h1 className="text-3xl md:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
@@ -133,7 +129,7 @@ export default function FeedbackPage() {
             </Button>
             <Button
               onClick={() => navigate("/interview")}
-              className="gap-2 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20"
+              className="gap-2 bg-blue-600 hover:bg-blue-500 shadow-lg"
             >
               <RotateCcw className="w-4 h-4" /> Retry
             </Button>
@@ -148,9 +144,9 @@ export default function FeedbackPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* 👈 Left Column: Score & Radar Chart */}
+          {/* LEFT COLUMN */}
           <div className="lg:col-span-1 space-y-8">
-            {/* 1. Circular Score Card */}
+            {/* 1. Score Circle */}
             <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-sm shadow-xl">
               <CardHeader className="text-center pb-2">
                 <CardTitle className="text-slate-200 text-lg uppercase tracking-wide">
@@ -159,7 +155,6 @@ export default function FeedbackPage() {
               </CardHeader>
               <CardContent className="flex flex-col items-center">
                 <div className="relative w-48 h-48 flex items-center justify-center">
-                  {/* Background Circle */}
                   <svg className="w-full h-full transform -rotate-90">
                     <circle
                       cx="96"
@@ -170,7 +165,6 @@ export default function FeedbackPage() {
                       fill="transparent"
                       className="text-slate-800"
                     />
-                    {/* Progress Circle */}
                     <circle
                       cx="96"
                       cy="96"
@@ -178,47 +172,34 @@ export default function FeedbackPage() {
                       stroke="currentColor"
                       strokeWidth="12"
                       fill="transparent"
-                      className={`${
-                        ratingOutOf10 >= 7
-                          ? "text-green-500"
-                          : ratingOutOf10 >= 4
-                            ? "text-yellow-500"
-                            : "text-red-500"
-                      } transition-all duration-1000 ease-out`}
+                      className={`${ratingOutOf10 >= 7 ? "text-green-500" : ratingOutOf10 >= 4 ? "text-yellow-500" : "text-red-500"} transition-all duration-1000 ease-out`}
                       strokeDasharray={502}
                       strokeDashoffset={502 - (502 * ratingOutOf10) / 10}
                       strokeLinecap="round"
                     />
                   </svg>
-                  <div className="absolute flex flex-col items-center animate-in zoom-in duration-500">
+                  <div className="absolute flex flex-col items-center">
                     <span className="text-6xl font-bold text-white">
                       {ratingOutOf10}
                     </span>
-                    <span className="text-sm text-slate-400 uppercase font-semibold tracking-wider">
+                    <span className="text-sm text-slate-400 uppercase font-semibold">
                       out of 10
                     </span>
                   </div>
                 </div>
-
                 <Badge
-                  className={`mt-6 px-6 py-2 text-lg font-medium border-0 ${
-                    ratingOutOf10 >= 8
-                      ? "bg-green-500/20 text-green-400"
-                      : ratingOutOf10 >= 5
-                        ? "bg-yellow-500/20 text-yellow-400"
-                        : "bg-red-500/20 text-red-400"
-                  }`}
+                  className={`mt-6 px-6 py-2 text-lg font-medium border-0 ${ratingOutOf10 >= 8 ? "bg-green-500/20 text-green-400" : ratingOutOf10 >= 5 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}
                 >
                   {ratingOutOf10 >= 8
                     ? "Excellent"
                     : ratingOutOf10 >= 5
                       ? "Good"
-                      : "Needs Improvement"}
+                      : "Needs Work"}
                 </Badge>
               </CardContent>
             </Card>
 
-            {/* 2. Skills Radar Chart */}
+            {/* 2. Radar Chart */}
             <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-sm shadow-xl overflow-hidden">
               <CardHeader>
                 <CardTitle className="text-sm uppercase tracking-wider text-slate-400 flex items-center gap-2">
@@ -267,9 +248,31 @@ export default function FeedbackPage() {
             </Card>
           </div>
 
-          {/* 👉 Right Column: Detailed Feedback */}
+          {/* RIGHT COLUMN */}
           <div className="lg:col-span-2 space-y-8">
-            {/* 3. AI Summary */}
+            {/* ✅ VIDEO PLAYER (NEW) */}
+            {data.videoUrl && (
+              <Card className="bg-slate-900/50 border-slate-800 overflow-hidden shadow-xl">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Video className="w-5 h-5 text-blue-400" /> Session
+                    Recording
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-xl overflow-hidden border border-slate-700 bg-black aspect-video">
+                    <video
+                      src={data.videoUrl}
+                      controls
+                      className="w-full h-full object-contain"
+                      playsInline
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* AI Summary */}
             <Card className="bg-slate-900/50 border-slate-800 border-l-4 border-l-purple-500 shadow-xl">
               <CardHeader>
                 <div className="flex items-center gap-3">
@@ -288,7 +291,7 @@ export default function FeedbackPage() {
               </CardContent>
             </Card>
 
-            {/* 4. Strengths & Weaknesses Grid */}
+            {/* Strengths & Weaknesses */}
             <div className="grid md:grid-cols-2 gap-6">
               <Card className="bg-green-950/10 border-green-900/30 shadow-lg">
                 <CardHeader>
@@ -337,7 +340,7 @@ export default function FeedbackPage() {
               </Card>
             </div>
 
-            {/* 5. Transcript Area */}
+            {/* Transcript */}
             <Card className="bg-slate-900/50 border-slate-800 shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl">Interview Transcript</CardTitle>
@@ -346,32 +349,20 @@ export default function FeedbackPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[400px] w-full rounded-xl border border-slate-800 p-6 bg-slate-950/30">
+                <ScrollArea className="h-[300px] w-full rounded-xl border border-slate-800 p-6 bg-slate-950/30">
                   {data.messages &&
                     data.messages.map((msg, i) => (
                       <div
                         key={i}
-                        className={`mb-6 flex ${
-                          msg.role === "user" ? "justify-end" : "justify-start"
-                        }`}
+                        className={`mb-4 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                       >
                         <div
-                          className={`flex flex-col max-w-[80%] ${
-                            msg.role === "user" ? "items-end" : "items-start"
-                          }`}
+                          className={`max-w-[80%] p-3 rounded-xl text-sm ${msg.role === "user" ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300"}`}
                         >
-                          <span className="text-xs text-slate-500 mb-1 uppercase font-bold tracking-wider">
+                          <p className="text-xs opacity-50 mb-1 uppercase font-bold">
                             {msg.role === "user" ? "You" : "AI Interviewer"}
-                          </span>
-                          <div
-                            className={`p-4 rounded-2xl text-sm leading-relaxed ${
-                              msg.role === "user"
-                                ? "bg-blue-600 text-white rounded-tr-none shadow-lg shadow-blue-900/20"
-                                : "bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700"
-                            }`}
-                          >
-                            {msg.text}
-                          </div>
+                          </p>
+                          {msg.text}
                         </div>
                       </div>
                     ))}
