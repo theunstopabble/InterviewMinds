@@ -7,8 +7,9 @@ import {
   Sparkles,
   Settings2,
   Volume2,
-  Loader2, // ✅ Loading Icon
-  MonitorX, // ✅ Mobile Block Icon
+  Loader2,
+  MonitorX,
+  Languages, // ✅ Added Icon
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
@@ -23,6 +24,17 @@ import WebcamAnalysis from "@/components/WebcamAnalysis";
 import { useAudioAnalysis } from "@/hooks/useAudioAnalysis";
 import { useProctoring } from "@/hooks/useProctoring";
 import ProctoringUI from "@/components/ProctoringUI";
+// ✅ UI Components for Setup Modal
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface Message {
   role: "user" | "ai";
@@ -56,10 +68,12 @@ export default function InterviewPage() {
   // ⚙️ CONTROLS STATE
   const [persona, setPersona] = useState("strict");
   const [difficulty, setDifficulty] = useState("medium");
+  const [languageMode, setLanguageMode] = useState("english"); // ✅ New Language State
 
   // 🎥 Phase 6: Video & Emotion State
   const [userEmotion, setUserEmotion] = useState("Neutral");
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
+  const [showSetup, setShowSetup] = useState(true); // ✅ Controls Setup Modal Visibility
 
   // ✅ FIX 3: Ref for Closure-Safe Video Uploading
   const recordedBlobRef = useRef<Blob | null>(null);
@@ -96,20 +110,17 @@ export default function InterviewPage() {
 
   const getCurrentGender = () => PERSONA_DETAILS[persona]?.gender || "female";
 
-  // --- 0. MOBILE CHECK (Industry Standard) ---
+  // --- 0. MOBILE CHECK ---
   useEffect(() => {
     const checkMobile = () => {
-      // < 1024px width considered Tablet/Mobile
       setIsMobile(window.innerWidth < 1024);
     };
-    checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // --- 1. INITIALIZATION ---
+  // --- 1. INITIALIZATION (Checks only, does not start interview yet) ---
   useEffect(() => {
-    // 🛑 SECURITY: Agar mobile hai to logic run mat karo
     if (window.innerWidth < 1024) return;
 
     const resumeId = localStorage.getItem("resumeId");
@@ -118,35 +129,26 @@ export default function InterviewPage() {
       navigate("/");
       return;
     }
+    // We wait for user to click "Start" in the modal
+  }, []);
+
+  // ✅ NEW: Handle Start from Modal
+  const handleStartInterview = () => {
+    setShowSetup(false);
+    setIsInterviewStarted(true);
 
     if (!hasInitialized.current) {
       hasInitialized.current = true;
-      // Start Recording & Interview immediately
-      setIsInterviewStarted(true);
-      handleAIResponse(
-        "Start the technical interview based on my resume.",
-        true,
-      );
-    }
-  }, []);
 
-  // 🚫 MOBILE BLOCKER UI (Ye sabse upar hi rahega)
-  if (isMobile) {
-    return (
-      <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-center p-6 text-white">
-        <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6 animate-pulse border border-red-500/20">
-          <MonitorX className="w-10 h-10 text-red-500" />
-        </div>
-        <h1 className="text-3xl font-bold mb-2">Desktop Required</h1>
-        <p className="text-slate-400 max-w-md text-lg leading-relaxed">
-          Coding interviews require a focused environment.
-          <br />
-          Please open <strong>InterviewMinds</strong> on a Laptop or PC to
-          access the IDE and AI tools.
-        </p>
-      </div>
-    );
-  }
+      // Inject Language Instruction into the first prompt
+      const initialPrompt =
+        languageMode === "hinglish"
+          ? "Start the technical interview based on my resume. Please speak in Hinglish (Mix of Hindi and English) to make it comfortable."
+          : "Start the technical interview based on my resume.";
+
+      handleAIResponse(initialPrompt, true);
+    }
+  };
 
   // --- 2. VOICE SYNC ---
   useEffect(() => {
@@ -190,7 +192,8 @@ export default function InterviewPage() {
 
       if (e.code === "Space") {
         e.preventDefault();
-        if (!isListening && !isLoading) startListening();
+        // Only allow mic if setup is done
+        if (!isListening && !isLoading && !showSetup) startListening();
       }
     };
 
@@ -202,7 +205,7 @@ export default function InterviewPage() {
 
       if (e.code === "Space") {
         e.preventDefault();
-        if (isListening) stopListening();
+        if (isListening && !showSetup) stopListening();
       }
     };
 
@@ -213,7 +216,7 @@ export default function InterviewPage() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [isListening, isLoading, startListening, stopListening]);
+  }, [isListening, isLoading, startListening, stopListening, showSetup]);
 
   // --- 6. RUN CODE ---
   const handleRunCode = async () => {
@@ -266,6 +269,7 @@ export default function InterviewPage() {
         })),
         mode: persona,
         difficulty: difficulty,
+        language: languageMode, // ✅ Sending Language Preference
       });
 
       const aiReply = res.data.reply;
@@ -282,19 +286,15 @@ export default function InterviewPage() {
     }
   };
 
-  // --- 8. END INTERVIEW (Robust Logic) ---
+  // --- 8. END INTERVIEW ---
   const endInterview = async () => {
-    // 🛑 1. UI Freeze Fix: Activate Overlay immediately
     setIsSaving(true);
-
     cancelSpeech();
-    setIsInterviewStarted(false); // Stops recording in Webcam component
+    setIsInterviewStarted(false);
 
-    // ⏳ Wait 2s for blob to finalize and update Ref
     setTimeout(async () => {
       const resumeId = localStorage.getItem("resumeId");
       try {
-        // 1. Save Chat History
         const res = await api.post("/interview/end", {
           resumeId,
           history: messages.map((m) => ({
@@ -304,11 +304,7 @@ export default function InterviewPage() {
         });
 
         const interviewId = res.data.id;
-
-        // 2. Upload Video (Using Ref for fresh value)
         const blobToUpload = recordedBlobRef.current;
-
-        console.log("📼 Blob Status:", blobToUpload ? "Ready" : "Missing");
 
         if (blobToUpload) {
           const videoData = new FormData();
@@ -329,7 +325,7 @@ export default function InterviewPage() {
       } catch (e) {
         console.error(e);
         toast.error("Error ending session");
-        setIsSaving(false); // Hide overlay on error
+        setIsSaving(false);
       }
     }, 2000);
   };
@@ -345,8 +341,7 @@ export default function InterviewPage() {
         <p className="text-slate-400 max-w-md text-lg leading-relaxed">
           Coding interviews require a focused environment.
           <br />
-          Please open <strong>InterviewMinds</strong> on a Laptop or PC to
-          access the IDE and AI tools.
+          Please open <strong>InterviewMinds</strong> on a Laptop or PC.
         </p>
       </div>
     );
@@ -355,7 +350,90 @@ export default function InterviewPage() {
   // ✅ MAIN INTERVIEW UI
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full bg-black text-white overflow-hidden relative">
-      {/* 🟢 SAVING OVERLAY (Fixes "Page Stuck" Feeling) */}
+      {/* 🟢 1. SETUP MODAL (Starts Here) */}
+      <Dialog open={showSetup} onOpenChange={() => {}}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white sm:max-w-md shadow-2xl backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl flex items-center gap-2">
+              <Settings2 className="w-6 h-6 text-blue-500" />
+              Interview Setup
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Customize your experience before we begin the session.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Language Selection */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                <Languages className="w-4 h-4" /> Preferred Language
+              </Label>
+              <RadioGroup
+                defaultValue="english"
+                value={languageMode}
+                onValueChange={setLanguageMode}
+                className="grid grid-cols-2 gap-4"
+              >
+                <div>
+                  <RadioGroupItem
+                    value="english"
+                    id="english"
+                    className="peer sr-only"
+                  />
+                  <Label
+                    htmlFor="english"
+                    className="flex flex-col items-center justify-between rounded-xl border-2 border-slate-700 bg-slate-800/50 p-4 hover:bg-slate-700/80 hover:text-white peer-data-[state=checked]:border-blue-500 peer-data-[state=checked]:bg-blue-500/10 peer-data-[state=checked]:text-blue-400 cursor-pointer transition-all"
+                  >
+                    <span className="text-2xl mb-2">🇺🇸</span>
+                    <span className="font-semibold">English</span>
+                  </Label>
+                </div>
+                <div>
+                  <RadioGroupItem
+                    value="hinglish"
+                    id="hinglish"
+                    className="peer sr-only"
+                  />
+                  <Label
+                    htmlFor="hinglish"
+                    className="flex flex-col items-center justify-between rounded-xl border-2 border-slate-700 bg-slate-800/50 p-4 hover:bg-slate-700/80 hover:text-white peer-data-[state=checked]:border-purple-500 peer-data-[state=checked]:bg-purple-500/10 peer-data-[state=checked]:text-purple-400 cursor-pointer transition-all"
+                  >
+                    <span className="text-2xl mb-2">🇮🇳</span>
+                    <span className="font-semibold">Hinglish</span>
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300 flex gap-2 items-start">
+              <span className="mt-0.5">ℹ️</span>
+              <span>
+                Hinglish mode uses a mix of Hindi and English. Recommended if
+                you want a more natural, Indian-context conversation.
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter className="sm:justify-between gap-2">
+            <Button
+              onClick={() => navigate("/dashboard")}
+              variant="ghost"
+              className="text-slate-400 hover:text-white"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleStartInterview}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/20 w-full sm:w-auto"
+            >
+              Start Interview <Sparkles className="w-4 h-4 ml-2" />
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🟢 2. SAVING OVERLAY */}
       {isSaving && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center text-white">
           <Loader2 className="w-16 h-16 animate-spin text-blue-500 mb-4" />
@@ -386,7 +464,7 @@ export default function InterviewPage() {
               variant="destructive"
               size="sm"
               onClick={endInterview}
-              disabled={isSaving}
+              disabled={isSaving || showSetup}
               className="h-7 gap-2 text-xs"
             >
               {isSaving ? (
@@ -406,7 +484,7 @@ export default function InterviewPage() {
                 value={persona}
                 onChange={(e) => setPersona(e.target.value)}
                 className="bg-transparent text-xs text-white outline-none w-full cursor-pointer"
-                disabled={isLoading || isSpeaking}
+                disabled={isLoading || isSpeaking || showSetup}
               >
                 <option value="strict">Vikram (Strict)</option>
                 <option value="friendly">Neha (HR)</option>
@@ -419,7 +497,7 @@ export default function InterviewPage() {
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value)}
                 className="bg-transparent text-xs text-white outline-none w-full cursor-pointer"
-                disabled={isLoading || isSpeaking}
+                disabled={isLoading || isSpeaking || showSetup}
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
@@ -504,7 +582,7 @@ export default function InterviewPage() {
               variant="outline"
               size="icon"
               onClick={isListening ? stopListening : startListening}
-              disabled={isSaving}
+              disabled={isSaving || showSetup}
               className={`border-slate-700 bg-slate-800 hover:bg-slate-700 ${
                 isListening
                   ? "text-red-500 border-red-500 animate-pulse"
@@ -525,12 +603,12 @@ export default function InterviewPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAIResponse(input)}
-              disabled={isLoading || isSaving}
+              disabled={isLoading || isSaving || showSetup}
             />
 
             <Button
               onClick={() => handleAIResponse(input)}
-              disabled={isLoading || !input.trim() || isSaving}
+              disabled={isLoading || !input.trim() || isSaving || showSetup}
               size="icon"
               className="bg-blue-600 hover:bg-blue-500"
             >
