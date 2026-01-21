@@ -8,50 +8,50 @@ dotenv.config();
 
 const router = express.Router();
 
-// ✅ 1. SETUP GROQ (Chat - Free & Fast)
+// ✅ 1. SETUP GROQ (Chat - Fast Llama 3)
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // ✅ 2. SETUP GEMINI EMBEDDINGS (Context search)
 const embeddings = new GoogleGenerativeAIEmbeddings({
   modelName: "text-embedding-004",
   apiKey: process.env.GEMINI_API_KEY,
-  maxRetries: 0,
+  maxRetries: 1,
 });
 
-// 🎭 PERSONA DEFINITIONS (The Brain)
+// 🎭 PERSONA DEFINITIONS
 const PERSONAS: any = {
   strict: {
     name: "Vikram",
     role: "Senior Staff Engineer (Strict & Technical)",
     style:
-      "Direct, skeptical, asks deep 'Why' questions. No fluff. Cuts off vague answers.",
+      "Direct, skeptical, asks deep 'Why' questions. Cuts off vague answers. Focuses on system depth.",
     tone: "Professional, slightly intimidating but fair.",
   },
   friendly: {
     name: "Neha",
     role: "Engineering Manager (Supportive)",
     style:
-      "Encouraging, focuses on potential, asks about collaboration and projects.",
-    tone: "Warm, professional, uses 'Great!', 'Interesting'.",
+      "Encouraging, focuses on potential, asks about collaboration. Uses positive reinforcement.",
+    tone: "Warm, professional, constructive.",
   },
   system: {
     name: "Sam",
     role: "System Architect",
     style:
-      "Obsessed with scalability, databases, and tradeoffs (CAP theorem, Sharding).",
-    tone: "Analytical, thoughtful.",
+      "Obsessed with scalability, databases, CAP theorem, Sharding, and Trade-offs.",
+    tone: "Analytical, thoughtful, detail-oriented.",
   },
 };
 
 router.post("/", async (req: any, res: any) => {
   try {
-    // ✅ Extract fields including 'difficulty' and 'mode'
     const {
       message,
       resumeId,
       history,
       mode = "strict",
       difficulty = "medium",
+      language = "english", // ✅ Default to English if not provided
     } = req.body;
 
     if (!message || !resumeId)
@@ -59,10 +59,9 @@ router.post("/", async (req: any, res: any) => {
 
     let contextText = "";
 
-    // --- STEP 1: CONTEXT RETRIEVAL (Vector Search) ---
+    // --- STEP 1: CONTEXT RETRIEVAL ---
     try {
       const queryVector = await embeddings.embedQuery(message);
-
       const resumes = await ResumeModel.aggregate([
         {
           $vectorSearch: {
@@ -84,20 +83,36 @@ router.post("/", async (req: any, res: any) => {
       if (resumes.length > 0) {
         contextText = resumes[0].content?.substring(0, 5000) || "";
       } else {
-        throw new Error("No vectors found");
+        // Fallback to full resume if vector search fails or returns nothing relevant
+        const r = await ResumeModel.findById(resumeId);
+        if (r) contextText = r.content.substring(0, 8000);
       }
     } catch (err: any) {
       console.warn("⚠️ Vector Search failed, switching to fallback.");
       const r = await ResumeModel.findById(resumeId);
-      if (r) {
-        contextText = r.content.substring(0, 8000);
-      }
+      if (r) contextText = r.content.substring(0, 8000);
     }
 
     // --- STEP 2: SELECT PERSONA ---
     const persona = PERSONAS[mode] || PERSONAS["strict"];
 
-    // --- STEP 3: DYNAMIC PROMPT GENERATION (Updated for Strictness) ---
+    // --- STEP 3: LANGUAGE INSTRUCTION BUILDER ---
+    let languageInstruction = "";
+    if (language === "hinglish") {
+      languageInstruction = `
+      - **Language Mode:** HINGLISH (Mix of Hindi & English).
+      - **Rule:** Speak naturally like an Indian Tech Interviewer. Use English for technical terms (e.g., "Dependency Injection", "Scalability") but use Hindi for connecting verbs/grammar.
+      - **Example:** "Tumhara approach thoda complex lag raha hai. Isse optimize kaise karoge?"
+      - **Avoid:** Do not use pure Shuddh Hindi. Keep it casual professional.
+      `;
+    } else {
+      languageInstruction = `
+      - **Language Mode:** Professional English (US/Global Standard).
+      - **Rule:** Use clear, concise, and professional grammar.
+      `;
+    }
+
+    // --- STEP 4: SYSTEM PROMPT (The Brain) ---
     const systemPrompt = `
       You are '${persona.name}', a ${persona.role}.
       Your goal is to conduct a technical interview based on the candidate's resume.
@@ -106,22 +121,29 @@ router.post("/", async (req: any, res: any) => {
       ${persona.style}
       Tone: ${persona.tone}
       Current Difficulty Level: ${difficulty}
+      
+      --- LANGUAGE INSTRUCTIONS (STRICTLY FOLLOW) ---
+      ${languageInstruction}
 
       --- RESUME CONTEXT ---
       ${contextText}
 
-      --- CRITICAL INSTRUCTIONS ---
-      1. **FACT CHECK (Priority #1):** If the candidate gives a WRONG, VAGUE, or HALLUCINATED answer, DO NOT move to the next question. Immediately point out the mistake strictly.
-         - Example: "No, that's incorrect. React state is not shared between components by default. Try again."
-      2. **Language:** **Hinglish** (Indian Tech style). Keep it Natural & Professional.
-      3. **Length:** **Max 2-3 sentences**. Keep it extremely short for real-time voice latency.
-      4. **No Fluff:** Don't say "Great answer" unless it is actually correct. If it's average, just move to the next question.
-      5. **Task:** Ask exactly **ONE** follow-up or new technical question.
-      6. If the user greets, introduce yourself as ${persona.name} and start immediately.
+      --- INTERVIEW GUIDELINES ---
+      1. **Verify Facts:** If the candidate is wrong or vague, call them out immediately. Do not be polite if they are hallucinating concepts.
+      2. **Concise Responses:** Keep your response under **2-3 sentences**. This is a voice conversation, long text is bad.
+      3. **One Question at a Time:** Ask exactly ONE follow-up question. Do not stack multiple questions.
+      4. **No Fluff:** Do not say "That's a great answer" unless it is perfect. If it's okay, just say "Okay" and move on.
+      5. **Assessment Criteria (Internal Thought Process):**
+         - Content Quality (Technical Accuracy)
+         - Communication (Clarity)
+         - Domain Knowledge (Depth)
+      
+      If the user just says "Hello" or "Start", introduce yourself briefly as ${persona.name} and ask the first question based on their Resume Projects/Skills.
     `;
 
     const messages: any[] = [{ role: "system", content: systemPrompt }];
 
+    // Inject History
     if (history && Array.isArray(history)) {
       history.forEach((msg: any) => {
         messages.push({
@@ -138,7 +160,7 @@ router.post("/", async (req: any, res: any) => {
       messages: messages,
       model: "llama-3.3-70b-versatile",
       temperature: 0.6,
-      max_tokens: 150, // Short answers for speed
+      max_tokens: 150, // Keep short for TTS speed
     });
 
     const aiText = completion.choices[0]?.message?.content || "Server Error.";
