@@ -11,12 +11,11 @@ const router = express.Router();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // ============================================================================
-// 1. END INTERVIEW & GENERATE REPORT (PROTECTED 🔒)
+// 1. END INTERVIEW & GENERATE REPORT (Weighted Ensemble Scoring 🧠)
 // ============================================================================
 router.post("/end", requireAuth, async (req: any, res: any) => {
   try {
     const { resumeId, history } = req.body;
-    // Note: Adjust 'req.user.userId' if your auth middleware uses 'req.auth.userId'
     const userId = req.user?.userId || req.auth?.userId;
 
     // 1. Basic Validation
@@ -24,11 +23,12 @@ router.post("/end", requireAuth, async (req: any, res: any) => {
       return res.status(400).json({ error: "No conversation to analyze" });
     }
 
-    // 2. Check if user actually answered (Prevent AI hallucination on empty chat)
+    // 2. Check if user actually answered
     const userMessageCount = history.filter(
       (msg: any) => msg.role === "user",
     ).length;
 
+    // 🛑 EARLY EXIT: Zero Score if no interaction
     if (userMessageCount === 0) {
       console.log(`⚠️ User ${userId} ended interview without answering.`);
 
@@ -36,10 +36,10 @@ router.post("/end", requireAuth, async (req: any, res: any) => {
         score: 0,
         feedback: "Interview terminated early. No answers provided.",
         metrics: [
-          { subject: "Technical", A: 0, fullMark: 100 },
-          { subject: "Communication", A: 0, fullMark: 100 },
-          { subject: "Problem Solving", A: 0, fullMark: 100 },
-          { subject: "Confidence", A: 0, fullMark: 100 },
+          { subject: "Content Quality", A: 0, fullMark: 100 },
+          { subject: "Communication Skills", A: 0, fullMark: 100 },
+          { subject: "Behavioral Indicators", A: 0, fullMark: 100 },
+          { subject: "Domain Expertise", A: 0, fullMark: 100 },
         ],
       };
 
@@ -61,23 +61,30 @@ router.post("/end", requireAuth, async (req: any, res: any) => {
       });
     }
 
-    // 3. AI Analysis (Groq)
+    // 3. AI Analysis (Weighted Ensemble Logic)
     const systemPrompt = `
       You are an expert Technical Interview Evaluator.
       Analyze the provided interview transcript based ONLY on the candidate's answers.
       
+      --- SCORING CRITERIA (WEIGHTED ENSEMBLE) ---
+      Evaluate based on these 4 strict parameters:
+      1. **Content Quality (40%)**: Accuracy of technical answers, code logic, and correctness.
+      2. **Communication Skills (30%)**: Clarity, articulation, and language flow (English/Hinglish).
+      3. **Behavioral Indicators (20%)**: Confidence, honesty about gaps, and problem-solving approach.
+      4. **Domain Expertise (10%)**: Depth of knowledge in the specific tech stack (React, Node, etc.).
+
       --- OUTPUT REQUIREMENTS ---
       1. Return a **STRICT JSON** object.
-      2. No markdown, no introductory text.
+      2. Calculate the 'score' as a weighted average: (Content*0.4 + Comm*0.3 + Behavior*0.2 + Domain*0.1).
       3. Structure must match exactly:
       {
-        "score": number (0-100 overall score),
-        "feedback": "string (2-3 sentences summary of performance)",
+        "score": number (0-100),
+        "feedback": "string (concise summary of performance, mentioning strengths and weak areas)",
         "skills": [
-          { "subject": "Technical", "A": number (0-100), "fullMark": 100 },
-          { "subject": "Communication", "A": number (0-100), "fullMark": 100 },
-          { "subject": "Problem Solving", "A": number (0-100), "fullMark": 100 },
-          { "subject": "Confidence", "A": number (0-100), "fullMark": 100 }
+          { "subject": "Content Quality", "A": number (0-100), "fullMark": 100 },
+          { "subject": "Communication Skills", "A": number (0-100), "fullMark": 100 },
+          { "subject": "Behavioral Indicators", "A": number (0-100), "fullMark": 100 },
+          { "subject": "Domain Expertise", "A": number (0-100), "fullMark": 100 }
         ]
       }
     `;
@@ -106,10 +113,10 @@ router.post("/end", requireAuth, async (req: any, res: any) => {
       score: aiResponse.score || 0,
       feedback: aiResponse.feedback || "Analysis incomplete.",
       metrics: aiResponse.skills || [
-        { subject: "Technical", A: 0, fullMark: 100 },
-        { subject: "Communication", A: 0, fullMark: 100 },
-        { subject: "Problem Solving", A: 0, fullMark: 100 },
-        { subject: "Confidence", A: 0, fullMark: 100 },
+        { subject: "Content Quality", A: 0, fullMark: 100 },
+        { subject: "Communication Skills", A: 0, fullMark: 100 },
+        { subject: "Behavioral Indicators", A: 0, fullMark: 100 },
+        { subject: "Domain Expertise", A: 0, fullMark: 100 },
       ],
     };
 
@@ -138,15 +145,14 @@ router.post("/end", requireAuth, async (req: any, res: any) => {
 });
 
 // ============================================================================
-// 2. GET USER HISTORY (NEW ROUTE FOR DASHBOARD) 🕒
+// 2. GET USER HISTORY (DASHBOARD)
 // ============================================================================
 router.get("/history", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.user?.userId || req.auth?.userId;
 
-    // Fetch interviews for this user, sorted by newest first
     const interviews = await InterviewModel.find({ userId })
-      .select("score feedback createdAt metrics") // Optimize: Don't fetch full chat history
+      .select("score feedback createdAt metrics")
       .sort({ createdAt: -1 });
 
     res.json(interviews);
@@ -157,16 +163,13 @@ router.get("/history", requireAuth, async (req: any, res: any) => {
 });
 
 // ============================================================================
-// 3. GET INTERVIEW DETAILS (For Feedback Page)
+// 3. GET INTERVIEW DETAILS (FEEDBACK PAGE)
 // ============================================================================
 router.get("/:id", requireAuth, async (req: any, res: any) => {
   try {
     const interview = await InterviewModel.findById(req.params.id);
     if (!interview)
       return res.status(404).json({ error: "Interview not found" });
-
-    // Optional: Check if the user owns this interview
-    // if (interview.userId.toString() !== req.user.userId) return res.status(403).json({ error: "Unauthorized" });
 
     res.json(interview);
   } catch (error) {
@@ -176,12 +179,12 @@ router.get("/:id", requireAuth, async (req: any, res: any) => {
 });
 
 // ============================================================================
-// 4. UPLOAD VIDEO (CLOUD STORAGE ☁️)
+// 4. UPLOAD VIDEO (CLOUDINARY ☁️)
 // ============================================================================
 router.post(
   "/upload-video",
   requireAuth,
-  uploadMiddleware.single("video"), // ✅ Using Cloudinary Middleware
+  uploadMiddleware.single("video"),
   async (req: any, res: any) => {
     try {
       if (!req.file) {
@@ -189,13 +192,12 @@ router.post(
       }
 
       const { interviewId } = req.body;
-      const videoUrl = req.file.path; // ✅ Cloudinary URL (Available instantly)
+      const videoUrl = req.file.path; // Cloudinary URL
 
       console.log(`☁️ Video Uploaded to Cloudinary: ${videoUrl}`);
 
-      // Save Video URL to Interview Document
       await InterviewModel.findByIdAndUpdate(interviewId, {
-        videoUrl: videoUrl, // ✅ Ensure your Model has this field
+        videoUrl: videoUrl,
       });
 
       res.json({
