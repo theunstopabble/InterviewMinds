@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import {
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useLocation,
+} from "react-router-dom"; // ✅ Added useLocation
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
-import { Play, Upload, FileText, ArrowLeft } from "lucide-react"; // ✅ Added ArrowLeft
+import { Play, Upload, FileText, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Components
@@ -20,7 +26,7 @@ import FeedbackPage from "./pages/FeedbackPage";
 function Home() {
   const navigate = useNavigate();
   const [hasResume, setHasResume] = useState(false);
-  const [showUpload, setShowUpload] = useState(false); // ✅ New Toggle State
+  const [showUpload, setShowUpload] = useState(false);
 
   // 🕵️‍♂️ Check for existing resume on mount
   useEffect(() => {
@@ -83,7 +89,7 @@ function Home() {
               {/* Option 2: Upload New (Non-Destructive) */}
               <Button
                 variant="outline"
-                onClick={() => setShowUpload(true)} // ✅ Only changes view, keeps data
+                onClick={() => setShowUpload(true)}
                 className="w-full border-slate-700 bg-slate-950/50 hover:bg-slate-900 hover:text-white h-12 text-base transition-all"
               >
                 <Upload className="w-4 h-4 mr-2" />
@@ -95,11 +101,11 @@ function Home() {
       ) : (
         /* 📤 Default Upload View */
         <div className="w-full max-w-3xl animate-in zoom-in duration-700 delay-300 flex flex-col gap-4">
-          {/* ✅ BACK BUTTON: Only shows if user has a saved resume to go back to */}
+          {/* ✅ BACK BUTTON */}
           {hasResume && (
             <Button
               variant="ghost"
-              onClick={() => setShowUpload(false)} // ✅ Go back to "Continue" screen
+              onClick={() => setShowUpload(false)}
               className="self-start text-slate-400 hover:text-white -ml-2 mb-2"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -116,15 +122,20 @@ function Home() {
 
 // 🌐 Main App Component
 function App() {
+  const location = useLocation();
+  // 🎯 FOCUS MODE: Interview page par Navbar hide karo
+  const isFocusMode = location.pathname === "/interview";
+
   return (
     <div className="relative min-h-screen bg-gray-950 text-white font-sans selection:bg-blue-500/30">
-      {/* 🔒 Navbar: Shows automatically when logged in */}
-      <SignedIn>
-        <Navbar />
-      </SignedIn>
+      {/* 🔒 Navbar: Shows automatically when logged in, BUT HIDDEN IN FOCUS MODE */}
+      <SignedIn>{!isFocusMode && <Navbar />}</SignedIn>
 
       {/* Main Content Area */}
-      <div className="pt-16 sm:pt-20">
+      {/* Agar Navbar hai (Normal Mode): pt-16 (Padding Top) taaki content Navbar ke peeche na chupe.
+          Agar Focus Mode hai (Interview): No Padding. Full Screen use karo.
+      */}
+      <div className={isFocusMode ? "" : "pt-16 sm:pt-20"}>
         <AxiosInterceptor>
           <Routes>
             {/* 🔓 Public Route: Sign In */}
