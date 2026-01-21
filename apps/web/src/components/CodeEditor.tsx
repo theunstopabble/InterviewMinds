@@ -1,13 +1,14 @@
 import { Editor } from "@monaco-editor/react";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Code2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Play, RotateCcw } from "lucide-react";
 
 interface CodeEditorProps {
   code: string;
@@ -16,59 +17,98 @@ interface CodeEditorProps {
   setLanguage: (value: string) => void;
 }
 
-export default function CodeEditor({ code, setCode, language, setLanguage }: CodeEditorProps) {
-  
+// 🎨 Supported Languages Configuration
+const LANGUAGES = [
+  { id: "javascript", name: "JavaScript (Node.js)" },
+  { id: "python", name: "Python 3" },
+  { id: "java", name: "Java" },
+  { id: "cpp", name: "C++" },
+];
+
+export default function CodeEditor({
+  code,
+  setCode,
+  language,
+  setLanguage,
+}: CodeEditorProps) {
+  // Reset Code Helper
+  const handleReset = () => {
+    setCode("// Write your code here...");
+  };
+
   return (
-    <div className="flex flex-col h-full bg-slate-950 border-l border-white/10">
-      
-      {/* --- Toolbar (Top Bar) --- */}
-      <div className="flex items-center justify-between p-3 border-b border-white/10 bg-slate-900/50 backdrop-blur-sm">
-        
+    <div className="flex flex-col h-full bg-[#1e1e1e] border-l border-white/10">
+      {/* 🛠️ EDITOR TOOLBAR */}
+      <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-white/10 shrink-0">
+        {/* Left: Title & Language Selector */}
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-slate-400">Language:</span>
-          {/* Language Selector */}
+          <div className="flex items-center gap-2 text-blue-400">
+            <Code2 className="w-4 h-4" />
+            <span className="text-xs font-bold tracking-wider uppercase">
+              Editor
+            </span>
+          </div>
+
           <Select value={language} onValueChange={setLanguage}>
-            <SelectTrigger className="w-[140px] h-8 bg-slate-800 border-slate-700 text-slate-200">
+            <SelectTrigger className="h-7 w-[160px] bg-[#3c3c3c] border-none text-xs text-white focus:ring-1 focus:ring-blue-500">
               <SelectValue placeholder="Select Language" />
             </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-              <SelectItem value="javascript">JavaScript</SelectItem>
-              <SelectItem value="python">Python</SelectItem>
-              <SelectItem value="java">Java</SelectItem>
-              <SelectItem value="cpp">C++</SelectItem>
+            <SelectContent className="bg-[#252526] border-slate-700 text-white">
+              {LANGUAGES.map((lang) => (
+                <SelectItem
+                  key={lang.id}
+                  value={lang.id}
+                  className="text-xs cursor-pointer hover:bg-slate-700 focus:bg-slate-700"
+                >
+                  {lang.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
+        {/* Right: Actions & Status */}
         <div className="flex items-center gap-2">
-           {/* Reset Button */}
-           <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-white" onClick={() => setCode("// Write your code here...")}>
-            <RotateCcw className="w-4 h-4" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleReset}
+            className="h-6 w-6 text-slate-500 hover:text-white hover:bg-slate-700"
+            title="Reset Code"
+          >
+            <RotateCcw className="w-3 h-3" />
           </Button>
-          
-          {/* Run Button (Abhi functionality baad mein denge) */}
-          <Button size="sm" className="bg-green-600 hover:bg-green-500 text-white gap-2 h-8">
-            <Play className="w-3 h-3" />
-            Run Code
-          </Button>
+
+          <Badge
+            variant="outline"
+            className="border-green-500/30 text-green-400 text-[10px] px-2 h-5 bg-green-500/10 hidden sm:flex"
+          >
+            Auto-Save On
+          </Badge>
         </div>
       </div>
 
-      {/* --- The Monaco Editor --- */}
-      <div className="flex-1 overflow-hidden">
+      {/* 📝 MONACO EDITOR ENGINE */}
+      <div className="flex-1 overflow-hidden relative">
         <Editor
           height="100%"
           language={language}
           value={code}
-          theme="vs-dark"
+          theme="vs-dark" // Professional Dark Theme
           onChange={(value) => setCode(value)}
           options={{
-            minimap: { enabled: false }, // Chota map hataya clean look ke liye
+            minimap: { enabled: false }, // Clean look
             fontSize: 14,
+            fontFamily: "'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
+            lineNumbers: "on",
+            roundedSelection: false,
             scrollBeyondLastLine: false,
-            automaticLayout: true,
+            readOnly: false,
+            automaticLayout: true, // Auto-resize handle karega
+            cursorBlinking: "smooth",
+            smoothScrolling: true,
             padding: { top: 16 },
-            fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+            wordWrap: "on",
           }}
         />
       </div>

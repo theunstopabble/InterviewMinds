@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { UploadCloud, Loader2, FileText, CheckCircle } from "lucide-react";
+import {
+  UploadCloud,
+  Loader2,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Upload,
+} from "lucide-react";
 import { api } from "../lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,23 +59,32 @@ export default function ResumeUpload() {
     formData.append("resume", file);
 
     try {
-      // 👇 3. Timeout Fix for Slow Mobile Networks
+      // 3. Upload Request with Timeout
       const res = await api.post("/resume/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 60000, // 60 Seconds wait karega (Mobile data ke liye zaroori)
+        timeout: 60000, // 60 Seconds timeout for mobile
       });
 
-      localStorage.setItem("resumeId", res.data.id);
+      // ✅ FIX STARTS HERE: Handle both 'id' and '_id'
+      const resumeId = res.data.id || res.data._id;
 
-      toast.success("Resume Uploaded!", {
-        description: "Redirecting to interview...",
+      if (!resumeId) {
+        throw new Error("Server did not return a valid Resume ID");
+      }
+
+      // ✅ Store safely in LocalStorage
+      localStorage.setItem("resumeId", resumeId);
+      console.log("✅ Resume ID Saved:", resumeId);
+
+      toast.success("Resume Analyzed!", {
+        description: "Redirecting to interview setup...",
       });
 
+      // Thoda delay taaki toast dikhe
       setTimeout(() => navigate("/interview"), 1000);
     } catch (error: any) {
       console.error("Upload failed", error);
 
-      // Error Details dikhayein
       const errorMessage =
         error.response?.data?.error || "Connection Timeout or Server Error";
 
@@ -104,7 +120,7 @@ export default function ResumeUpload() {
               Select Resume
             </Label>
             <div className="relative group cursor-pointer">
-              {/* 👇 4. Main Fix: Accept 'application/pdf' explicitly for Android */}
+              {/* 4. Accept 'application/pdf' explicitly */}
               <Input
                 id="resume"
                 type="file"
@@ -163,6 +179,14 @@ export default function ResumeUpload() {
             "Start AI Interview"
           )}
         </Button>
+
+        {/* Security Note */}
+        <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
+          <AlertCircle className="w-3 h-3" />
+          <span>
+            Your data is secure and used only for interview simulation.
+          </span>
+        </div>
       </CardContent>
     </Card>
   );

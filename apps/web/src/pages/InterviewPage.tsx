@@ -7,6 +7,8 @@ import {
   Sparkles,
   Settings2,
   Volume2,
+  Loader2, // ✅ Loading Icon
+  MonitorX, // ✅ Mobile Block Icon
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
@@ -45,6 +47,12 @@ export default function InterviewPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // ✅ FIX 1: Saving Overlay State
+  const [isSaving, setIsSaving] = useState(false);
+
+  // ✅ FIX 2: Mobile Detection State
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
+
   // ⚙️ CONTROLS STATE
   const [persona, setPersona] = useState("strict");
   const [difficulty, setDifficulty] = useState("medium");
@@ -53,16 +61,8 @@ export default function InterviewPage() {
   const [userEmotion, setUserEmotion] = useState("Neutral");
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
 
-  // ✅ FIX: Ref use kar rahe hain taaki endInterview me latest value mile
-
+  // ✅ FIX 3: Ref for Closure-Safe Video Uploading
   const recordedBlobRef = useRef<Blob | null>(null);
-
-  // ✅ Log emotion to satisfy TypeScript unused variable check
-  useEffect(() => {
-    if (userEmotion) {
-      // console.log("Emotion:", userEmotion);
-    }
-  }, [userEmotion]);
 
   // 🔒 STRICT LOCKS
   const isProcessing = useRef(false);
@@ -96,8 +96,22 @@ export default function InterviewPage() {
 
   const getCurrentGender = () => PERSONA_DETAILS[persona]?.gender || "female";
 
+  // --- 0. MOBILE CHECK (Industry Standard) ---
+  useEffect(() => {
+    const checkMobile = () => {
+      // < 1024px width considered Tablet/Mobile
+      setIsMobile(window.innerWidth < 1024);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   // --- 1. INITIALIZATION ---
   useEffect(() => {
+    // 🛑 SECURITY: Agar mobile hai to logic run mat karo
+    if (window.innerWidth < 1024) return;
+
     const resumeId = localStorage.getItem("resumeId");
     if (!resumeId) {
       toast.error("No resume found");
@@ -115,6 +129,24 @@ export default function InterviewPage() {
       );
     }
   }, []);
+
+  // 🚫 MOBILE BLOCKER UI (Ye sabse upar hi rahega)
+  if (isMobile) {
+    return (
+      <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-center p-6 text-white">
+        <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6 animate-pulse border border-red-500/20">
+          <MonitorX className="w-10 h-10 text-red-500" />
+        </div>
+        <h1 className="text-3xl font-bold mb-2">Desktop Required</h1>
+        <p className="text-slate-400 max-w-md text-lg leading-relaxed">
+          Coding interviews require a focused environment.
+          <br />
+          Please open <strong>InterviewMinds</strong> on a Laptop or PC to
+          access the IDE and AI tools.
+        </p>
+      </div>
+    );
+  }
 
   // --- 2. VOICE SYNC ---
   useEffect(() => {
@@ -148,23 +180,21 @@ export default function InterviewPage() {
     }
   }, [messages]);
 
-  // --- 5. SPACEBAR MIC TOGGLE (UX Improvement) ---
+  // --- 5. SPACEBAR MIC TOGGLE ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in input/textarea or editor
       const tagName = document.activeElement?.tagName.toLowerCase();
       const isEditable =
         document.activeElement?.getAttribute("contenteditable") === "true";
       if (tagName === "input" || tagName === "textarea" || isEditable) return;
 
       if (e.code === "Space") {
-        e.preventDefault(); // Prevent scrolling
+        e.preventDefault();
         if (!isListening && !isLoading) startListening();
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      // Ignore if typing
       const tagName = document.activeElement?.tagName.toLowerCase();
       const isEditable =
         document.activeElement?.getAttribute("contenteditable") === "true";
@@ -236,7 +266,6 @@ export default function InterviewPage() {
         })),
         mode: persona,
         difficulty: difficulty,
-        // emotion: userEmotion // Future: Send emotion to backend
       });
 
       const aiReply = res.data.reply;
@@ -253,18 +282,19 @@ export default function InterviewPage() {
     }
   };
 
-  // --- 8. END INTERVIEW ---
+  // --- 8. END INTERVIEW (Robust Logic) ---
   const endInterview = async () => {
-    cancelSpeech();
-    setIsInterviewStarted(false); // 🛑 Stop Recording Trigger
+    // 🛑 1. UI Freeze Fix: Activate Overlay immediately
+    setIsSaving(true);
 
-    // ⏳ Wait 2 seconds for blob to generate and Ref to update
+    cancelSpeech();
+    setIsInterviewStarted(false); // Stops recording in Webcam component
+
+    // ⏳ Wait 2s for blob to finalize and update Ref
     setTimeout(async () => {
       const resumeId = localStorage.getItem("resumeId");
       try {
-        toast.info("Generating Report...");
-
-        // 1. Save Text Chat
+        // 1. Save Chat History
         const res = await api.post("/interview/end", {
           resumeId,
           history: messages.map((m) => ({
@@ -275,8 +305,8 @@ export default function InterviewPage() {
 
         const interviewId = res.data.id;
 
-        // 2. Upload Video using REF (Closure-Safe)
-        const blobToUpload = recordedBlobRef.current; // ✅ Fresh Value
+        // 2. Upload Video (Using Ref for fresh value)
+        const blobToUpload = recordedBlobRef.current;
 
         console.log("📼 Blob Status:", blobToUpload ? "Ready" : "Missing");
 
@@ -285,11 +315,12 @@ export default function InterviewPage() {
           videoData.append("video", blobToUpload, "interview.webm");
           videoData.append("interviewId", interviewId);
 
-          toast.info("Uploading Video...");
+          toast.loading("Uploading Video to Cloud...");
           await api.post("/interview/upload-video", videoData, {
             headers: { "Content-Type": "multipart/form-data" },
           });
-          console.log("✅ Video Uploaded!");
+          toast.dismiss();
+          toast.success("Interview Saved Successfully!");
         } else {
           console.warn("⚠️ No video recorded to upload.");
         }
@@ -298,12 +329,48 @@ export default function InterviewPage() {
       } catch (e) {
         console.error(e);
         toast.error("Error ending session");
+        setIsSaving(false); // Hide overlay on error
       }
-    }, 2000); // 2 seconds safety buffer
+    }, 2000);
   };
 
+  // 🚫 MOBILE BLOCKER UI
+  if (isMobile) {
+    return (
+      <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-center p-6 text-white">
+        <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6 animate-pulse border border-red-500/20">
+          <MonitorX className="w-10 h-10 text-red-500" />
+        </div>
+        <h1 className="text-3xl font-bold mb-2">Desktop Required</h1>
+        <p className="text-slate-400 max-w-md text-lg leading-relaxed">
+          Coding interviews require a focused environment.
+          <br />
+          Please open <strong>InterviewMinds</strong> on a Laptop or PC to
+          access the IDE and AI tools.
+        </p>
+      </div>
+    );
+  }
+
+  // ✅ MAIN INTERVIEW UI
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full bg-black text-white overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full bg-black text-white overflow-hidden relative">
+      {/* 🟢 SAVING OVERLAY (Fixes "Page Stuck" Feeling) */}
+      {isSaving && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+          <Loader2 className="w-16 h-16 animate-spin text-blue-500 mb-4" />
+          <h2 className="text-2xl font-bold tracking-tight">
+            Finishing Interview...
+          </h2>
+          <p className="text-slate-400 mt-2">
+            Uploading video & generating AI feedback.
+          </p>
+          <p className="text-slate-500 text-sm mt-1">
+            Please do not close this tab.
+          </p>
+        </div>
+      )}
+
       {/* --- LEFT PANEL: Chat & Video Controls --- */}
       <div className="w-full lg:w-[40%] h-[45%] lg:h-full flex flex-col border-r border-white/10 bg-slate-950/50 relative order-1">
         {/* Header Section */}
@@ -319,9 +386,15 @@ export default function InterviewPage() {
               variant="destructive"
               size="sm"
               onClick={endInterview}
+              disabled={isSaving}
               className="h-7 gap-2 text-xs"
             >
-              <StopCircle className="w-3 h-3" /> End
+              {isSaving ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <StopCircle className="w-3 h-3" />
+              )}
+              End
             </Button>
           </div>
 
@@ -356,25 +429,22 @@ export default function InterviewPage() {
           </div>
         </div>
 
-        {/* 🎥 NEW: Webcam Analysis Section */}
+        {/* 🎥 Webcam Analysis Section */}
         <div className="relative p-4 bg-slate-950/30 border-b border-white/10 shrink-0">
-          {/* 1. Camera Feed */}
           <WebcamAnalysis
             onEmotionUpdate={setUserEmotion}
             isInterviewActive={isInterviewStarted}
             onRecordingComplete={(blob) => {
-
-              recordedBlobRef.current = blob; // ✅ Update Ref for immediate access
+              recordedBlobRef.current = blob; // ✅ Update Ref immediately
             }}
           />
 
-          {/* 2. Proctoring UI (Warnings) */}
           <ProctoringUI
             violationCount={violationCount}
             lastViolation={lastViolation}
           />
 
-          {/* 3. Audio Coach UI */}
+          {/* Audio Coach UI */}
           {isListening && warning && (
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
               <div
@@ -394,7 +464,7 @@ export default function InterviewPage() {
             </div>
           )}
 
-          {/* 🔊 Audio Visualizer */}
+          {/* Audio Visualizer */}
           {isSpeaking && (
             <div className="absolute bottom-6 right-6 z-20 pointer-events-none">
               <div className="w-10 h-10 rounded-full bg-slate-900/80 backdrop-blur-md border border-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20 animate-pulse">
@@ -434,6 +504,7 @@ export default function InterviewPage() {
               variant="outline"
               size="icon"
               onClick={isListening ? stopListening : startListening}
+              disabled={isSaving}
               className={`border-slate-700 bg-slate-800 hover:bg-slate-700 ${
                 isListening
                   ? "text-red-500 border-red-500 animate-pulse"
@@ -454,12 +525,12 @@ export default function InterviewPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAIResponse(input)}
-              disabled={isLoading}
+              disabled={isLoading || isSaving}
             />
 
             <Button
               onClick={() => handleAIResponse(input)}
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || !input.trim() || isSaving}
               size="icon"
               className="bg-blue-600 hover:bg-blue-500"
             >
