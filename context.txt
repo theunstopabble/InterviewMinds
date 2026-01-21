@@ -47,13 +47,18 @@ InterviewMinds
 │       │   ├── assets
 │       │   │   └── react.svg
 │       │   ├── components
+│       │   │   ├── interview
+│       │   │   │   ├── InterviewHeader.tsx
+│       │   │   │   └── InterviewSetupModal.tsx
 │       │   │   ├── ui
 │       │   │   │   ├── badge.tsx
 │       │   │   │   ├── button.tsx
 │       │   │   │   ├── card.tsx
+│       │   │   │   ├── dialog.tsx
 │       │   │   │   ├── input.tsx
 │       │   │   │   ├── label.tsx
 │       │   │   │   ├── progress.tsx
+│       │   │   │   ├── radio-group.tsx
 │       │   │   │   ├── scroll-area.tsx
 │       │   │   │   ├── select.tsx
 │       │   │   │   ├── separator.tsx
@@ -72,6 +77,7 @@ InterviewMinds
 │       │   │   └── useSpeech.ts
 │       │   ├── lib
 │       │   │   ├── api.ts
+│       │   │   ├── interviewConstants.ts
 │       │   │   └── utils.ts
 │       │   ├── pages
 │       │   │   ├── DashboardPage.tsx
