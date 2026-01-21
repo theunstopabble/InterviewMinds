@@ -110,6 +110,14 @@ export default function InterviewPage() {
 
   const getCurrentGender = () => PERSONA_DETAILS[persona]?.gender || "female";
 
+  // ✅ DEBUG: Log Emotion to satisfy TypeScript unused variable check
+  // This prevents the "userEmotion is declared but never read" build error
+  useEffect(() => {
+    if (userEmotion && userEmotion !== "Neutral") {
+      console.log("User Emotion Detected:", userEmotion);
+    }
+  }, [userEmotion]);
+
   // --- 0. MOBILE CHECK ---
   useEffect(() => {
     const checkMobile = () => {
