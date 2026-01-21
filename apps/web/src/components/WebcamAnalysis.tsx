@@ -17,9 +17,10 @@ export default function WebcamAnalysis({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // 🎥 Recording Refs
+  // 🎥 Stream & Recorder Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null); // ✅ Added ref for reliable cleanup
 
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(false);
@@ -51,14 +52,21 @@ export default function WebcamAnalysis({
     initCamera();
   }, []);
 
-  // 2. Control Recording based on Interview Status
+  // 2. Control Recording & Camera based on Interview Status
   useEffect(() => {
-    if (isInterviewActive && isVideoOn && !isRecording) {
-      startRecording();
-    } else if (!isInterviewActive && isRecording) {
-      stopRecording();
+    if (isInterviewActive) {
+      if (isVideoOn && !isRecording) {
+        startRecording();
+      }
+    } else {
+      // 🛑 Interview Ends -> Stop Recording -> Stop Camera
+      if (isRecording) {
+        stopRecording();
+        // Thoda delay taaki last chunk save ho jaye, fir camera band karo
+        setTimeout(() => stopTracks(), 500);
+      }
     }
-  }, [isInterviewActive, isVideoOn]);
+  }, [isInterviewActive, isVideoOn, isRecording]);
 
   // 3. Start Video (Camera + Mic)
   const startVideo = async () => {
@@ -68,6 +76,8 @@ export default function WebcamAnalysis({
         video: true,
         audio: true,
       });
+
+      streamRef.current = stream; // Save stream for cleanup
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -83,9 +93,9 @@ export default function WebcamAnalysis({
 
   // 4. Start Recording Logic
   const startRecording = () => {
-    if (!videoRef.current || !videoRef.current.srcObject) return;
+    if (!streamRef.current) return;
 
-    const stream = videoRef.current.srcObject as MediaStream;
+    const stream = streamRef.current;
     // Use supported mime type (Prioritize VP9 for quality)
     const mimeType = MediaRecorder.isTypeSupported("video/webm; codecs=vp9")
       ? "video/webm; codecs=vp9"
@@ -127,18 +137,20 @@ export default function WebcamAnalysis({
 
   // 6. Stop Everything (Robust Cleanup)
   const stopTracks = () => {
-    // Stop recording first
+    // Stop recording first if active
     if (isRecording) stopRecording();
 
-    // Stop Hardware Camera/Mic
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => {
-        track.stop(); // Light off
-      });
-      videoRef.current.srcObject = null;
-      setIsVideoOn(false);
+    // Stop Hardware Camera/Mic (Green Light OFF)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    setIsVideoOn(false);
 
     // Stop AI Loop
     if (intervalRef.current) {
@@ -166,11 +178,11 @@ export default function WebcamAnalysis({
         .detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions())
         .withFaceExpressions();
 
-      // 🚨 NEW: MULTIPLE FACE DETECTION LOGIC
+      // 🚨 MULTIPLE FACE DETECTION LOGIC
       if (detections.length > 1) {
         toast.error("⚠️ Multiple Faces Detected!", {
           description: "Only the candidate should be visible.",
-          duration: 2000, // Jaldi hatega taaki spam na ho
+          duration: 2000,
         });
       }
 
@@ -250,7 +262,7 @@ export default function WebcamAnalysis({
         </div>
       )}
 
-      {/* Manual Controls (Hidden by default, visible on hover) */}
+      {/* Manual Controls (Visible on hover) */}
       <div className="absolute bottom-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button
           size="sm"

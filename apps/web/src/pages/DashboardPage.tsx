@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
-import { Plus, LayoutDashboard, Trophy, Clock, ArrowRight } from "lucide-react";
+import { LayoutDashboard, Trophy, Clock, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +25,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        // ✅ FIX: Correct Endpoint (/history)
+        // ✅ Endpoint: Fetches user's past interviews
         const res = await api.get("/interview/history");
         setInterviews(res.data);
       } catch (error) {
@@ -51,10 +51,12 @@ export default function DashboardPage() {
         ).toFixed(1)
       : "N/A";
 
+  const latestInterview = interviews.length > 0 ? interviews[0] : null;
+
   return (
     <div className="min-h-screen bg-black text-white p-6 md:p-12">
       <div className="max-w-6xl mx-auto space-y-8">
-        {/* --- Header --- */}
+        {/* --- Header (Cleaned - No Duplicate Button) --- */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-600">
@@ -64,12 +66,7 @@ export default function DashboardPage() {
               Track your progress and past interviews.
             </p>
           </div>
-          <Button
-            onClick={() => navigate("/")} // Navigate to Resume Upload (Start)
-            className="gap-2 bg-blue-600 hover:bg-blue-500 text-white"
-          >
-            <Plus className="w-4 h-4" /> New Interview
-          </Button>
+          {/* Note: 'New Interview' button removed from here as it exists in Navbar */}
         </div>
 
         {/* --- Stats Cards --- */}
@@ -86,7 +83,9 @@ export default function DashboardPage() {
               {loading ? (
                 <Skeleton className="h-8 w-20 bg-slate-800" />
               ) : (
-                <div className="text-2xl font-bold">{totalInterviews}</div>
+                <div className="text-2xl font-bold text-white">
+                  {totalInterviews}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -103,9 +102,11 @@ export default function DashboardPage() {
               {loading ? (
                 <Skeleton className="h-8 w-20 bg-slate-800" />
               ) : (
-                <div className="text-2xl font-bold">
+                <div className="text-2xl font-bold text-white">
                   {avgRating}{" "}
-                  <span className="text-sm text-slate-500">/ 10</span>
+                  <span className="text-sm text-slate-500 font-normal">
+                    / 10
+                  </span>
                 </div>
               )}
             </CardContent>
@@ -123,9 +124,9 @@ export default function DashboardPage() {
               {loading ? (
                 <Skeleton className="h-8 w-32 bg-slate-800" />
               ) : (
-                <div className="text-sm text-slate-300">
-                  {interviews.length > 0
-                    ? new Date(interviews[0].createdAt).toLocaleDateString()
+                <div className="text-sm text-slate-300 font-medium">
+                  {latestInterview
+                    ? new Date(latestInterview.createdAt).toLocaleDateString()
                     : "No activity yet"}
                 </div>
               )}
@@ -161,7 +162,7 @@ export default function DashboardPage() {
                 <Button
                   variant="link"
                   onClick={() => navigate("/")}
-                  className="text-blue-400 mt-2"
+                  className="text-blue-400 mt-2 hover:text-blue-300"
                 >
                   Start your first one!
                 </Button>

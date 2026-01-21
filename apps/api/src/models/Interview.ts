@@ -23,6 +23,13 @@ const interviewSchema = new mongoose.Schema({
     default: "ongoing",
   },
 
+  // 📹 Phase 6: Video Recording (Cloudinary URL)
+  // ✅ NEW FIELD: Ye zaroori hai video save karne ke liye
+  videoUrl: {
+    type: String,
+    required: false, // Optional initially, upload ke baad update hoga
+  },
+
   // 💬 Chat History
   messages: [
     {

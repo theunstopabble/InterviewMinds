@@ -8,8 +8,11 @@ InterviewMinds
 ├── apps
 │   ├── api
 │   │   ├── src
+│   │   │   ├── config
+│   │   │   │   └── cloudinary.ts
 │   │   │   ├── middleware
-│   │   │   │   └── auth.ts
+│   │   │   │   ├── auth.ts
+│   │   │   │   └── upload.ts
 │   │   │   ├── models
 │   │   │   │   ├── Interview.ts
 │   │   │   │   └── Resume.ts
@@ -60,10 +63,12 @@ InterviewMinds
 │       │   │   ├── CodeEditor.tsx
 │       │   │   ├── Navbar.tsx
 │       │   │   ├── OutputConsole.tsx
+│       │   │   ├── ProctoringUI.tsx
 │       │   │   ├── ResumeUpload.tsx
 │       │   │   └── WebcamAnalysis.tsx
 │       │   ├── hooks
 │       │   │   ├── useAudioAnalysis.ts
+│       │   │   ├── useProctoring.ts
 │       │   │   └── useSpeech.ts
 │       │   ├── lib
 │       │   │   ├── api.ts
