@@ -24,22 +24,22 @@ const PERSONAS: any = {
     name: "Vikram",
     role: "Senior Staff Engineer (Strict & Technical)",
     style:
-      "Direct, skeptical, asks deep 'Why' questions. Cuts off vague answers. Focuses on system depth.",
-    tone: "Professional, slightly intimidating but fair.",
+      "Direct, skeptical. Focuses on efficient code, time complexity, and edge cases.",
+    tone: "Professional, demanding.",
   },
   friendly: {
     name: "Neha",
     role: "Engineering Manager (Supportive)",
     style:
-      "Encouraging, focuses on potential, asks about collaboration. Uses positive reinforcement.",
-    tone: "Warm, professional, constructive.",
+      "Encouraging. Focuses on code readability, logic building, and collaboration.",
+    tone: "Warm, constructive.",
   },
   system: {
     name: "Sam",
     role: "System Architect",
     style:
-      "Obsessed with scalability, databases, CAP theorem, Sharding, and Trade-offs.",
-    tone: "Analytical, thoughtful, detail-oriented.",
+      "Obsessed with scalability, API design, database structures, and clean code.",
+    tone: "Analytical, thoughtful.",
   },
 };
 
@@ -51,7 +51,7 @@ router.post("/", async (req: any, res: any) => {
       history,
       mode = "strict",
       difficulty = "medium",
-      language = "english", // ✅ Default to English if not provided
+      language = "english",
     } = req.body;
 
     if (!message || !resumeId)
@@ -59,7 +59,7 @@ router.post("/", async (req: any, res: any) => {
 
     let contextText = "";
 
-    // --- STEP 1: CONTEXT RETRIEVAL ---
+    // --- STEP 1: CONTEXT RETRIEVAL (Vector Search) ---
     try {
       const queryVector = await embeddings.embedQuery(message);
       const resumes = await ResumeModel.aggregate([
@@ -83,7 +83,7 @@ router.post("/", async (req: any, res: any) => {
       if (resumes.length > 0) {
         contextText = resumes[0].content?.substring(0, 5000) || "";
       } else {
-        // Fallback to full resume if vector search fails or returns nothing relevant
+        // Fallback to full resume if vector search fails
         const r = await ResumeModel.findById(resumeId);
         if (r) contextText = r.content.substring(0, 8000);
       }
@@ -101,8 +101,8 @@ router.post("/", async (req: any, res: any) => {
     if (language === "hinglish") {
       languageInstruction = `
       - **Language Mode:** HINGLISH (Mix of Hindi & English).
-      - **Rule:** Speak naturally like an Indian Tech Interviewer. Use English for technical terms (e.g., "Dependency Injection", "Scalability") but use Hindi for connecting verbs/grammar.
-      - **Example:** "Tumhara approach thoda complex lag raha hai. Isse optimize kaise karoge?"
+      - **Rule:** Speak naturally like an Indian Tech Interviewer. Use English for technical terms (e.g., "Function", "Array", "Compile") but use Hindi for connecting verbs.
+      - **Example:** "Is problem ke liye ek function likho jo array ko sort kare aur run karke dikhao."
       - **Avoid:** Do not use pure Shuddh Hindi. Keep it casual professional.
       `;
     } else {
@@ -112,16 +112,20 @@ router.post("/", async (req: any, res: any) => {
       `;
     }
 
-    // --- STEP 4: SYSTEM PROMPT (The Brain) ---
+    // --- STEP 4: SYSTEM PROMPT (The Brain - Updated for Coding) ---
     const systemPrompt = `
       You are '${persona.name}', a ${persona.role}.
-      Your goal is to conduct a technical interview based on the candidate's resume.
-      
+      Your goal is to conduct a **Hands-on Technical Interview**.
+
+      --- INTERVIEW ENVIRONMENT ---
+      **IMPORTANT:** The candidate has a live **Code Editor** and **Compiler** on their screen.
+      **DO NOT just ask theoretical questions.** You MUST verify their coding skills.
+
       --- YOUR STYLE ---
       ${persona.style}
       Tone: ${persona.tone}
-      Current Difficulty Level: ${difficulty}
-      
+      Difficulty: ${difficulty}
+
       --- LANGUAGE INSTRUCTIONS (STRICTLY FOLLOW) ---
       ${languageInstruction}
 
@@ -129,16 +133,15 @@ router.post("/", async (req: any, res: any) => {
       ${contextText}
 
       --- INTERVIEW GUIDELINES ---
-      1. **Verify Facts:** If the candidate is wrong or vague, call them out immediately. Do not be polite if they are hallucinating concepts.
-      2. **Concise Responses:** Keep your response under **2-3 sentences**. This is a voice conversation, long text is bad.
-      3. **One Question at a Time:** Ask exactly ONE follow-up question. Do not stack multiple questions.
-      4. **No Fluff:** Do not say "That's a great answer" unless it is perfect. If it's okay, just say "Okay" and move on.
-      5. **Assessment Criteria (Internal Thought Process):**
-         - Content Quality (Technical Accuracy)
-         - Communication (Clarity)
-         - Domain Knowledge (Depth)
+      1. **Mix Theory & Practice:** Start with 1-2 questions about their projects/resume to break the ice.
+      2. **THE CODING CHALLENGE (CRITICAL):** After the intro, explicitly ask them to **Write Code** in the editor.
+         - Example: "Okay, let's test your logic. Please write a function in the editor to reverse a string without using built-in methods, and run it."
+         - Example: "Open the editor and create a simple API endpoint logic..."
+      3. **Verify Execution:** Ask them: "Did the code run successfully? What was the output?"
+      4. **Verify Facts:** If the candidate is wrong or vague, call them out immediately.
+      5. **Short Responses:** Keep your speaking output under **3 sentences**. Long monologues are bad for voice chat.
       
-      If the user just says "Hello" or "Start", introduce yourself briefly as ${persona.name} and ask the first question based on their Resume Projects/Skills.
+      If the user says "Hello" or "Start", introduce yourself briefly as ${persona.name} and ask the first question based on their Resume Projects/Skills.
     `;
 
     const messages: any[] = [{ role: "system", content: systemPrompt }];
