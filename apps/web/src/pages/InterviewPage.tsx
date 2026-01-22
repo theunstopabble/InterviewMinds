@@ -6,7 +6,6 @@ import {
   Loader2,
   MonitorX,
   Sparkles,
-  ArrowDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
@@ -46,7 +45,7 @@ export default function InterviewPage() {
   const [languageMode, setLanguageMode] = useState("english");
 
   // 🎥 Video & Emotion State
-  const [userEmotion, setUserEmotion] = useState("Neutral");
+  const [setUserEmotion] = useState("Neutral");
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [showSetup, setShowSetup] = useState(true);
 
