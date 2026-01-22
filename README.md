@@ -1,12 +1,13 @@
 <div align="center">
 [![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-InterviewMinds-blue?style=for-the-badge&logo=vercel)](https://interviewminds.vercel.app/)
-[![GitHub Stars](https://img.shields.io/github/stars/theunstopabble/InterviewMinds?style=for-the-badge&logo=github)](https://github.com/theunstopabble/InterviewMinds)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-Repo-black?style=for-the-badge&logo=github)](https://github.com/theunstopabble/InterviewMinds)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react)](https://react.dev/)
 [![Node.js](https://img.shields.io/badge/Node.js-20+-3C873A?style=for-the-badge&logo=node.js)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
 </div>
+
 
 # 🧠 InterviewMinds.ai
 **The Flagship AI Mock Interview SaaS for 2026 Placements** 🚀
