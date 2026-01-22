@@ -21,7 +21,7 @@ app.use(
     origin: [
       "http://localhost:5173", // Local Vite
       "http://localhost:5174", // Local Vite (Alternative)
-      "https://interview-minds.vercel.app", // Aapka Live Vercel Domain
+      "https://interviewminds.vercel.app", // Aapka Live Vercel Domain
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
