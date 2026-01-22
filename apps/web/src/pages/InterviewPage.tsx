@@ -1,12 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  Mic,
-  MicOff,
-  Send,
-  Loader2,
-  MonitorX,
-  Sparkles,
-} from "lucide-react";
+import { Mic, MicOff, Send, Loader2, MonitorX, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -45,8 +38,8 @@ export default function InterviewPage() {
   const [languageMode, setLanguageMode] = useState("english");
 
   // 🎥 Video & Emotion State
-  // Pehla variable 'value' hai, dusra 'function' hai
   const [userEmotion, setUserEmotion] = useState("Neutral");
+
   useEffect(() => {
     // console.log(userEmotion);
   }, [userEmotion]);
@@ -89,18 +82,16 @@ export default function InterviewPage() {
     PERSONA_DETAILS[persona]?.name || "Interviewer";
 
   // ✅ SMART SCROLL FUNCTION
-  // Yeh function ensure karta hai ki naya message "Top" se dikhe
   const scrollToNewMessage = () => {
     if (lastMessageRef.current) {
       lastMessageRef.current.scrollIntoView({
         behavior: "smooth",
-        block: "start", // 👈 CRITICAL: Aligns top of message to top of view
+        block: "start",
       });
     }
   };
 
   useEffect(() => {
-    // Thoda delay taaki DOM update ho jaye, phir scroll karo
     if (messages.length > 0) {
       setTimeout(scrollToNewMessage, 100);
     }
@@ -331,18 +322,24 @@ export default function InterviewPage() {
           />
         </div>
 
-        {/* 2. WEBCAM (Compact & Sticky) */}
+        {/* 2. WEBCAM (Refactored Layout to fix Clipping) */}
         <div className="relative p-2 bg-black/60 border-b border-white/10 shrink-0 z-10 backdrop-blur-sm">
-          <div className="relative rounded-lg overflow-hidden border border-white/10 shadow-2xl bg-black aspect-video max-h-[180px] mx-auto">
-            <WebcamAnalysis
-              onEmotionUpdate={setUserEmotion}
-              isInterviewActive={isInterviewStarted}
-              onRecordingComplete={(blob) => {
-                recordedBlobRef.current = blob;
-              }}
-            />
-            {/* Proctoring Overlay */}
-            <div className="absolute top-2 right-2 pointer-events-none scale-75 origin-top-right">
+          {/* Main Container for sizing */}
+          <div className="relative aspect-video max-h-[180px] mx-auto shadow-2xl">
+            {/* Layer 1: Video (Clipped/Rounded) */}
+            <div className="rounded-lg overflow-hidden border border-white/10 bg-black w-full h-full relative">
+              <WebcamAnalysis
+                onEmotionUpdate={setUserEmotion}
+                isInterviewActive={isInterviewStarted}
+                onRecordingComplete={(blob) => {
+                  recordedBlobRef.current = blob;
+                }}
+              />
+            </div>
+
+            {/* Layer 2: Proctoring UI (Not Clipped, Overlay) */}
+            {/* Changed z-index and removed it from overflow-hidden div */}
+            <div className="absolute top-2 right-2 pointer-events-none scale-75 origin-top-right z-20">
               <ProctoringUI
                 violationCount={violationCount}
                 lastViolation={lastViolation}
@@ -364,7 +361,6 @@ export default function InterviewPage() {
           ref={chatContainerRef}
           className="flex-1 min-h-0 bg-slate-950/40 flex flex-col overflow-y-auto scroll-smooth relative"
         >
-          {/* Top Shadow Gradient for visual separation */}
           <div className="sticky top-0 left-0 right-0 h-4 bg-gradient-to-b from-black/80 to-transparent z-10 pointer-events-none" />
 
           <div className="flex-1 px-4 pb-4">
@@ -372,7 +368,6 @@ export default function InterviewPage() {
               {messages.map((msg, i) => (
                 <div
                   key={i}
-                  // ✅ Ref attached to the last message to anchor scroll
                   ref={i === messages.length - 1 ? lastMessageRef : null}
                   className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
                 >
@@ -409,7 +404,6 @@ export default function InterviewPage() {
                 </div>
               )}
             </div>
-            {/* Spacer to ensure last message is never hidden behind input */}
             <div className="h-6 w-full" />
           </div>
         </div>
