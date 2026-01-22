@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://interviewminds.vercel.app/favicon.ico" width="80" height="80"/>
+  <img src="apps/web/public/pwa-192x192.png" alt="InterviewMinds width="80" height="80"/>
   <h1>🧠 InterviewMinds</h1>
   <p><b>AI-Powered Mock Interview Platform</b></p>
   <p>
@@ -14,12 +14,11 @@
     <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white"/>
     <img alt="Vercel" src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white"/>
   </p>
-  <p><b>Stars | 1 Commit Today | Jagannath University, Jaipur</b></p>
 </div>
 
 
 # 🧠 InterviewMinds
-**The Flagship AI Mock Interview SaaS for 2026 Placements** 🚀
+**The Flagship AI Mock Interview SaaS for Placements** 🚀
 
 > Transform your interview preparation with a **hyper-realistic, AI-driven simulation** that analyzes your resume, proctors your session, and provides **actionable feedback**.
 
