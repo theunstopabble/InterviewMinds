@@ -293,6 +293,7 @@ export default function InterviewPage() {
       <InterviewSetupModal
         open={showSetup}
         onStart={handleStartInterview}
+        onCancel={() => navigate("/dashboard")}
         languageMode={languageMode}
         setLanguageMode={setLanguageMode}
         persona={persona}

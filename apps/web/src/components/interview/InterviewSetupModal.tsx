@@ -23,6 +23,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 interface InterviewSetupModalProps {
   open: boolean;
   onStart: () => void;
+  onCancel: () => void; // ✅ Added onCancel prop
   languageMode: string;
   setLanguageMode: (val: string) => void;
   persona: string;
@@ -34,6 +35,7 @@ interface InterviewSetupModalProps {
 export function InterviewSetupModal({
   open,
   onStart,
+  onCancel, // ✅ Destructure onCancel
   languageMode,
   setLanguageMode,
   persona,
@@ -42,7 +44,8 @@ export function InterviewSetupModal({
   setDifficulty,
 }: InterviewSetupModalProps) {
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
+    // ✅ FIX 1: Allow dialog to close via 'X' or outside click
+    <Dialog open={open} onOpenChange={(val) => !val && onCancel()}>
       <DialogContent className="bg-slate-900 border-slate-800 text-white sm:max-w-2xl shadow-2xl backdrop-blur-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
@@ -228,7 +231,12 @@ export function InterviewSetupModal({
         </div>
 
         <DialogFooter className="sm:justify-between gap-2 border-t border-white/10 pt-4">
-          <Button variant="ghost" className="text-slate-400 hover:text-white">
+          {/* ✅ FIX 2: Connect Cancel Button to onCancel prop */}
+          <Button
+            variant="ghost"
+            className="text-slate-400 hover:text-white"
+            onClick={onCancel}
+          >
             Cancel
           </Button>
           <Button
