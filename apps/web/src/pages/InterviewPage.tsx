@@ -46,6 +46,7 @@ export default function InterviewPage() {
 
   // 🎥 Video & Emotion State
   // Pehla variable 'value' hai, dusra 'function' hai
+  useEffect(() => {}, [userEmotion]);
   const [userEmotion, setUserEmotion] = useState("Neutral");
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [showSetup, setShowSetup] = useState(true);
