@@ -3,16 +3,15 @@ import {
   Mic,
   MicOff,
   Send,
-  // ❌ Removed 'Volume2' because it was unused
   Loader2,
   MonitorX,
   Sparkles,
+  ArrowDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import CodeEditor from "@/components/CodeEditor";
 import { OutputConsole } from "@/components/OutputConsole";
 import { executeCode } from "@/services/compiler";
@@ -22,7 +21,6 @@ import { useAudioAnalysis } from "@/hooks/useAudioAnalysis";
 import { useProctoring } from "@/hooks/useProctoring";
 import ProctoringUI from "@/components/ProctoringUI";
 
-// IMPORTS FROM NEW FILES
 import { PERSONA_DETAILS, BOILERPLATES } from "@/lib/interviewConstants";
 import { InterviewSetupModal } from "@/components/interview/InterviewSetupModal";
 import { InterviewHeader } from "@/components/interview/InterviewHeader";
@@ -55,11 +53,13 @@ export default function InterviewPage() {
   const recordedBlobRef = useRef<Blob | null>(null);
   const isProcessing = useRef(false);
   const hasInitialized = useRef(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ✅ REFS for Scrolling Logic
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const lastMessageRef = useRef<HTMLDivElement>(null);
 
   const {
     isListening,
-    // ❌ Removed 'isSpeaking' to fix build error
     transcript,
     startListening,
     stopListening,
@@ -84,15 +84,24 @@ export default function InterviewPage() {
   const getCurrentPersonaName = () =>
     PERSONA_DETAILS[persona]?.name || "Interviewer";
 
-  // ✅ FIX: Use 'userEmotion' in a dummy effect to satisfy TypeScript
-  useEffect(() => {
-    if (userEmotion && userEmotion !== "Neutral") {
-      // Keep this log for debugging emotion detection
-      // console.log("Detected Emotion:", userEmotion);
+  // ✅ SMART SCROLL FUNCTION
+  // Yeh function ensure karta hai ki naya message "Top" se dikhe
+  const scrollToNewMessage = () => {
+    if (lastMessageRef.current) {
+      lastMessageRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start", // 👈 CRITICAL: Aligns top of message to top of view
+      });
     }
-  }, [userEmotion]);
+  };
 
-  // ✅ HANDLERS & EFFECTS
+  useEffect(() => {
+    // Thoda delay taaki DOM update ho jaye, phir scroll karo
+    if (messages.length > 0) {
+      setTimeout(scrollToNewMessage, 100);
+    }
+  }, [messages, isLoading]);
+
   useEffect(() => {
     setCode(BOILERPLATES[language] || "// Language not supported");
   }, [language]);
@@ -144,10 +153,6 @@ export default function InterviewPage() {
       return () => clearTimeout(timer);
     }
   }, [isListening, transcript, isLoading]);
-
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   // Spacebar Mic Logic
   useEffect(() => {
@@ -288,8 +293,7 @@ export default function InterviewPage() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full bg-black text-white overflow-hidden relative">
-      {/* 🟢 COMPONENTS */}
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full bg-[#0a0a0a] text-white overflow-hidden relative">
       <InterviewSetupModal
         open={showSetup}
         onStart={handleStartInterview}
@@ -309,97 +313,146 @@ export default function InterviewPage() {
         </div>
       )}
 
-      {/* --- LEFT PANEL --- */}
-      <div className="w-full lg:w-[40%] h-[45%] lg:h-full flex flex-col border-r border-white/10 bg-slate-950/50 relative order-1">
-        <InterviewHeader
-          isSaving={isSaving}
-          onEndInterview={endInterview}
-          showSetup={showSetup}
-          personaName={getCurrentPersonaName()}
-          difficulty={difficulty}
-          languageMode={languageMode}
-        />
+      {/* --- LEFT PANEL (Interaction) --- */}
+      <div className="w-full lg:w-[400px] xl:w-[450px] flex flex-col border-r border-white/10 bg-slate-950/50 relative order-1 z-10 shadow-xl">
+        {/* 1. HEADER */}
+        <div className="shrink-0 bg-slate-950 z-20">
+          <InterviewHeader
+            isSaving={isSaving}
+            onEndInterview={endInterview}
+            showSetup={showSetup}
+            personaName={getCurrentPersonaName()}
+            difficulty={difficulty}
+            languageMode={languageMode}
+          />
+        </div>
 
-        {/* Webcam Area */}
-        <div className="relative p-4 bg-slate-950/30 border-b border-white/10 shrink-0">
-          <WebcamAnalysis
-            onEmotionUpdate={setUserEmotion}
-            isInterviewActive={isInterviewStarted}
-            onRecordingComplete={(blob) => {
-              recordedBlobRef.current = blob;
-            }}
-          />
-          <ProctoringUI
-            violationCount={violationCount}
-            lastViolation={lastViolation}
-          />
+        {/* 2. WEBCAM (Compact & Sticky) */}
+        <div className="relative p-2 bg-black/60 border-b border-white/10 shrink-0 z-10 backdrop-blur-sm">
+          <div className="relative rounded-lg overflow-hidden border border-white/10 shadow-2xl bg-black aspect-video max-h-[180px] mx-auto">
+            <WebcamAnalysis
+              onEmotionUpdate={setUserEmotion}
+              isInterviewActive={isInterviewStarted}
+              onRecordingComplete={(blob) => {
+                recordedBlobRef.current = blob;
+              }}
+            />
+            {/* Proctoring Overlay */}
+            <div className="absolute top-2 right-2 pointer-events-none scale-75 origin-top-right">
+              <ProctoringUI
+                violationCount={violationCount}
+                lastViolation={lastViolation}
+              />
+            </div>
+          </div>
+
           {isListening && warning && (
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
-              <div className="px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 border bg-yellow-500/20 text-yellow-400 border-yellow-500/50">
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 w-full px-4 flex justify-center">
+              <div className="px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2 border bg-yellow-500/20 text-yellow-400 border-yellow-500/50 backdrop-blur-md shadow-lg animate-bounce">
                 <Sparkles className="w-3 h-3" /> {warning}
               </div>
             </div>
           )}
         </div>
 
-        {/* Chat Area */}
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-4 pb-4">
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] p-3 rounded-lg text-sm leading-relaxed ${msg.role === "user" ? "bg-blue-600 text-white rounded-tr-none" : "bg-slate-800 border border-slate-700 text-slate-200 rounded-tl-none"}`}
-                >
-                  {msg.content}
-                </div>
-              </div>
-            ))}
-            <div ref={scrollRef} />
-          </div>
-        </ScrollArea>
+        {/* 3. CHAT AREA (Scrollable) */}
+        <div
+          ref={chatContainerRef}
+          className="flex-1 min-h-0 bg-slate-950/40 flex flex-col overflow-y-auto scroll-smooth relative"
+        >
+          {/* Top Shadow Gradient for visual separation */}
+          <div className="sticky top-0 left-0 right-0 h-4 bg-gradient-to-b from-black/80 to-transparent z-10 pointer-events-none" />
 
-        {/* Input Area */}
-        <div className="p-4 border-t border-white/10 bg-slate-900 shrink-0">
-          <div className="flex gap-2">
+          <div className="flex-1 px-4 pb-4">
+            <div className="space-y-6">
+              {messages.map((msg, i) => (
+                <div
+                  key={i}
+                  // ✅ Ref attached to the last message to anchor scroll
+                  ref={i === messages.length - 1 ? lastMessageRef : null}
+                  className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
+                >
+                  <div
+                    className={`flex flex-col max-w-[90%] ${msg.role === "user" ? "items-end" : "items-start"}`}
+                  >
+                    <span className="text-[10px] text-slate-500 mb-1 px-1 font-medium tracking-wide uppercase">
+                      {msg.role === "user" ? "You" : getCurrentPersonaName()}
+                    </span>
+                    <div
+                      className={`p-3.5 rounded-2xl text-sm leading-relaxed shadow-md border ${
+                        msg.role === "user"
+                          ? "bg-blue-600 border-blue-500 text-white rounded-tr-sm"
+                          : "bg-slate-800/80 border-slate-700 text-slate-100 rounded-tl-sm backdrop-blur-sm"
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {isLoading && (
+                <div
+                  ref={lastMessageRef}
+                  className="flex justify-start w-full animate-pulse"
+                >
+                  <div className="bg-slate-800/50 p-3 rounded-2xl rounded-tl-sm border border-slate-800 flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                    <span className="text-xs text-slate-500">
+                      AI is thinking...
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Spacer to ensure last message is never hidden behind input */}
+            <div className="h-6 w-full" />
+          </div>
+        </div>
+
+        {/* 4. INPUT AREA */}
+        <div className="p-4 border-t border-white/10 bg-slate-900/95 backdrop-blur-xl shrink-0 z-20 shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
+          <div className="flex gap-3 items-center">
             <Button
               variant="outline"
               size="icon"
               onClick={isListening ? stopListening : startListening}
               disabled={isSaving || showSetup}
-              className={`border-slate-700 bg-slate-800 hover:bg-slate-700 ${isListening ? "text-red-500 border-red-500 animate-pulse" : "text-slate-400"}`}
+              className={`h-11 w-11 shrink-0 rounded-full transition-all duration-300 border-slate-700 bg-slate-800 hover:bg-slate-700 ${isListening ? "text-red-500 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] bg-red-500/10" : "text-slate-400 hover:text-white"}`}
             >
               {isListening ? (
-                <MicOff className="w-4 h-4" />
+                <MicOff className="w-5 h-5 animate-pulse" />
               ) : (
-                <Mic className="w-4 h-4" />
+                <Mic className="w-5 h-5" />
               )}
             </Button>
-            <input
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-md px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder="Type or hold Space to speak..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAIResponse(input)}
-              disabled={isLoading || isSaving || showSetup}
-            />
+
+            <div className="flex-1 relative">
+              <input
+                className="w-full h-11 bg-slate-950 border border-slate-700 rounded-full px-5 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all placeholder:text-slate-600"
+                placeholder="Type or hold Space..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAIResponse(input)}
+                disabled={isLoading || isSaving || showSetup}
+              />
+            </div>
+
             <Button
               onClick={() => handleAIResponse(input)}
               disabled={isLoading || !input.trim() || isSaving || showSetup}
               size="icon"
-              className="bg-blue-600 hover:bg-blue-500"
+              className="h-11 w-11 shrink-0 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 shadow-lg shadow-blue-900/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-5 h-5" />
             </Button>
           </div>
         </div>
       </div>
 
-      {/* --- RIGHT PANEL --- */}
-      <div className="w-full lg:w-[60%] h-[55%] lg:h-full flex flex-col bg-[#1e1e1e] order-2">
-        <div className="flex-1 overflow-hidden">
+      {/* --- RIGHT PANEL (Code) --- */}
+      <div className="flex-1 flex flex-col bg-[#1e1e1e] order-2 h-full min-w-0">
+        <div className="flex-1 overflow-hidden relative">
           <CodeEditor
             code={code || ""}
             setCode={setCode}
@@ -407,7 +460,7 @@ export default function InterviewPage() {
             setLanguage={setLanguage}
           />
         </div>
-        <div className="h-[35%] min-h-[200px] border-t border-slate-700">
+        <div className="h-[35%] min-h-[200px] border-t border-slate-700 bg-[#1e1e1e]">
           <OutputConsole
             output={output}
             error={execError}
