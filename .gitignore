@@ -14,6 +14,7 @@ node_modules
 dist
 build
 out
+dev-dist
 
 # Logs
 npm-debug.log*
