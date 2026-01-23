@@ -32,7 +32,6 @@
 - [🚀 Quick Start](#-quick-start)
 - [🔐 Environment Variables](#-environment-variables)
 - [🐛 Troubleshooting](#-troubleshooting)
-- [📊 Roadmap](#-roadmap)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 
