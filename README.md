@@ -201,9 +201,6 @@ VITE_API_URL=http://localhost:8000/api
 4. Push to branch: git push origin feature/AmazingFeature
 5. Open Pull Request
 
-### 📄 License
-Distributed under the MIT License. See LICENSE for more details.
-
 ## 📄 License
 
 Distributed under the MIT License. See `LICENSE` for more information.
