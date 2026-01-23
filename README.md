@@ -204,4 +204,21 @@ VITE_API_URL=http://localhost:8000/api
 ### 📄 License
 Distributed under the MIT License. See LICENSE for more details.
 
-<div align="center"> **Built with ❤️ by [Gautam Kumar](https://github.com/theunstopabble)** [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=for-the-badge&logo=linkedin)](https://linkedin.com/in/gautam-kumar-dev) [![Portfolio](https://img.shields.io/badge/Portfolio-Visit-black?style=for-the-badge&logo=website)](https://gautamkumar.dev) </div> ```
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+<br />
+
+<div align="center">
+  <p>
+    Built with ❤️ by <a href="https://github.com/theunstopabble" target="_blank"><b>Gautam Kumar</b></a>
+  </p>
+  
+  <p>
+    <a href="https://www.linkedin.com/in/gautamkr62" target="_blank">
+      <img src="https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn" />
+    </a>
+    &nbsp;
+  </p>
+</div>
