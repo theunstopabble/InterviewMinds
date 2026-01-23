@@ -217,7 +217,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
   
   <p>
     <a href="https://www.linkedin.com/in/gautamkr62" target="_blank">
-      <img src="https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn" />
+      <img src="https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin&logoColor=white"  />
     </a>
     &nbsp;
   </p>
