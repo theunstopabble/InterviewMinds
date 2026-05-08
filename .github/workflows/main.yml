@@ -45,6 +45,10 @@ jobs:
         working-directory: ./apps/web
         run: npm run typecheck
 
+      - name: Run Frontend Tests
+        working-directory: ./apps/web
+        run: npm run test
+
       - name: Check Frontend Build
         working-directory: ./apps/web
         run: npm run build
