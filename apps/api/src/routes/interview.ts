@@ -10,7 +10,14 @@ import { validateBody, EndInterviewSchema, UploadVideoSchema } from "../lib/vali
 dotenv.config();
 
 const router = express.Router();
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+function getGroqClient(): Groq {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) {
+    throw new Error("GROQ_API_KEY is not configured");
+  }
+  return new Groq({ apiKey: key });
+}
 
 // ============================================================================
 // 1. END INTERVIEW & GENERATE REPORT (Weighted Ensemble Scoring 🧠)
@@ -126,7 +133,7 @@ router.post(
       } = {};
 
       try {
-        const completion = await groq.chat.completions.create({
+        const completion = await getGroqClient().chat.completions.create({
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: conversationText },

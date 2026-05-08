@@ -3,6 +3,19 @@ import request from "supertest";
 import express from "express";
 import { mockAuthMiddleware, mockAuthUserId, createMockModel, clearAllMocks } from "./helpers";
 
+// Mock groq-sdk to avoid real API calls and missing GROQ_API_KEY in CI
+vi.mock("groq-sdk", () => ({
+  default: class MockGroq {
+    chat = {
+      completions: {
+        create: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: JSON.stringify({ score: 85, feedback: "Good interview", skills: [] }) } }],
+        }),
+      },
+    };
+  },
+}));
+
 const mockInterviewModel = createMockModel("Interview");
 
 // Mock InterviewModel module
