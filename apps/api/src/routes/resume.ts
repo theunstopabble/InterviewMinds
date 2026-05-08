@@ -4,9 +4,9 @@ import { ResumeModel } from "../models/Resume";
 import PDFParser from "pdf2json";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { requireAuth } from "../middleware/auth";
-import { pipeline } from "@xenova/transformers"; // Local AI Import
 import dotenv from "dotenv";
-import { logger } from "../lib/logger"; // Local AI Import
+import { logger } from "../lib/logger";
+import type { pipeline as PipelineType } from "@xenova/transformers";
 
 dotenv.config();
 
@@ -22,12 +22,11 @@ const upload = multer({ storage: storage });
 // ✅ Singleton Pattern for Model Loading (Taaki baar-baar load na ho)
 class EmbeddingService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  static pipeline: any = null;
+  static pipeline: ReturnType<typeof PipelineType> | null = null;
 
   static async getPipeline() {
     if (!this.pipeline) {
-      // console.log("📥 Loading Local Embedding Model (First time only)...");
-      // 'Xenova/all-MiniLM-L6-v2' ek super-lightweight model hai (sirf ~40MB)
+      const { pipeline } = await import("@xenova/transformers");
       this.pipeline = await pipeline(
         "feature-extraction",
         "Xenova/all-MiniLM-L6-v2",

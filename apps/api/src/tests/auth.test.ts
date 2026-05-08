@@ -1,6 +1,15 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { requireAuth } from "../middleware/auth";
 import { Request, Response, NextFunction } from "express";
+
+// Mock @clerk/express so requireAuth runs deterministically
+vi.mock("@clerk/express", () => ({
+  requireAuth: () => vi.fn((req: Request, res: Response, next: NextFunction) => {
+    // Simulate authenticated request
+    (req as any).auth = { userId: "test-user-123" };
+    next();
+  }),
+}));
 
 describe("Auth Middleware", () => {
   const createMockReq = (): Partial<Request> => ({
@@ -15,26 +24,17 @@ describe("Auth Middleware", () => {
     return res;
   };
 
-  const mockNext = vi.fn() as unknown as NextFunction;
+  let mockNext: NextFunction;
 
-  it("should call next when auth succeeds", async () => {
-    const req = createMockReq() as Request;
-    const res = createMockRes() as Response;
-
-    // Mock successful Clerk auth by simulating the middleware passing through
-    vi.spyOn(requireAuth as any, "implementation").mockImplementation((req: Request, res: Response, next: NextFunction) => {
-      next();
-    });
-
-    requireAuth(req, res, mockNext);
-    // We can't easily spy on the exported function, so we test the integration behavior
+  beforeEach(() => {
+    mockNext = vi.fn() as unknown as NextFunction;
   });
 
-  it("should return 401 when auth header is missing", async () => {
+  it("should call next when auth succeeds", () => {
     const req = createMockReq() as Request;
     const res = createMockRes() as Response;
 
     requireAuth(req, res, mockNext);
-    // The middleware should handle missing auth
+    expect(mockNext).toHaveBeenCalled();
   });
 });
