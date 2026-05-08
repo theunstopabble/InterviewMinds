@@ -24,6 +24,8 @@ import {
   requestTimeout,
   sanitizeInput,
 } from "./lib/security";
+import { attachRole, requirePermission } from "./middleware/rbac";
+import { auditLog } from "./middleware/audit";
 
 dotenv.config();
 initSentry();
@@ -117,12 +119,48 @@ app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "InterviewMinds Backend is Running!" });
 });
 
-// 8. Protected Routes
-app.use("/api/resume", requireAuth, uploadLimiter, resumeRoutes);
-app.use("/api/chat", requireAuth, aiLimiter, chatRoutes);
-app.use("/api/interview", requireAuth, interviewRoutes);
-app.use("/api/compiler", requireAuth, aiLimiter, compilerRoutes);
-app.use("/api/tts", requireAuth, aiLimiter, ttsRoutes);
+// 8. Protected Routes (RBAC + Audit)
+// attachRole must run after requireAuth so req.auth.userId is populated
+
+app.use(
+  "/api/resume",
+  requireAuth,
+  attachRole,
+  uploadLimiter,
+  auditLog("resume"),
+  resumeRoutes,
+);
+app.use(
+  "/api/chat",
+  requireAuth,
+  attachRole,
+  aiLimiter,
+  auditLog("chat"),
+  chatRoutes,
+);
+app.use(
+  "/api/interview",
+  requireAuth,
+  attachRole,
+  auditLog("interview"),
+  interviewRoutes,
+);
+app.use(
+  "/api/compiler",
+  requireAuth,
+  attachRole,
+  aiLimiter,
+  auditLog("compiler"),
+  compilerRoutes,
+);
+app.use(
+  "/api/tts",
+  requireAuth,
+  attachRole,
+  aiLimiter,
+  auditLog("tts"),
+  ttsRoutes,
+);
 
 // 9. Global Error Handler (must be last)
 app.use((err: Error, _req: Request, res: Response, _next: () => void) => {

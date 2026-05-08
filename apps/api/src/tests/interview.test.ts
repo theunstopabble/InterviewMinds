@@ -40,6 +40,17 @@ vi.mock("@clerk/express", () => ({
   },
 }));
 
+// Mock UserRoleModel for RBAC attachRole middleware
+vi.mock("../models/Role", () => ({
+  UserRoleModel: {
+    findOne: vi.fn(() => ({
+      lean: vi.fn(() => Promise.resolve({ role: "candidate" })),
+    })),
+  },
+  hasPermission: vi.fn(() => true),
+  RolePermissions: {},
+}));
+
 // Self-contained InterviewModel mock — no external variables to avoid hoisting issues
 const store: any[] = [];
 
