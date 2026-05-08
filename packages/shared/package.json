@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "./index.ts",
   "types": "./index.ts",
+  "files": ["dist", "index.ts"],
   "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },
   "devDependencies": {

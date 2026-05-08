@@ -40,7 +40,10 @@ router.post(
       }
 
       // 1. Basic Validation
-      if (!history || history.length === 0) {
+      if (!resumeId || typeof resumeId !== "string") {
+        return res.status(400).json({ error: "Valid resumeId is required" });
+      }
+      if (!Array.isArray(history) || history.length === 0) {
         return res.status(400).json({ error: "No conversation to analyze" });
       }
 
@@ -113,25 +116,40 @@ router.post(
         .map((msg) => `${msg.role}: ${msg.text}`)
         .join("\n");
 
-      const completion = await groq.chat.completions.create({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: conversationText },
-        ],
-        model: "llama-3.3-70b-versatile",
-        temperature: 0.2, // Low temp for consistent JSON
-        response_format: { type: "json_object" },
-      });
+      let aiResponse: {
+        score?: number;
+        feedback?: string;
+        skills?: { subject: string; A: number; fullMark?: number }[];
+      } = {};
 
-      const aiResponse = JSON.parse(
-        completion.choices[0]?.message?.content || "{}",
-      );
+      try {
+        const completion = await groq.chat.completions.create({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: conversationText },
+          ],
+          model: "llama-3.3-70b-versatile",
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+        });
+
+        const content = completion.choices[0]?.message?.content;
+        if (content) {
+          // Strip markdown fences if the model wraps JSON
+          const cleaned = content.replace(/^```json\s*|\s*```$/g, "").trim();
+          aiResponse = JSON.parse(cleaned);
+        }
+      } catch (parseOrApiError: unknown) {
+        const msg = parseOrApiError instanceof Error ? parseOrApiError.message : String(parseOrApiError);
+        console.error("AI Analysis Error:", msg);
+        // Continue with fallback defaults
+      }
 
       // Default fallback if AI fails partial parsing
       const finalData = {
-        score: aiResponse.score || 0,
-        feedback: aiResponse.feedback || "Analysis incomplete.",
-        metrics: aiResponse.skills || [
+        score: typeof aiResponse.score === "number" ? aiResponse.score : 0,
+        feedback: typeof aiResponse.feedback === "string" ? aiResponse.feedback : "Analysis incomplete.",
+        metrics: Array.isArray(aiResponse.skills) ? aiResponse.skills : [
           { subject: "Content Quality", A: 0, fullMark: 100 },
           { subject: "Communication Skills", A: 0, fullMark: 100 },
           { subject: "Behavioral Indicators", A: 0, fullMark: 100 },
@@ -158,8 +176,9 @@ router.post(
         metrics: interview.metrics,
       });
     } catch (error: unknown) {
-      console.error("Feedback Generation Error:", (error as Error).message);
-      res.status(500).json({ error: "Failed to generate report" });
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      console.error("Feedback Generation Error:", msg);
+      res.status(500).json({ error: "Failed to generate report", details: msg });
     }
   },
 );
@@ -195,13 +214,23 @@ router.get(
   requireAuth,
   async (req: express.Request, res: express.Response) => {
     try {
-      const interview = await InterviewModel.findById(req.params.id);
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user?.userId || authReq.auth?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const interview = await InterviewModel.findOne({
+        _id: req.params.id,
+        userId,
+      });
       if (!interview)
         return res.status(404).json({ error: "Interview not found" });
 
       res.json(interview);
-    } catch (error) {
-      console.error("Fetch Error:", error);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      console.error("Fetch Error:", msg);
       res.status(500).json({ error: "Server Error" });
     }
   },
@@ -216,11 +245,27 @@ router.post(
   uploadMiddleware.single("video"),
   async (req: express.Request, res: express.Response) => {
     try {
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user?.userId || authReq.auth?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
       if (!req.file) {
         return res.status(400).json({ error: "No video file provided" });
       }
 
       const { interviewId } = req.body as { interviewId: string };
+      if (!interviewId || typeof interviewId !== "string") {
+        return res.status(400).json({ error: "Valid interviewId is required" });
+      }
+
+      // Ownership check
+      const interview = await InterviewModel.findOne({ _id: interviewId, userId });
+      if (!interview) {
+        return res.status(404).json({ error: "Interview not found" });
+      }
+
       const videoUrl = req.file.path; // Cloudinary URL
 
       await InterviewModel.findByIdAndUpdate(interviewId, {
@@ -231,9 +276,10 @@ router.post(
         message: "Video uploaded successfully",
         url: videoUrl,
       });
-    } catch (error) {
-      console.error("Cloud Upload Error:", error);
-      res.status(500).json({ error: "Video upload failed" });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      console.error("Cloud Upload Error:", msg);
+      res.status(500).json({ error: "Video upload failed", details: msg });
     }
   },
 );

@@ -37,12 +37,14 @@ export default function InterviewPage() {
   const [difficulty, setDifficulty] = useState("medium");
   const [languageMode, setLanguageMode] = useState("english");
 
-  // 🎥 Video & Emotion State
-  const [userEmotion, setUserEmotion] = useState("Neutral");
-
+  // Cleanup any pending end-interview timeout on unmount
   useEffect(() => {
-    //
-  }, [userEmotion]);
+    return () => {
+      if (endInterviewTimeoutRef.current) {
+        clearTimeout(endInterviewTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [showSetup, setShowSetup] = useState(true);
@@ -50,10 +52,12 @@ export default function InterviewPage() {
   const recordedBlobRef = useRef<Blob | null>(null);
   const isProcessing = useRef(false);
   const hasInitialized = useRef(false);
+  const endInterviewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ✅ REFS for Scrolling Logic
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
 
   const {
     isListening,
@@ -65,7 +69,7 @@ export default function InterviewPage() {
     setTranscript,
   } = useSpeech();
 
-  const { warning } = useAudioAnalysis(isListening);
+  const { warning } = useAudioAnalysis(isListening, webcamStreamRef.current);
   const { violationCount, lastViolation } = useProctoring(isInterviewStarted);
 
   // --- EDITOR STATE ---
@@ -93,7 +97,8 @@ export default function InterviewPage() {
 
   useEffect(() => {
     if (messages.length > 0) {
-      setTimeout(scrollToNewMessage, 100);
+      const timer = setTimeout(scrollToNewMessage, 100);
+      return () => clearTimeout(timer);
     }
   }, [messages, isLoading]);
 
@@ -245,36 +250,41 @@ export default function InterviewPage() {
     setIsSaving(true);
     cancelSpeech();
     setIsInterviewStarted(false);
-    setTimeout(async () => {
-      const resumeId = localStorage.getItem("resumeId");
-      try {
-        const res = await api.post("/interview/end", {
-          resumeId,
-          history: messages.map((m) => ({
-            role: m.role === "ai" ? "model" : "user",
-            text: m.content,
-          })),
+
+    // Allow recording to finalize before stopping tracks
+    await new Promise((resolve) => {
+      endInterviewTimeoutRef.current = setTimeout(resolve, 1500);
+    });
+
+    const resumeId = localStorage.getItem("resumeId");
+    try {
+      const res = await api.post("/interview/end", {
+        resumeId,
+        history: messages.map((m) => ({
+          role: m.role === "ai" ? "model" : "user",
+          text: m.content,
+        })),
+      });
+      const interviewId = res.data.id;
+      const blobToUpload = recordedBlobRef.current;
+      if (blobToUpload) {
+        const videoData = new FormData();
+        videoData.append("video", blobToUpload, "interview.webm");
+        videoData.append("interviewId", interviewId);
+        const uploadToast = toast.loading("Uploading Video...");
+        await api.post("/interview/upload-video", videoData, {
+          headers: { "Content-Type": "multipart/form-data" },
         });
-        const interviewId = res.data.id;
-        const blobToUpload = recordedBlobRef.current;
-        if (blobToUpload) {
-          const videoData = new FormData();
-          videoData.append("video", blobToUpload, "interview.webm");
-          videoData.append("interviewId", interviewId);
-          toast.loading("Uploading Video...");
-          await api.post("/interview/upload-video", videoData, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
-          toast.dismiss();
-          toast.success("Saved!");
-        }
-        navigate(`/feedback/${interviewId}`);
-      } catch {
-        // eslint-disable-line @typescript-eslint/no-unused-vars
-        toast.error("Error ending session");
-        setIsSaving(false);
+        toast.dismiss(uploadToast);
+        toast.success("Saved!");
       }
-    }, 2000);
+      navigate(`/feedback/${interviewId}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error("End interview error:", msg);
+      toast.error("Error ending session");
+      setIsSaving(false);
+    }
   };
 
   if (isMobile) {
@@ -331,10 +341,12 @@ export default function InterviewPage() {
             {/* Layer 1: Video (Clipped/Rounded) */}
             <div className="rounded-lg overflow-hidden border border-white/10 bg-black w-full h-full relative">
               <WebcamAnalysis
-                onEmotionUpdate={setUserEmotion}
                 isInterviewActive={isInterviewStarted}
                 onRecordingComplete={(blob) => {
                   recordedBlobRef.current = blob;
+                }}
+                onStreamReady={(stream) => {
+                  webcamStreamRef.current = stream;
                 }}
               />
             </div>

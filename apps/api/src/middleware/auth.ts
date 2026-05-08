@@ -1,10 +1,10 @@
-import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
+import { requireAuth as clerkRequireAuth } from "@clerk/express";
 import { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-// Debugging Logs (Optional - rakh sakte ho agar dekhna hai)
+// Debugging Logs (Optional)
 // console.log("Checking Clerk Keys...");
 // console.log(
 //   "Publishable Key:",
@@ -15,15 +15,12 @@ dotenv.config();
 //   process.env.CLERK_SECRET_KEY ? "✅ Found" : "❌ Missing",
 // );
 
-// ✅ FIX: Empty Call. Clerk automatically reads keys from process.env
-const clerkAuth = ClerkExpressRequireAuth();
-
 export const requireAuth = (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
-  clerkAuth(req, res, (err: unknown) => {
+  clerkRequireAuth(req, res, (err: unknown) => {
     if (err) {
       console.error("Auth Error Details:", (err as Error).message);
       return res

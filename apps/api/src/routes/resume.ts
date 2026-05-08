@@ -55,12 +55,16 @@ router.post(
       const rawText: string = await new Promise((resolve, reject) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pdfParser.on("pdfParser_dataError", (errData: any) =>
-          reject(errData.parserError),
+          reject(errData.parserError || new Error("PDF parsing failed")),
         );
         pdfParser.on("pdfParser_dataReady", () =>
           resolve(pdfParser.getRawTextContent()),
         );
-        pdfParser.parseBuffer(req.file!.buffer);
+        try {
+          pdfParser.parseBuffer(req.file!.buffer);
+        } catch (syncErr) {
+          reject(syncErr instanceof Error ? syncErr : new Error("PDF parse failed"));
+        }
       });
 
       const cleanText = rawText.replace(/----------------/g, " ").trim();
@@ -117,10 +121,11 @@ router.post(
         previewText: cleanText.substring(0, 100) + "...",
       });
     } catch (error: unknown) {
-      console.error("❌ Critical Error:", error);
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      console.error("❌ Critical Error:", msg);
       res.status(500).json({
         error: "Failed to process resume",
-        details: (error as Error).message,
+        details: msg,
       });
     }
   },

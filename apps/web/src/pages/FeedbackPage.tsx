@@ -94,17 +94,19 @@ export default function FeedbackPage() {
           { subject: "Domain", A: 0, fullMark: 100 },
         ];
 
-  const strengths = data.metrics
+  const metrics = Array.isArray(data.metrics) ? data.metrics : [];
+
+  let strengths = metrics
     .filter((m) => m.A >= 70)
     .map((m) => `Strong in ${m.subject}`);
 
-  const improvements = data.metrics
+  let improvements = metrics
     .filter((m) => m.A < 70)
     .map((m) => `Improve ${m.subject}`);
 
-  if (strengths.length === 0) strengths.push("Consistent effort shown");
+  if (strengths.length === 0) strengths = [...strengths, "Consistent effort shown"];
   if (improvements.length === 0)
-    improvements.push("Practice more to improve score");
+    improvements = [...improvements, "Practice more to improve score"];
 
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-10 font-sans">

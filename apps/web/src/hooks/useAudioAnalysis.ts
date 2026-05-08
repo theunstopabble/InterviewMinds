@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export function useAudioAnalysis(isListening: boolean) {
+export function useAudioAnalysis(isListening: boolean, externalStream?: MediaStream | null) {
   const [audioData, setAudioData] = useState({
     volume: 0,
     isSpeaking: false,
@@ -10,6 +10,7 @@ export function useAudioAnalysis(isListening: boolean) {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -24,7 +25,18 @@ export function useAudioAnalysis(isListening: boolean) {
 
   const startAnalysis = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Stop any previously held stream to avoid duplicate mic access
+      if (streamRef.current && streamRef.current !== externalStream) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+
+      let stream: MediaStream;
+      if (externalStream && externalStream.getAudioTracks().length > 0) {
+        stream = externalStream;
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+      streamRef.current = stream;
 
       // Browser Audio Context Setup
       const AudioContext =
@@ -50,8 +62,16 @@ export function useAudioAnalysis(isListening: boolean) {
   const stopAnalysis = () => {
     if (animationFrameRef.current)
       cancelAnimationFrame(animationFrameRef.current);
-    if (audioContextRef.current) audioContextRef.current.close();
-    audioContextRef.current = null;
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    sourceRef.current = null;
+    analyserRef.current = null;
     setAudioData({ volume: 0, isSpeaking: false, warning: "" });
   };
 

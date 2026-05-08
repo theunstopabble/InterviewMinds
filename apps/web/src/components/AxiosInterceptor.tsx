@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/clerk-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 
 export const AxiosInterceptor = ({
@@ -8,12 +8,15 @@ export const AxiosInterceptor = ({
   children: React.ReactNode;
 }) => {
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     // Request Interceptor: Request jaane se pehle Token lagao
     const requestInterceptor = api.interceptors.request.use(async (config) => {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -26,7 +29,6 @@ export const AxiosInterceptor = ({
       (error) => {
         if (error.response?.status === 401) {
           console.error("Unauthorized! Redirecting to login...");
-          // Yahan chaho to login page par redirect kar sakte ho
         }
         return Promise.reject(error);
       },
@@ -34,13 +36,13 @@ export const AxiosInterceptor = ({
 
     setIsReady(true);
 
-    // Cleanup (Jab component hate to interceptor bhi hatao)
+    // Cleanup: remove interceptors on unmount
     return () => {
       api.interceptors.request.eject(requestInterceptor);
       api.interceptors.response.eject(responseInterceptor);
     };
-  }, [getToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Jab tak interceptor set na ho, tab tak app ko hold karo (Optional but safer)
   return isReady ? children : null;
 };

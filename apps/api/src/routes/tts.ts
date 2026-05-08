@@ -85,6 +85,12 @@ router.post(
     `;
 
       // 3. Generate Audio using SSML (Not plain text)
+      const closeAll = (...synths: sdk.SpeechSynthesizer[]) => {
+        synths.forEach((s) => {
+          try { s.close(); } catch { /* ignore */ }
+        });
+      };
+
       synthesizer.speakSsmlAsync(
         ssml,
         (result) => {
@@ -92,7 +98,7 @@ router.post(
             const audioBuffer = Buffer.from(result.audioData);
             res.set("Content-Type", "audio/mpeg");
             res.send(audioBuffer);
-            synthesizer.close();
+            closeAll(synthesizer);
           } else {
             console.error("❌ Azure SSML Error:", result.errorDetails);
 
@@ -103,16 +109,25 @@ router.post(
               undefined,
             );
             fallbackSynthesizer.speakTextAsync(text, (fbResult) => {
-              const fbBuffer = Buffer.from(fbResult.audioData);
-              res.set("Content-Type", "audio/mpeg");
-              res.send(fbBuffer);
-              fallbackSynthesizer.close();
+              if (fbResult.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
+                const fbBuffer = Buffer.from(fbResult.audioData);
+                res.set("Content-Type", "audio/mpeg");
+                res.send(fbBuffer);
+              } else {
+                console.error("❌ Fallback TTS Error:", fbResult.errorDetails);
+                res.status(500).json({ error: "TTS generation failed" });
+              }
+              closeAll(synthesizer, fallbackSynthesizer);
+            }, (fbErr) => {
+              console.error("❌ Fallback Synthesis Error:", fbErr);
+              closeAll(synthesizer, fallbackSynthesizer);
+              res.status(500).json({ error: "TTS Error" });
             });
           }
         },
         (err) => {
           console.error("❌ Synthesis Error:", err);
-          synthesizer.close();
+          closeAll(synthesizer);
           res.status(500).json({ error: "TTS Error" });
         },
       );

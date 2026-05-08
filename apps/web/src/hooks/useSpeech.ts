@@ -16,6 +16,7 @@ export const useSpeech = () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
   // 1. Initialize Speech Recognition
   useEffect(() => {
@@ -44,6 +45,10 @@ export const useSpeech = () => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
+      }
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
       }
       window.speechSynthesis.cancel();
     };
@@ -84,7 +89,12 @@ export const useSpeech = () => {
         );
 
         // 2. Blob se Playable URL banao
+        // Cleanup previous URL to prevent memory leak
+        if (audioUrlRef.current) {
+          URL.revokeObjectURL(audioUrlRef.current);
+        }
         const audioUrl = URL.createObjectURL(response.data);
+        audioUrlRef.current = audioUrl;
         const audio = new Audio(audioUrl);
         audioRef.current = audio;
 
@@ -113,6 +123,10 @@ export const useSpeech = () => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
     }
     window.speechSynthesis.cancel();
     setIsSpeaking(false);

@@ -42,15 +42,17 @@ router.post("/execute", requireAuth, async (req, res) => {
           },
         ],
       },
+      { timeout: 15000 },
     );
 
     // Piston ka result wapas bhejo
     res.json(response.data);
   } catch (error: unknown) {
-    console.error("Compiler Error:", (error as Error).message);
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Compiler Error:", msg);
     res.status(500).json({
       error: "Failed to execute code",
-      details: (error as Error).message,
+      details: msg,
     });
   }
 });

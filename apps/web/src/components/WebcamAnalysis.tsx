@@ -9,10 +9,12 @@ export default function WebcamAnalysis({
   onEmotionUpdate,
   isInterviewActive,
   onRecordingComplete,
+  onStreamReady,
 }: {
   onEmotionUpdate?: (emotion: string) => void;
   isInterviewActive?: boolean;
   onRecordingComplete?: (blob: Blob) => void;
+  onStreamReady?: (stream: MediaStream) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -53,18 +55,28 @@ export default function WebcamAnalysis({
 
   const startVideo = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+      } catch {
+        // Fallback: video-only if audio is already in use or blocked
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         setIsVideoOn(true);
+        onStreamReady?.(stream);
       }
     } catch (err) {
       console.error("Camera Error:", err);
-      toast.error("Could not access camera/mic");
+      toast.error("Could not access camera");
     }
   };
 
@@ -152,17 +164,7 @@ export default function WebcamAnalysis({
         .detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions())
         .withFaceExpressions();
 
-      if (canvasRef.current && videoRef.current) {
-        const displaySize = {
-          width: videoRef.current.videoWidth,
-          height: videoRef.current.videoHeight,
-        };
-        faceapi.matchDimensions(canvasRef.current, displaySize);
-        // const resizedDetections = faceapi.resizeResults(
-        //   detections,
-        //   displaySize,
-        // );
-      }
+      // Canvas is reserved for future overlay drawing; alignment handled via CSS
 
       if (detections.length > 0) {
         const expressions = detections[0].expressions;
