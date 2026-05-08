@@ -6,7 +6,6 @@ import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { requireAuth } from "../middleware/auth";
 import dotenv from "dotenv";
 import { logger } from "../lib/logger";
-import type { pipeline as PipelineType } from "@xenova/transformers";
 
 dotenv.config();
 
@@ -19,21 +18,16 @@ const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// ✅ Singleton Pattern for Model Loading (Taaki baar-baar load na ho)
-class EmbeddingService {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  static pipeline: ReturnType<typeof PipelineType> | null = null;
+// ✅ Singleton Pattern for Model Loading
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let cachedPipeline: any = null;
 
-  static async getPipeline() {
-    if (!this.pipeline) {
-      const { pipeline } = await import("@xenova/transformers");
-      this.pipeline = await pipeline(
-        "feature-extraction",
-        "Xenova/all-MiniLM-L6-v2",
-      );
-    }
-    return this.pipeline;
+async function getPipeline() {
+  if (!cachedPipeline) {
+    const { pipeline } = await import("@xenova/transformers");
+    cachedPipeline = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
   }
+  return cachedPipeline;
 }
 
 router.post(
@@ -83,7 +77,7 @@ router.post(
 
       // 3. EMBEDDINGS (Local Execution)
 
-      const extractor = await EmbeddingService.getPipeline();
+      const extractor = await getPipeline();
       const chunksWithEmbeddings = [];
 
       for (const chunk of outputChunks) {
