@@ -61,7 +61,15 @@ function MockModel(this: any, data: any) {
   };
 }
 
-(MockModel as any).find = () => makeChainable([...store]);
+(MockModel as any).find = (query: any = {}) => {
+  const results = store.filter((doc: any) => {
+    for (const key in query) {
+      if (doc[key] !== query[key]) return false;
+    }
+    return true;
+  }).sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+  return makeChainable(results);
+};
 (MockModel as any).findById = (id: string) => Promise.resolve(store.find((d: any) => d._id === id) || null);
 (MockModel as any).findOne = (query: any) => Promise.resolve(store.find((d: any) => {
   for (const k in query) if (d[k] !== query[k]) return false;
