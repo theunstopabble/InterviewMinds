@@ -8,6 +8,10 @@ describe("Metrics & Health", () => {
     const app = express();
     app.use(metricsMiddleware);
     app.get("/test-path", (_req, res: Response) => res.json({ ok: true }));
+    app.get("/metrics", async (_req, res: Response) => {
+      res.setHeader("Content-Type", register.contentType);
+      res.status(200).send(await register.metrics());
+    });
 
     // Warm up by hitting an endpoint
     const hitRes = await request(app).get("/test-path");
@@ -38,6 +42,10 @@ describe("Metrics & Health", () => {
     app.use(metricsMiddleware);
     app.get("/ok", (_req, res: Response) => res.json({ ok: true }));
     app.get("/err", (_req, res: Response) => res.status(500).json({ error: "boom" }));
+    app.get("/metrics", async (_req, res: Response) => {
+      res.setHeader("Content-Type", register.contentType);
+      res.status(200).send(await register.metrics());
+    });
 
     await request(app).get("/ok");
     await request(app).get("/err");
