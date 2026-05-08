@@ -20,7 +20,8 @@ export const requireAuth = (
   res: Response,
   next: NextFunction,
 ) => {
-  clerkRequireAuth(req, res, (err: unknown) => {
+  const middleware = clerkRequireAuth();
+  middleware(req, res, (err: unknown) => {
     if (err) {
       console.error("Auth Error Details:", (err as Error).message);
       return res

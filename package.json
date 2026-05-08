@@ -19,12 +19,26 @@
     "node": ">=18"
   },
   "overrides": {
-    "lodash": "^4.17.21",
+    "lodash": "^4.17.24",
     "node-fetch": "^2.7.0",
     "qs": "^6.13.0",
     "diff": "^5.2.0",
+    "@xenova/transformers": {
+      "onnxruntime-web": "1.25.1"
+    },
+    "onnxruntime-web": "1.25.1",
+    "protobufjs": "^7.5.5",
+    "flatted": "^3.4.2",
+    "serialize-javascript": "^7.0.5",
+    "dompurify": "^3.4.0",
+    "postcss": "^8.5.10",
+    "uuid": "^10.0.0",
+    "langsmith": "^0.5.19",
+    "ajv": "^6.15.0",
+    "path-to-regexp": "^0.1.13",
+    "follow-redirects": "^1.15.12",
     "multer-storage-cloudinary": {
-      "cloudinary": "^2.7.0"
+      "cloudinary": "$cloudinary"
     }
   }
 }
