@@ -38,7 +38,7 @@
     "path-to-regexp": "^0.1.13",
     "follow-redirects": "^1.15.12",
     "multer-storage-cloudinary": {
-      "cloudinary": "$cloudinary"
+      "cloudinary": "^2.9.0"
     }
   }
 }
