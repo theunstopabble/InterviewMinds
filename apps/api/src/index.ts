@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import rateLimit from "express-rate-limit";
+import { createServer } from "http";
 import resumeRoutes from "./routes/resume";
 import chatRoutes from "./routes/chat";
 import interviewRoutes from "./routes/interview";
@@ -13,6 +14,7 @@ import { logger } from "./lib/logger";
 import { correlationMiddleware, CorrelatedRequest } from "./lib/correlation";
 import { getRedisClient, closeRedisClient } from "./lib/redis";
 import { initSentry, captureException } from "./lib/sentry";
+import { createSocketServer } from "./lib/socket";
 
 dotenv.config();
 initSentry();
@@ -180,10 +182,13 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
-// 6. Start Server
+// 6. Start Server + Socket.IO
+const httpServer = createServer(app);
+
 if (require.main === module) {
-  app.listen(PORT, () => {
-    logger.info({ port: PORT, env: process.env.NODE_ENV || "development" }, "server started");
+  createSocketServer(httpServer, allowedOrigins);
+  httpServer.listen(PORT, () => {
+    logger.info({ port: PORT, env: process.env.NODE_ENV || "development" }, "server started with Socket.IO");
   });
 }
 

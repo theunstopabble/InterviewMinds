@@ -19,6 +19,16 @@ vi.mock("@sentry/react", () => ({
   reactRouterV6BrowserTracingIntegration: () => ({ name: "BrowserTracing", setupOnce: vi.fn() }),
 }));
 
+// Mock socket.io-client to prevent real WebSocket connections in tests
+vi.mock("socket.io-client", () => ({
+  io: vi.fn(() => ({
+    on: vi.fn(),
+    emit: vi.fn(),
+    disconnect: vi.fn(),
+    connected: false,
+  })),
+}));
+
 // Suppress console errors during tests unless explicitly needed
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -36,3 +46,15 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: vi.fn(),
   })),
 });
+
+// Mock localStorage for jsdom
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => { store[key] = value; },
+    removeItem: (key: string) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+})();
+Object.defineProperty(window, "localStorage", { value: localStorageMock });

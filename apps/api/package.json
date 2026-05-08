@@ -61,6 +61,7 @@
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.55.0",
     "vitest": "^2.1.8",
-    "pino-pretty": "^11.3.0"
+    "pino-pretty": "^11.3.0",
+    "socket.io-client": "^4.8.1"
   }
 }

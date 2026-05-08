@@ -40,5 +40,9 @@
     "multer-storage-cloudinary": {
       "cloudinary": "^2.9.0"
     }
+  },
+  "dependencies": {
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
   }
 }
