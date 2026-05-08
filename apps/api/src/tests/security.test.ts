@@ -50,6 +50,9 @@ describe("Security Middleware", () => {
     app.use(express.json());
     app.use(sanitizeInput);
     app.post("/echo", (req, res) => res.json(req.body));
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      res.status(500).json({ error: "Internal Server Error" });
+    });
 
     const res = await request(app)
       .post("/echo")
@@ -63,9 +66,13 @@ describe("Security Middleware", () => {
     const app = express();
     app.use(sanitizeInput);
     app.get("/search", (_req, res) => res.json({ ok: true }));
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      res.status(500).json({ error: "Internal Server Error" });
+    });
 
     const res = await request(app).get("/search?q=javascript:alert(1)");
     expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Internal Server Error");
   });
 
   it("should allow clean input through sanitization", async () => {
