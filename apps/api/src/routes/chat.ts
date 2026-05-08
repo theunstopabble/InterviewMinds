@@ -2,6 +2,8 @@ import express from "express";
 import { ResumeModel } from "../models/Resume";
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
+import { logger } from "../lib/logger";
+import { validateBody, ChatMessageSchema } from "../lib/validation";
 
 dotenv.config();
 
@@ -51,7 +53,7 @@ interface ChatRequest {
   language?: string;
 }
 
-router.post("/", async (req: express.Request, res: express.Response) => {
+router.post("/", validateBody(ChatMessageSchema), async (req: express.Request, res: express.Response) => {
   try {
     const {
       message,
@@ -78,7 +80,7 @@ router.post("/", async (req: express.Request, res: express.Response) => {
         throw new Error("Resume content not found");
       }
     } catch (err: unknown) {
-      console.error("❌ Resume Fetch Error:", (err as Error).message);
+      logger.error({ err: (err as Error).message, resumeId }, "resume fetch error");
       return res.status(404).json({ error: "Resume not found" });
     }
 
@@ -168,7 +170,7 @@ router.post("/", async (req: express.Request, res: express.Response) => {
 
     res.json({ reply: aiText });
   } catch (error: unknown) {
-    console.error("❌ Critical Chat Error:", (error as Error).message);
+    logger.error({ err: (error as Error).message }, "chat generation error");
     res
       .status(500)
       .json({ error: "AI Service Failed", details: (error as Error).message });

@@ -4,8 +4,9 @@ import { ResumeModel } from "../models/Resume";
 import PDFParser from "pdf2json";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { requireAuth } from "../middleware/auth";
-import { pipeline } from "@xenova/transformers"; // ✅ Local AI Import
+import { pipeline } from "@xenova/transformers"; // Local AI Import
 import dotenv from "dotenv";
+import { logger } from "../lib/logger"; // Local AI Import
 
 dotenv.config();
 

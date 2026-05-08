@@ -9,6 +9,8 @@ import interviewRoutes from "./routes/interview";
 import { requireAuth } from "./middleware/auth";
 import compilerRoutes from "./routes/compiler";
 import ttsRoutes from "./routes/tts";
+import { logger } from "./lib/logger";
+import { correlationMiddleware, CorrelatedRequest } from "./lib/correlation";
 
 dotenv.config();
 
@@ -36,6 +38,31 @@ app.use(
 );
 
 app.use(express.json({ limit: "10mb" }));
+
+// Correlation ID middleware (must be early for request tracing)
+app.use(correlationMiddleware);
+
+// Request logging middleware
+app.use((req: Request, res: Response, next: () => void) => {
+  const start = Date.now();
+  const cReq = req as CorrelatedRequest;
+  const requestLogger = logger.child({
+    correlationId: cReq.correlationId,
+    method: req.method,
+    path: req.path,
+    userAgent: req.get("user-agent"),
+  });
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    requestLogger.info({
+      statusCode: res.statusCode,
+      durationMs: duration,
+    }, "request completed");
+  });
+
+  next();
+});
 
 // 2. Rate Limiters
 const generalLimiter = rateLimit({
@@ -96,28 +123,42 @@ app.use((err: Error, _req: Request, res: Response, _next: () => void) => {
   if (err.message && err.message.startsWith("CORS policy")) {
     return res.status(403).json({ error: "CORS Forbidden", details: err.message });
   }
-  console.error("Unhandled Error:", err.message);
+  logger.error({ err: err.message, stack: err.stack }, "unhandled error");
   res.status(500).json({ error: "Internal Server Error" });
 });
 
 // 7. Database Connection
 if (!MONGO_URI) {
-  console.error("❌ Error: MONGO_URI is missing in .env file");
+  logger.fatal("MONGO_URI is missing in .env file");
   process.exit(1);
 } else {
   mongoose
-    .connect(MONGO_URI)
-    .then(() => console.log("✅ MongoDB Connected"))
-    .catch((err) => {
-      console.error("❌ MongoDB Connection Error:", err);
+    .connect(MONGO_URI, {
+      maxPoolSize: 20,
+      minPoolSize: 5,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      bufferCommands: false,
+    })
+    .then(() => logger.info("MongoDB connected"))
+    .catch((err: Error) => {
+      logger.fatal({ err: err.message }, "MongoDB connection failed");
       process.exit(1);
     });
+
+  mongoose.connection.on("disconnected", () => {
+    logger.warn("MongoDB disconnected");
+  });
+
+  mongoose.connection.on("reconnected", () => {
+    logger.info("MongoDB reconnected");
+  });
 }
 
 // 6. Start Server
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    logger.info({ port: PORT, env: process.env.NODE_ENV || "development" }, "server started");
   });
 }
 

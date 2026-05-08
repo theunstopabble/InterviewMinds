@@ -32,12 +32,24 @@ jobs:
             sleep 10
           done
 
-      # Backend Build Check
+      # Backend Quality Checks
+      - name: Check Backend Typecheck
+        working-directory: ./apps/api
+        run: npm run typecheck
+
+      - name: Run Backend Tests
+        working-directory: ./apps/api
+        run: npm run test
+
       - name: Check Backend Build
         working-directory: ./apps/api
         run: npm run build --if-present
 
-      # Frontend Build Check
+      # Frontend Quality Checks
+      - name: Check Frontend Typecheck
+        working-directory: ./apps/web
+        run: npm run typecheck
+
       - name: Check Frontend Build
         working-directory: ./apps/web
         run: npm run build

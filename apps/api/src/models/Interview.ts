@@ -60,4 +60,14 @@ const interviewSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+// Compound index for user history queries (sorted by newest first)
+interviewSchema.index({ userId: 1, createdAt: -1 });
+
+// TTL index: auto-delete completed interviews after 90 days for GDPR/compliance
+// Only applies to completed interviews; ongoing ones are kept
+interviewSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: 90 * 24 * 60 * 60, partialFilterExpression: { status: "completed" } },
+);
+
 export const InterviewModel = mongoose.model("Interview", interviewSchema);

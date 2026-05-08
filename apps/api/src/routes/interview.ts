@@ -3,7 +3,9 @@ import { InterviewModel } from "../models/Interview";
 import { requireAuth } from "../middleware/auth";
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
-import { uploadMiddleware } from "../middleware/upload"; // ✅ Use Cloudinary Middleware
+import { uploadMiddleware } from "../middleware/upload";
+import { logger } from "../lib/logger";
+import { validateBody, EndInterviewSchema, UploadVideoSchema } from "../lib/validation";
 
 dotenv.config();
 
@@ -29,11 +31,12 @@ interface EndInterviewRequest {
 router.post(
   "/end",
   requireAuth,
+  validateBody(EndInterviewSchema),
   async (req: express.Request, res: express.Response) => {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.userId || authReq.auth?.userId;
     try {
       const { resumeId, history } = req.body as EndInterviewRequest;
-      const authReq = req as AuthenticatedRequest;
-      const userId = authReq.user?.userId || authReq.auth?.userId;
 
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -141,7 +144,7 @@ router.post(
         }
       } catch (parseOrApiError: unknown) {
         const msg = parseOrApiError instanceof Error ? parseOrApiError.message : String(parseOrApiError);
-        console.error("AI Analysis Error:", msg);
+        logger.error({ err: msg }, "AI analysis failed");
         // Continue with fallback defaults
       }
 
@@ -177,7 +180,7 @@ router.post(
       });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Unknown error";
-      console.error("Feedback Generation Error:", msg);
+      logger.error({ err: msg, userId }, "feedback generation failed");
       res.status(500).json({ error: "Failed to generate report", details: msg });
     }
   },
@@ -200,7 +203,7 @@ router.get(
 
       res.json(interviews);
     } catch (error: unknown) {
-      console.error("History Fetch Error:", (error as Error).message);
+      logger.error({ err: (error as Error).message }, "history fetch failed");
       res.status(500).json({ error: "Failed to fetch history" });
     }
   },
@@ -230,7 +233,7 @@ router.get(
       res.json(interview);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Unknown error";
-      console.error("Fetch Error:", msg);
+      logger.error({ err: msg, interviewId: req.params.id }, "interview fetch failed");
       res.status(500).json({ error: "Server Error" });
     }
   },
@@ -244,18 +247,17 @@ router.post(
   requireAuth,
   uploadMiddleware.single("video"),
   async (req: express.Request, res: express.Response) => {
-    try {
-      const authReq = req as AuthenticatedRequest;
-      const userId = authReq.user?.userId || authReq.auth?.userId;
-      if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user?.userId || authReq.auth?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
+    const { interviewId } = req.body as { interviewId: string };
+    try {
       if (!req.file) {
         return res.status(400).json({ error: "No video file provided" });
       }
-
-      const { interviewId } = req.body as { interviewId: string };
       if (!interviewId || typeof interviewId !== "string") {
         return res.status(400).json({ error: "Valid interviewId is required" });
       }
@@ -278,7 +280,7 @@ router.post(
       });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Unknown error";
-      console.error("Cloud Upload Error:", msg);
+      logger.error({ err: msg, userId, interviewId }, "video upload failed");
       res.status(500).json({ error: "Video upload failed", details: msg });
     }
   },

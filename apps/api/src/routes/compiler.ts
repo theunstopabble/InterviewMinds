@@ -1,6 +1,8 @@
 import express from "express";
 import axios from "axios";
 import { requireAuth } from "../middleware/auth";
+import { logger } from "../lib/logger";
+import { validateBody, CompilerRequestSchema } from "../lib/validation";
 
 const router = express.Router();
 
@@ -16,7 +18,7 @@ const LANGUAGE_MAP: Record<string, string> = {
   rust: "1.68.2",
 };
 
-router.post("/execute", requireAuth, async (req, res) => {
+router.post("/execute", requireAuth, validateBody(CompilerRequestSchema), async (req, res) => {
   const { language, code } = req.body;
 
   if (!language || !code) {
@@ -49,7 +51,7 @@ router.post("/execute", requireAuth, async (req, res) => {
     res.json(response.data);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    console.error("Compiler Error:", msg);
+    logger.error({ err: msg }, "compiler request failed");
     res.status(500).json({
       error: "Failed to execute code",
       details: msg,

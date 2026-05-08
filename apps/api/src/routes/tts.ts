@@ -1,7 +1,9 @@
 import express from "express";
-import * as sdk from "microsoft-cognitiveservices-speech-sdk";
-import { requireAuth } from "../middleware/auth";
 import dotenv from "dotenv";
+import sdk from "microsoft-cognitiveservices-speech-sdk";
+import { logger } from "../lib/logger";
+import { validateBody, TTSRequestSchema } from "../lib/validation";
+import { requireAuth } from "../middleware/auth";
 
 dotenv.config();
 
@@ -36,6 +38,7 @@ interface TTSRequest {
 router.post(
   "/speak",
   requireAuth,
+  validateBody(TTSRequestSchema),
   async (req: express.Request, res: express.Response) => {
     try {
       const { text, gender, language = "english" } = req.body as TTSRequest;
@@ -100,10 +103,10 @@ router.post(
             res.send(audioBuffer);
             closeAll(synthesizer);
           } else {
-            console.error("❌ Azure SSML Error:", result.errorDetails);
+            logger.error({ errorDetails: result.errorDetails }, "Azure SSML error");
 
             // Fallback: If SSML fails (rare), try plain text
-            console.warn("⚠️ Falling back to plain text TTS...");
+            logger.warn("Falling back to plain text TTS");
             const fallbackSynthesizer = new sdk.SpeechSynthesizer(
               speechConfig,
               undefined,
@@ -114,25 +117,25 @@ router.post(
                 res.set("Content-Type", "audio/mpeg");
                 res.send(fbBuffer);
               } else {
-                console.error("❌ Fallback TTS Error:", fbResult.errorDetails);
+                logger.error({ errorDetails: fbResult.errorDetails }, "fallback TTS error");
                 res.status(500).json({ error: "TTS generation failed" });
               }
               closeAll(synthesizer, fallbackSynthesizer);
             }, (fbErr) => {
-              console.error("❌ Fallback Synthesis Error:", fbErr);
+              logger.error({ err: fbErr }, "fallback synthesis error");
               closeAll(synthesizer, fallbackSynthesizer);
               res.status(500).json({ error: "TTS Error" });
             });
           }
         },
         (err) => {
-          console.error("❌ Synthesis Error:", err);
+          logger.error({ err }, "synthesis error");
           closeAll(synthesizer);
           res.status(500).json({ error: "TTS Error" });
         },
       );
     } catch (error: unknown) {
-      console.error("❌ Server Error:", (error as Error).message);
+      logger.error({ err: (error as Error).message }, "TTS server error");
       res.status(500).json({ error: "Internal Server Error" });
     }
   },

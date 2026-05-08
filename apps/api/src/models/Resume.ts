@@ -19,4 +19,7 @@ const ResumeSchema = new mongoose.Schema<IResume>({
   createdAt: { type: Date, default: Date.now },
 });
 
+// Compound index for user resume lookups
+ResumeSchema.index({ userId: 1, createdAt: -1 });
+
 export const ResumeModel = mongoose.model<IResume>("Resume", ResumeSchema);
