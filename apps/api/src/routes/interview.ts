@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { uploadMiddleware } from "../middleware/upload";
 import { logger } from "../lib/logger";
 import { validateBody, EndInterviewSchema, UploadVideoSchema } from "../lib/validation";
+import { interviewsCompleted } from "../lib/metrics";
 
 dotenv.config();
 
@@ -86,6 +87,7 @@ router.post(
         });
 
         await newInterview.save();
+        interviewsCompleted.inc({ outcome: "empty" });
         return res.json({
           id: newInterview._id,
           score: 0,
@@ -179,6 +181,7 @@ router.post(
       });
 
       await interview.save();
+      interviewsCompleted.inc({ outcome: "evaluated" });
 
       res.json({
         id: interview._id,

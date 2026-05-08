@@ -26,6 +26,7 @@ import {
 } from "./lib/security";
 import { attachRole, requirePermission } from "./middleware/rbac";
 import { auditLog } from "./middleware/audit";
+import { metricsMiddleware, register } from "./lib/metrics";
 
 dotenv.config();
 initSentry();
@@ -83,21 +84,37 @@ app.use((req: Request, res: Response, next: () => void) => {
 // Trust proxy for accurate client IP behind load balancers
 configureTrustProxy(app);
 
-// 2. Security Headers (Helmet)
+// 2. Prometheus Metrics — record duration/counters for all requests
+app.use(metricsMiddleware);
+
+// 3. Security Headers (Helmet)
 app.use(securityHeaders);
 
-// 3. Request Timeout (prevent hanging connections)
+// 4. Request Timeout (prevent hanging connections)
 app.use(requestTimeout(30000));
 
-// 4. Input Sanitization (prevent NoSQL injection & XSS payloads)
+// 5. Input Sanitization (prevent NoSQL injection & XSS payloads)
 app.use(sanitizeInput);
 
-// 5. Rate Limiters
+// 6. Rate Limiters
 app.use(generalLimiter);
 
-// 6. Health Check (includes DB and Redis status)
+// 7. Metrics Endpoint (Prometheus exposition format)
+app.get("/metrics", async (_req: Request, res: Response) => {
+  try {
+    res.setHeader("Content-Type", register.contentType);
+    const metrics = await register.metrics();
+    res.status(200).send(metrics);
+  } catch (err: unknown) {
+    logger.error({ err: (err as Error).message }, "metrics collection failed");
+    res.status(500).json({ error: "Failed to collect metrics" });
+  }
+});
+
+// 8. Health Check (includes DB, Redis, and external service status)
 app.get("/health", async (_req: Request, res: Response) => {
   const mongoState = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+
   let redisState = "unknown";
   try {
     const redis = getRedisClient();
@@ -106,20 +123,51 @@ app.get("/health", async (_req: Request, res: Response) => {
   } catch {
     redisState = "disconnected";
   }
-  const healthy = mongoState === "connected" && redisState === "connected";
-  res.status(healthy ? 200 : 503).json({
-    status: healthy ? "ok" : "degraded",
+
+  // Check external AI service (Groq) via a lightweight HEAD request to the API
+  let groqState = "unknown";
+  try {
+    const axios = (await import("axios")).default;
+    await axios.head("https://api.groq.com/openai/v1/models", { timeout: 5000 });
+    groqState = "connected";
+  } catch {
+    groqState = "unreachable";
+  }
+
+  // Check external compiler service (Piston)
+  let pistonState = "unknown";
+  try {
+    const axios = (await import("axios")).default;
+    await axios.get("https://emkc.org/api/v2/piston/runtimes", { timeout: 5000 });
+    pistonState = "connected";
+  } catch {
+    pistonState = "unreachable";
+  }
+
+  const criticalHealthy = mongoState === "connected";
+  const fullyHealthy =
+    criticalHealthy &&
+    redisState === "connected" &&
+    groqState === "connected";
+
+  res.status(fullyHealthy ? 200 : criticalHealthy ? 200 : 503).json({
+    status: fullyHealthy ? "ok" : criticalHealthy ? "degraded" : "unhealthy",
     timestamp: new Date().toISOString(),
-    services: { mongo: mongoState, redis: redisState },
+    services: {
+      mongo: mongoState,
+      redis: redisState,
+      groq: groqState,
+      piston: pistonState,
+    },
   });
 });
 
-// 7. Root Route
+// 9. Root Route
 app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "InterviewMinds Backend is Running!" });
 });
 
-// 8. Protected Routes (RBAC + Audit)
+// 10. Protected Routes (RBAC + Audit)
 // attachRole must run after requireAuth so req.auth.userId is populated
 
 app.use(
@@ -162,7 +210,7 @@ app.use(
   ttsRoutes,
 );
 
-// 9. Global Error Handler (must be last)
+// 11. Global Error Handler (must be last)
 app.use((err: Error, _req: Request, res: Response, _next: () => void) => {
   if (err.message && err.message.startsWith("CORS policy")) {
     return res.status(403).json({ error: "CORS Forbidden", details: err.message });
@@ -172,7 +220,7 @@ app.use((err: Error, _req: Request, res: Response, _next: () => void) => {
   res.status(500).json({ error: "Internal Server Error" });
 });
 
-// 10. Database Connection
+// 12. Database Connection
 if (!MONGO_URI) {
   logger.fatal("MONGO_URI is missing in .env file");
   process.exit(1);
@@ -200,7 +248,7 @@ if (!MONGO_URI) {
   });
 }
 
-// 11. Graceful shutdown
+// 13. Graceful shutdown
 process.on("SIGTERM", async () => {
   logger.info("SIGTERM received, shutting down gracefully");
   await closeRedisClient();
@@ -217,7 +265,7 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
-// 12. Start Server + Socket.IO
+// 14. Start Server + Socket.IO
 const httpServer = createServer(app);
 
 if (require.main === module) {
@@ -227,5 +275,5 @@ if (require.main === module) {
   });
 }
 
-// 13. Export App
+// 15. Export App
 export default app;

@@ -3,6 +3,7 @@ import axios from "axios";
 import { createHash } from "crypto";
 import { requireAuth } from "../middleware/auth";
 import { logger } from "../lib/logger";
+import { codeExecutions } from "../lib/metrics";
 import { validateBody, CompilerRequestSchema } from "../lib/validation";
 import { cacheGet, cacheSet } from "../lib/redis";
 
@@ -39,6 +40,7 @@ router.post("/execute", requireAuth, validateBody(CompilerRequestSchema), async 
     const cached = await cacheGet<Record<string, unknown>>("compiler", cacheKey);
     if (cached) {
       logger.debug({ cacheKey }, "compiler cache hit");
+      codeExecutions.inc({ language, status: "cached" });
       res.json(cached);
       return;
     }
@@ -59,6 +61,7 @@ router.post("/execute", requireAuth, validateBody(CompilerRequestSchema), async 
 
     // Cache result for 1 hour (3600s)
     await cacheSet("compiler", cacheKey, response.data, 3600);
+    codeExecutions.inc({ language, status: "fresh" });
     res.json(response.data);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";

@@ -6,6 +6,7 @@ import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { requireAuth } from "../middleware/auth";
 import dotenv from "dotenv";
 import { logger } from "../lib/logger";
+import { resumesUploaded } from "../lib/metrics";
 
 dotenv.config();
 
@@ -109,6 +110,7 @@ router.post(
         chunks: chunksWithEmbeddings,
       });
 
+      resumesUploaded.inc();
       res.json({
         message: "Resume processed successfully!",
         id: newResume._id,
