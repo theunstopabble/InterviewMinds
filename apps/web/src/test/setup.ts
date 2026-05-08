@@ -21,3 +21,18 @@ vi.mock("@sentry/react", () => ({
 
 // Suppress console errors during tests unless explicitly needed
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+// Mock matchMedia for responsive components (Navbar uses it)
+Object.defineProperty(window, "matchMedia", {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
