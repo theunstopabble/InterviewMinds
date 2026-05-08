@@ -11,9 +11,9 @@ vi.mock("../models/Interview", () => ({
 }));
 
 // Lazy load router after mock is set up
-const getInterviewRouter = async () => {
-  const { default: router } = await import("../routes/interview");
-  return router;
+const getInterviewRouter = async (): Promise<express.Router> => {
+  const mod = await import("../routes/interview.js");
+  return (mod as any).default;
 };
 
 const createTestApp = async () => {
