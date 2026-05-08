@@ -27,9 +27,23 @@ import {
 import { attachRole, requirePermission } from "./middleware/rbac";
 import { auditLog } from "./middleware/audit";
 import { metricsMiddleware, register } from "./lib/metrics";
+import { ApolloServer } from "@apollo/server";
+import { typeDefs } from "./graphql/schema";
+import { resolvers } from "./graphql/resolvers";
+import adminRoutes from "./routes/admin";
+import exportRoutes from "./routes/export";
+import { deduplicate } from "./lib/dedup";
+import { startWorkers, closeQueues } from "./lib/queue";
 
 dotenv.config();
 initSentry();
+
+// ─── Apollo Server (GraphQL) ───────────────────────────────────────────────
+const apolloServer = new ApolloServer({
+  typeDefs,
+  resolvers,
+  introspection: process.env.NODE_ENV !== "production",
+});
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -210,7 +224,40 @@ app.use(
   ttsRoutes,
 );
 
-// 11. Global Error Handler (must be last)
+// 11. Admin & Export Routes (require admin/auditor permissions)
+app.use(
+  "/api/admin",
+  requireAuth,
+  attachRole,
+  adminRoutes,
+);
+app.use(
+  "/api/export",
+  requireAuth,
+  attachRole,
+  exportRoutes,
+);
+
+// 12. GraphQL Endpoint (Apollo Server)
+// Mounted after all REST routes; requires auth via context
+(async () => {
+  await apolloServer.start();
+  const { expressMiddleware } = await import("@apollo/server/express4");
+  app.use(
+    "/graphql",
+    expressMiddleware(apolloServer, {
+      context: async ({ req }: { req: any }) => {
+        const userId = req.auth?.userId || null;
+        const userRole = req.userRole || "candidate";
+        return { userId, userRole };
+      },
+    }),
+  );
+})().catch((err: Error) => {
+  logger.error({ err: err.message }, "Apollo Server startup failed");
+});
+
+// 13. Global Error Handler (must be last)
 app.use((err: Error, _req: Request, res: Response, _next: () => void) => {
   if (err.message && err.message.startsWith("CORS policy")) {
     return res.status(403).json({ error: "CORS Forbidden", details: err.message });
@@ -220,7 +267,7 @@ app.use((err: Error, _req: Request, res: Response, _next: () => void) => {
   res.status(500).json({ error: "Internal Server Error" });
 });
 
-// 12. Database Connection
+// 14. Database Connection
 if (!MONGO_URI) {
   logger.fatal("MONGO_URI is missing in .env file");
   process.exit(1);
@@ -233,7 +280,15 @@ if (!MONGO_URI) {
       socketTimeoutMS: 45000,
       bufferCommands: false,
     })
-    .then(() => logger.info("MongoDB connected"))
+    .then(() => {
+      logger.info("MongoDB connected");
+      // Start background job workers after DB is ready
+      try {
+        startWorkers();
+      } catch (err: unknown) {
+        logger.error({ err: (err as Error).message }, "BullMQ worker startup failed");
+      }
+    })
     .catch((err: Error) => {
       logger.fatal({ err: err.message }, "MongoDB connection failed");
       process.exit(1);
@@ -248,9 +303,10 @@ if (!MONGO_URI) {
   });
 }
 
-// 13. Graceful shutdown
+// 15. Graceful shutdown
 process.on("SIGTERM", async () => {
   logger.info("SIGTERM received, shutting down gracefully");
+  await closeQueues();
   await closeRedisClient();
   await mongoose.connection.close();
   logger.info("Connections closed");
@@ -259,13 +315,14 @@ process.on("SIGTERM", async () => {
 
 process.on("SIGINT", async () => {
   logger.info("SIGINT received, shutting down gracefully");
+  await closeQueues();
   await closeRedisClient();
   await mongoose.connection.close();
   logger.info("Connections closed");
   process.exit(0);
 });
 
-// 14. Start Server + Socket.IO
+// 16. Start Server + Socket.IO
 const httpServer = createServer(app);
 
 if (require.main === module) {
@@ -275,5 +332,5 @@ if (require.main === module) {
   });
 }
 
-// 15. Export App
+// 17. Export App
 export default app;
