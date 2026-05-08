@@ -21,6 +21,7 @@
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-separator": "^1.0.3",
     "@radix-ui/react-slot": "^1.0.2",
+    "@sentry/react": "^8.9.0",
     "@vercel/analytics": "^1.6.1",
     "axios": "^1.15.2",
     "class-variance-authority": "^0.7.0",

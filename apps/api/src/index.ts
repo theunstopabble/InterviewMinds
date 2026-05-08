@@ -11,8 +11,11 @@ import compilerRoutes from "./routes/compiler";
 import ttsRoutes from "./routes/tts";
 import { logger } from "./lib/logger";
 import { correlationMiddleware, CorrelatedRequest } from "./lib/correlation";
+import { getRedisClient, closeRedisClient } from "./lib/redis";
+import { initSentry, captureException } from "./lib/sentry";
 
 dotenv.config();
+initSentry();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -91,18 +94,22 @@ const uploadLimiter = rateLimit({
 
 app.use(generalLimiter);
 
-// 3. Health Check (includes DB status)
-app.get("/health", (_req: Request, res: Response) => {
-  const dbState = mongoose.connection.readyState;
-  const status = dbState === 1 ? "ok" : "degraded";
-  const httpCode = dbState === 1 ? 200 : 503;
-  res.status(httpCode).json({
-    status,
+// 3. Health Check (includes DB and Redis status)
+app.get("/health", async (_req: Request, res: Response) => {
+  const mongoState = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+  let redisState = "unknown";
+  try {
+    const redis = getRedisClient();
+    await redis.ping();
+    redisState = "connected";
+  } catch {
+    redisState = "disconnected";
+  }
+  const healthy = mongoState === "connected" && redisState === "connected";
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? "ok" : "degraded",
     timestamp: new Date().toISOString(),
-    services: {
-      api: "up",
-      database: dbState === 1 ? "connected" : "disconnected",
-    },
+    services: { mongo: mongoState, redis: redisState },
   });
 });
 
@@ -124,6 +131,7 @@ app.use((err: Error, _req: Request, res: Response, _next: () => void) => {
     return res.status(403).json({ error: "CORS Forbidden", details: err.message });
   }
   logger.error({ err: err.message, stack: err.stack }, "unhandled error");
+  captureException(err, { path: (_req as any).path, method: _req.method });
   res.status(500).json({ error: "Internal Server Error" });
 });
 
@@ -154,6 +162,23 @@ if (!MONGO_URI) {
     logger.info("MongoDB reconnected");
   });
 }
+
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  logger.info("SIGTERM received, shutting down gracefully");
+  await closeRedisClient();
+  await mongoose.connection.close();
+  logger.info("Connections closed");
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  logger.info("SIGINT received, shutting down gracefully");
+  await closeRedisClient();
+  await mongoose.connection.close();
+  logger.info("Connections closed");
+  process.exit(0);
+});
 
 // 6. Start Server
 if (require.main === module) {

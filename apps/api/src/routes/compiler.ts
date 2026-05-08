@@ -1,8 +1,10 @@
 import express from "express";
 import axios from "axios";
+import { createHash } from "crypto";
 import { requireAuth } from "../middleware/auth";
 import { logger } from "../lib/logger";
 import { validateBody, CompilerRequestSchema } from "../lib/validation";
+import { cacheGet, cacheSet } from "../lib/redis";
 
 const router = express.Router();
 
@@ -32,7 +34,15 @@ router.post("/execute", requireAuth, validateBody(CompilerRequestSchema), async 
   }
 
   try {
-    // Piston API ko code bhejo
+    // Cache key = SHA256(language + code)
+    const cacheKey = createHash("sha256").update(`${language}:${code}`).digest("hex");
+    const cached = await cacheGet<Record<string, unknown>>("compiler", cacheKey);
+    if (cached) {
+      logger.debug({ cacheKey }, "compiler cache hit");
+      res.json(cached);
+      return;
+    }
+
     const response = await axios.post(
       "https://emkc.org/api/v2/piston/execute",
       {
@@ -47,7 +57,8 @@ router.post("/execute", requireAuth, validateBody(CompilerRequestSchema), async 
       { timeout: 15000 },
     );
 
-    // Piston ka result wapas bhejo
+    // Cache result for 1 hour (3600s)
+    await cacheSet("compiler", cacheKey, response.data, 3600);
     res.json(response.data);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
