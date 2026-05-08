@@ -6,6 +6,8 @@ vi.mock("@clerk/clerk-react", () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
   SignedIn: ({ children }: { children: React.ReactNode }) => children,
   SignedOut: ({ children }: { children: React.ReactNode }) => children,
+  UserButton: () => null,
+  SignIn: () => null,
   useAuth: () => ({ isLoaded: true, isSignedIn: true, userId: "test-user-123" }),
   useUser: () => ({ isLoaded: true, user: { id: "test-user-123", fullName: "Test User" } }),
 }));
