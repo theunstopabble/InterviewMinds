@@ -25,12 +25,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: |
-          for i in 1 2 3; do
-            npm ci --legacy-peer-deps && break
-            echo "npm ci failed (attempt $i/3), retrying in 10s..."
-            sleep 10
-          done
+        run: npm install --legacy-peer-deps
 
       # Backend Quality Checks
       - name: Check Backend Typecheck
