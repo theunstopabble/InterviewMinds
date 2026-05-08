@@ -16,6 +16,14 @@ vi.mock("groq-sdk", () => ({
   },
 }));
 
+// Mock @clerk/express so requireAuth bypasses real Clerk auth in tests
+vi.mock("@clerk/express", () => ({
+  requireAuth: () => (req: any, _res: any, next: any) => {
+    req.auth = { userId: "test-user-123" };
+    next();
+  },
+}));
+
 const mockInterviewModel = createMockModel("Interview");
 
 // Mock InterviewModel module
