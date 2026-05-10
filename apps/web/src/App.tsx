@@ -127,8 +127,8 @@ function Home() {
 // 🌐 Main App Component
 function App() {
   const location = useLocation();
-  // 🎯 FOCUS MODE: Interview page par Navbar hide karo
   const isFocusMode = location.pathname === "/interview";
+  const isPublicPage = location.pathname === "/sign-in" || location.pathname === "/sign-up";
 
   return (
     <div className="relative min-h-screen bg-gray-950 text-white font-sans selection:bg-blue-500/30">
@@ -136,10 +136,7 @@ function App() {
       <SignedIn>{!isFocusMode && <Navbar />}</SignedIn>
 
       {/* Main Content Area */}
-      {/* Agar Navbar hai (Normal Mode): pt-16 (Padding Top) taaki content Navbar ke peeche na chupe.
-          Agar Focus Mode hai (Interview): No Padding. Full Screen use karo.
-      */}
-      <div className={isFocusMode ? "" : "pt-16 sm:pt-20"}>
+      <div className={isFocusMode || isPublicPage ? "" : "pt-16 sm:pt-20"}>
         <AxiosInterceptor>
           <Routes>
             {/* 🔓 Public Route: Sign In */}
