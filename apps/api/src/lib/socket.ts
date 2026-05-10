@@ -3,6 +3,7 @@ import { Server as SocketServer, Socket } from "socket.io";
 import { logger } from "./logger";
 import { MessageModel } from "../models/Message";
 import { getRequestLogger } from "./logger";
+import { verifyToken } from "@clerk/express";
 
 interface SocketAuth {
   userId: string;
@@ -14,7 +15,22 @@ interface ChatSocket extends Socket {
   roomId?: string;
 }
 
-const onlineUsers = new Map<string, Set<string>>(); // roomId -> Set<userId>
+const onlineUsers = new Map<string, Set<string>>();
+
+async function verifyClerkToken(token: string): Promise<{ userId: string; fullName?: string } | null> {
+  try {
+    const payload = await verifyToken(token, {
+      secretKey: process.env.CLERK_SECRET_KEY,
+    });
+    return {
+      userId: payload.sub,
+      fullName: (payload as { name?: string }).name,
+    };
+  } catch (error) {
+    logger.warn({ err: (error as Error).message }, "Token verification failed");
+    return null;
+  }
+}
 
 export function createSocketServer(httpServer: HttpServer, corsOrigins: string[]) {
   const io = new SocketServer(httpServer, {
@@ -28,21 +44,36 @@ export function createSocketServer(httpServer: HttpServer, corsOrigins: string[]
     transports: ["websocket", "polling"],
   });
 
-  // ─── Auth Middleware ─────────────────────────────────────────────────────
-  io.use((socket: ChatSocket, next) => {
+  io.use(async (socket: ChatSocket, next) => {
     const token = socket.handshake.auth?.token as string | undefined;
-    const userId = socket.handshake.auth?.userId as string | undefined;
+    const clientUserId = socket.handshake.auth?.userId as string | undefined;
     const fullName = socket.handshake.auth?.fullName as string | undefined;
 
-    if (!token || !userId) {
+    if (!token) {
       return next(new Error("Authentication required"));
     }
 
-    // In production, verify Clerk JWT token here.
-    // For now we trust the client-passed userId alongside the token,
-    // since the API already validates HTTP routes via Clerk middleware.
-    socket.user = { userId, fullName: fullName || "Anonymous" };
-    next();
+    try {
+      const verified = await verifyClerkToken(token);
+      
+      if (!verified) {
+        return next(new Error("Invalid token"));
+      }
+
+      if (clientUserId && clientUserId !== verified.userId) {
+        logger.warn({ clientUserId, tokenUserId: verified.userId }, "User ID mismatch");
+        return next(new Error("User ID mismatch"));
+      }
+
+      socket.user = { 
+        userId: verified.userId, 
+        fullName: fullName || verified.fullName || "Anonymous" 
+      };
+      next();
+    } catch (error) {
+      logger.error({ err: (error as Error).message }, "Socket auth error");
+      next(new Error("Authentication failed"));
+    }
   });
 
   io.on("connection", (socket: ChatSocket) => {

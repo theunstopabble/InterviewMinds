@@ -6,10 +6,12 @@ import { logger } from "../lib/logger";
 import { codeExecutions } from "../lib/metrics";
 import { validateBody, CompilerRequestSchema } from "../lib/validation";
 import { cacheGet, cacheSet } from "../lib/redis";
+import { pistonCircuitBreaker } from "../lib/circuitBreaker";
 
 const router = express.Router();
 
-// Supported Languages & Versions (Piston API map)
+const MAX_CODE_LENGTH = 50000; // 50KB limit
+
 const LANGUAGE_MAP: Record<string, string> = {
   javascript: "18.15.0",
   typescript: "5.0.3",
@@ -28,14 +30,25 @@ router.post("/execute", requireAuth, validateBody(CompilerRequestSchema), async 
     return res.status(400).json({ error: "Language and Code are required" });
   }
 
-  // Language check
+  if (typeof code !== "string" || code.length > MAX_CODE_LENGTH) {
+    return res.status(400).json({ error: `Code exceeds maximum length of ${MAX_CODE_LENGTH} characters` });
+  }
+
   const version = LANGUAGE_MAP[language];
   if (!version) {
     return res.status(400).json({ error: "Unsupported language" });
   }
 
+  const circuitState = pistonCircuitBreaker.getState();
+  if (circuitState.state === "open") {
+    logger.warn({ nextAttempt: circuitState.nextAttempt }, "Piston circuit breaker open");
+    return res.status(503).json({
+      error: "Code execution service temporarily unavailable",
+      retryAfter: Math.ceil((circuitState.nextAttempt - Date.now()) / 1000),
+    });
+  }
+
   try {
-    // Cache key = SHA256(language + code)
     const cacheKey = createHash("sha256").update(`${language}:${code}`).digest("hex");
     const cached = await cacheGet<Record<string, unknown>>("compiler", cacheKey);
     if (cached) {
@@ -45,27 +58,37 @@ router.post("/execute", requireAuth, validateBody(CompilerRequestSchema), async 
       return;
     }
 
-    const response = await axios.post(
-      "https://emkc.org/api/v2/piston/execute",
-      {
-        language: language,
-        version: version,
-        files: [
-          {
-            content: code,
-          },
-        ],
-      },
-      { timeout: 15000 },
-    );
+    const response = await pistonCircuitBreaker.execute(async () => {
+      return axios.post(
+        "https://emkc.org/api/v2/piston/execute",
+        {
+          language: language,
+          version: version,
+          files: [
+            {
+              content: code,
+            },
+          ],
+        },
+        { timeout: 15000 },
+      );
+    });
 
-    // Cache result for 1 hour (3600s)
     await cacheSet("compiler", cacheKey, response.data, 3600);
     codeExecutions.inc({ language, status: "fresh" });
     res.json(response.data);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     logger.error({ err: msg }, "compiler request failed");
+    
+    const circuitState = pistonCircuitBreaker.getState();
+    if (circuitState.state === "open") {
+      return res.status(503).json({
+        error: "Code execution service unavailable",
+        retryAfter: Math.ceil((circuitState.nextAttempt - Date.now()) / 1000),
+      });
+    }
+    
     res.status(500).json({
       error: "Failed to execute code",
       details: msg,

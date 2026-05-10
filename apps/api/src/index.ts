@@ -20,11 +20,13 @@ import {
   generalLimiter,
   aiLimiter,
   uploadLimiter,
-  authLimiter,
   requestTimeout,
   sanitizeInput,
+  getCsrfToken,
+  graphqlLimiter,
 } from "./lib/security";
-import { attachRole, requirePermission } from "./middleware/rbac";
+import { getCircuitBreakersHealth } from "./lib/circuitBreaker";
+import { attachRole } from "./middleware/rbac";
 import { auditLog } from "./middleware/audit";
 import { metricsMiddleware, register } from "./lib/metrics";
 import { ApolloServer } from "@apollo/server";
@@ -32,11 +34,12 @@ import { typeDefs } from "./graphql/schema";
 import { resolvers } from "./graphql/resolvers";
 import adminRoutes from "./routes/admin";
 import exportRoutes from "./routes/export";
-import { deduplicate } from "./lib/dedup";
 import { startWorkers, closeQueues } from "./lib/queue";
+import { requireEnvVars } from "./lib/envValidation";
 
 dotenv.config();
 initSentry();
+requireEnvVars();
 
 // ─── Apollo Server (GraphQL) ───────────────────────────────────────────────
 const apolloServer = new ApolloServer({
@@ -125,7 +128,10 @@ app.get("/metrics", async (_req: Request, res: Response) => {
   }
 });
 
-// 8. Health Check (includes DB, Redis, and external service status)
+// 8. CSRF Token Endpoint
+app.get("/api/csrf", getCsrfToken);
+
+// 9. Health Check (includes DB, Redis, external services, and circuit breakers)
 app.get("/health", async (_req: Request, res: Response) => {
   const mongoState = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
 
@@ -173,6 +179,7 @@ app.get("/health", async (_req: Request, res: Response) => {
       groq: groqState,
       piston: pistonState,
     },
+    circuitBreakers: getCircuitBreakersHealth(),
   });
 });
 
@@ -245,6 +252,7 @@ app.use(
   const { expressMiddleware } = await import("@apollo/server/express4");
   app.use(
     "/graphql",
+    graphqlLimiter,
     expressMiddleware(apolloServer, {
       context: async ({ req }: { req: any }) => {
         const userId = req.auth?.userId || null;

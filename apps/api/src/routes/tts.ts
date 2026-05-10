@@ -1,30 +1,21 @@
 import express from "express";
-import dotenv from "dotenv";
 import sdk from "microsoft-cognitiveservices-speech-sdk";
 import { logger } from "../lib/logger";
 import { validateBody, TTSRequestSchema } from "../lib/validation";
 import { requireAuth } from "../middleware/auth";
-
-dotenv.config();
+import { azureSpeechCircuitBreaker } from "../lib/circuitBreaker";
 
 const router = express.Router();
 
-// Helper to sanitize text for SSML (Avoids XML errors)
 const escapeXML = (unsafe: string) => {
   return unsafe.replace(/[<>&'"]/g, (c) => {
     switch (c) {
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case "&":
-        return "&amp;";
-      case "'":
-        return "&apos;";
-      case '"':
-        return "&quot;";
-      default:
-        return c;
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case "&": return "&amp;";
+      case "'": return "&apos;";
+      case '"': return "&quot;";
+      default: return c;
     }
   });
 };
@@ -35,44 +26,55 @@ interface TTSRequest {
   language?: string;
 }
 
+function getAzureSpeechConfig() {
+  const key = process.env.AZURE_SPEECH_KEY;
+  const region = process.env.AZURE_SPEECH_REGION;
+  
+  if (!key || !region) {
+    throw new Error("Azure Speech configuration missing");
+  }
+  
+  return sdk.SpeechConfig.fromSubscription(key, region);
+}
+
 router.post(
   "/speak",
   requireAuth,
   validateBody(TTSRequestSchema),
   async (req: express.Request, res: express.Response) => {
+    const circuitState = azureSpeechCircuitBreaker.getState();
+    
+    if (circuitState.state === "open") {
+      logger.warn({ nextAttempt: circuitState.nextAttempt }, "Azure TTS circuit breaker open");
+      return res.status(503).json({
+        error: "TTS service temporarily unavailable",
+        retryAfter: Math.ceil((circuitState.nextAttempt - Date.now()) / 1000),
+      });
+    }
+
     try {
       const { text, gender, language = "english" } = req.body as TTSRequest;
 
-      if (!text) return res.status(400).json({ error: "Text is required" });
+      if (!text) {
+        return res.status(400).json({ error: "Text is required" });
+      }
 
-      const speechConfig = sdk.SpeechConfig.fromSubscription(
-        process.env.AZURE_SPEECH_KEY!,
-        process.env.AZURE_SPEECH_REGION!,
-      );
+      if (text.length > 10000) {
+        return res.status(400).json({ error: "Text exceeds maximum length of 10000 characters" });
+      }
 
-      // 🧠 LOGIC: Best Neural Voices for India
+      const speechConfig = getAzureSpeechConfig();
+
       let voiceName = "";
-
-      // Azure supports specific "Styles" for some voices (chat, cheerful, etc.)
-      // We will try to apply a conversational style via SSML if supported.
       if (language === "hinglish") {
-        voiceName =
-          gender === "male" ? "hi-IN-MadhurNeural" : "hi-IN-SwaraNeural";
+        voiceName = gender === "male" ? "hi-IN-MadhurNeural" : "hi-IN-SwaraNeural";
       } else {
-        voiceName =
-          gender === "male" ? "en-IN-PrabhatNeural" : "en-IN-NeerjaNeural";
+        voiceName = gender === "male" ? "en-IN-PrabhatNeural" : "en-IN-NeerjaNeural";
       }
 
       speechConfig.speechSynthesisVoiceName = voiceName;
 
-      // 2. Synthesizer Setup
       const synthesizer = new sdk.SpeechSynthesizer(speechConfig, undefined);
-
-      // ✨ MAGIC: Use SSML for Human-Like Prosody
-      // Rate="1.0" -> Normal Speed
-      // Pitch="default" -> Natural Pitch
-      // We wrap the text in SSML to force the Neural engine to treat it as a conversation.
-
       const safeText = escapeXML(text);
 
       const ssml = `
@@ -84,59 +86,48 @@ router.post(
             </prosody>
           </mstts:express-as>
         </voice>
-      </speak>
-    `;
+      </speak>`;
 
-      // 3. Generate Audio using SSML (Not plain text)
       const closeAll = (...synths: sdk.SpeechSynthesizer[]) => {
         synths.forEach((s) => {
           try { s.close(); } catch { /* ignore */ }
         });
       };
 
-      synthesizer.speakSsmlAsync(
-        ssml,
-        (result) => {
-          if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-            const audioBuffer = Buffer.from(result.audioData);
-            res.set("Content-Type", "audio/mpeg");
-            res.send(audioBuffer);
-            closeAll(synthesizer);
-          } else {
-            logger.error({ errorDetails: result.errorDetails }, "Azure SSML error");
+      const result = await azureSpeechCircuitBreaker.execute(() => {
+        return new Promise<sdk.SpeechSynthesisResult>((resolve, reject) => {
+          synthesizer.speakSsmlAsync(
+            ssml,
+            (result) => resolve(result),
+            (err) => reject(err),
+          );
+        });
+      });
 
-            // Fallback: If SSML fails (rare), try plain text
-            logger.warn("Falling back to plain text TTS");
-            const fallbackSynthesizer = new sdk.SpeechSynthesizer(
-              speechConfig,
-              undefined,
-            );
-            fallbackSynthesizer.speakTextAsync(text, (fbResult) => {
-              if (fbResult.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-                const fbBuffer = Buffer.from(fbResult.audioData);
-                res.set("Content-Type", "audio/mpeg");
-                res.send(fbBuffer);
-              } else {
-                logger.error({ errorDetails: fbResult.errorDetails }, "fallback TTS error");
-                res.status(500).json({ error: "TTS generation failed" });
-              }
-              closeAll(synthesizer, fallbackSynthesizer);
-            }, (fbErr) => {
-              logger.error({ err: fbErr }, "fallback synthesis error");
-              closeAll(synthesizer, fallbackSynthesizer);
-              res.status(500).json({ error: "TTS Error" });
-            });
-          }
-        },
-        (err) => {
-          logger.error({ err }, "synthesis error");
-          closeAll(synthesizer);
-          res.status(500).json({ error: "TTS Error" });
-        },
-      );
+      if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
+        const audioBuffer = Buffer.from(result.audioData);
+        res.set("Content-Type", "audio/mpeg");
+        closeAll(synthesizer);
+        return res.send(audioBuffer);
+      }
+
+      throw new Error(result.errorDetails || "SSML synthesis failed");
     } catch (error: unknown) {
-      logger.error({ err: (error as Error).message }, "TTS server error");
-      res.status(500).json({ error: "Internal Server Error" });
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      logger.error({ err: errorMessage }, "TTS synthesis failed");
+
+      const circuitState = azureSpeechCircuitBreaker.getState();
+      if (circuitState.state === "open") {
+        return res.status(503).json({
+          error: "TTS service unavailable",
+          retryAfter: Math.ceil((circuitState.nextAttempt - Date.now()) / 1000),
+        });
+      }
+
+      return res.status(500).json({ 
+        error: "TTS generation failed",
+        details: errorMessage,
+      });
     }
   },
 );

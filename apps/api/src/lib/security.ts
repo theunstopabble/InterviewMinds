@@ -1,23 +1,32 @@
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { Request, Response, NextFunction } from "express";
+import crypto from "crypto";
 import { getRedisClient } from "./redis";
 import { logger } from "./logger";
 
 // ============================================================================
-// 1. HELMET — Enterprise Security Headers
+// 1. HELMET — Enterprise Security Headers with CSP Nonce
 // ============================================================================
+const generateNonce = (): string => {
+  return crypto.randomBytes(32).toString("base64");
+};
+
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // React build needs inline/eval
+      scriptSrc: [
+        "'self'",
+        "'nonce-INLINE-SCRIPT-NONCE'",
+        "'strict-dynamic'",
+      ],
       styleSrc: ["'self'", "'unsafe-inline'", "https:"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
-      connectSrc: ["'self'", "https:"],
+      connectSrc: ["'self'", "https://api.groq.io", "https://generativelanguage.googleapis.com"],
       fontSrc: ["'self'", "https:", "data:"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'", "https:"],
+      mediaSrc: ["'self'", "https:", "blob:"],
       frameSrc: ["'none'"],
       childSrc: ["'none'"],
       workerSrc: ["'self'", "blob:"],
@@ -25,13 +34,14 @@ export const securityHeaders = helmet({
       upgradeInsecureRequests: [],
     },
   },
-  crossOriginEmbedderPolicy: false, // Relaxed for frontend compatibility
-  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: { policy: "require-corp" },
+  crossOriginResourcePolicy: { policy: "same-origin" },
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   dnsPrefetchControl: { allow: false },
   frameguard: { action: "deny" },
   hidePoweredBy: true,
   hsts: {
-    maxAge: 31536000, // 1 year
+    maxAge: 31536000,
     includeSubDomains: true,
     preload: true,
   },
@@ -43,15 +53,182 @@ export const securityHeaders = helmet({
   xssFilter: true,
 });
 
+// Middleware to add CSP nonce to requests
+export const cspNonceMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  res.locals.nonce = generateNonce();
+  next();
+};
+
+// ============================================================================
+// 2. CSRF PROTECTION
+// ============================================================================
+const CSRF_TOKEN_LENGTH = 32;
+
+function generateCsrfToken(): string {
+  return crypto.randomBytes(CSRF_TOKEN_LENGTH).toString("hex");
+}
+
+// Store CSRF tokens in memory (in production, use Redis)
+const csrfTokens = new Map<string, { token: string; expiresAt: number }>();
+
+export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
+  // Skip CSRF for safe methods
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    return next();
+  }
+
+  // Skip for API routes with token auth (Clerk handles this)
+  const authHeader = req.get("authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const csrfToken = req.get("x-csrf-token") || req.body?._csrf;
+  const sessionId = req.ip + ":" + (req.get("user-agent") || "").slice(0, 50);
+
+  if (!csrfToken) {
+    logger.warn({ path: req.path, ip: req.ip }, "CSRF token missing");
+    return res.status(403).json({ error: "CSRF token required" });
+  }
+
+  const stored = csrfTokens.get(sessionId);
+  if (!stored || stored.token !== csrfToken || Date.now() > stored.expiresAt) {
+    logger.warn({ path: req.path, ip: req.ip }, "CSRF token invalid or expired");
+    return res.status(403).json({ error: "CSRF token invalid or expired" });
+  }
+
+  // Regenerate token after successful validation
+  const newToken = generateCsrfToken();
+  csrfTokens.set(sessionId, {
+    token: newToken,
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+  });
+
+  res.setHeader("x-csrf-token", newToken);
+  next();
+};
+
+// Endpoint to get CSRF token
+export const getCsrfToken = (_req: Request, res: Response) => {
+  const sessionId = _req.ip + ":" + (_req.get("user-agent") || "").slice(0, 50);
+  const token = generateCsrfToken();
+  csrfTokens.set(sessionId, {
+    token,
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+  });
+  res.setHeader("x-csrf-token", token);
+  res.json({ csrfToken: token });
+};
+
+// Clean expired tokens periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of csrfTokens.entries()) {
+    if (value.expiresAt < now) {
+      csrfTokens.delete(key);
+    }
+  }
+}, 60 * 60 * 1000); // Every hour
+
 // ============================================================================
 // 2. RATE LIMITING — Tiered Limits with Redis Store
 // ============================================================================
 
+// Redis-backed rate limiter with memory fallback
+interface RateLimitStore {
+  increment(key: string): Promise<{ totalHits: number; resetTime: Date }>;
+  decrement(key: string): Promise<void>;
+  resetKey(key: string): Promise<void>;
+}
+
+// Redis store implementation
+class RedisRateLimitStore implements RateLimitStore {
+  private prefix: string;
+  private windowMs: number;
+
+  constructor(prefix: string, windowMs: number) {
+    this.prefix = prefix;
+    this.windowMs = windowMs;
+  }
+
+  async increment(key: string): Promise<{ totalHits: number; resetTime: Date }> {
+    try {
+      const redis = getRedisClient();
+      const redisKey = `ratelimit:${this.prefix}:${key}`;
+      const ttl = Math.ceil(this.windowMs / 1000);
+
+      const result = await redis
+        .multi()
+        .incr(redisKey)
+        .expire(redisKey, ttl)
+        .exec();
+
+      if (!result || !result[0]) {
+        throw new Error("Redis result is null");
+      }
+
+      const totalHits = result[0][1] as number;
+      const resetTime = new Date(Date.now() + this.windowMs);
+
+      return { totalHits, resetTime };
+    } catch (error) {
+      logger.warn({ err: (error as Error).message }, "Redis rate limit failed, using memory");
+      return memoryStore.increment(key, this.windowMs);
+    }
+  }
+
+  async decrement(key: string): Promise<void> {
+    try {
+      const redis = getRedisClient();
+      const redisKey = `ratelimit:${this.prefix}:${key}`;
+      await redis.decr(redisKey);
+    } catch {
+      memoryStore.decrement(key);
+    }
+  }
+
+  async resetKey(key: string): Promise<void> {
+    try {
+      const redis = getRedisClient();
+      const redisKey = `ratelimit:${this.prefix}:${key}`;
+      await redis.del(redisKey);
+    } catch {
+      memoryStore.resetKey(key);
+    }
+  }
+}
+
 // In-memory store for rate limiter (fallback when Redis unavailable)
-const memoryStore = new Map<string, { count: number; resetTime: number }>();
+const memoryStore = {
+  store: new Map<string, { count: number; resetTime: number }>(),
+
+  async increment(key: string, windowMs: number) {
+    const now = Date.now();
+    const entry = memoryStore.store.get(key);
+    if (!entry || now > entry.resetTime) {
+      memoryStore.store.set(key, {
+        count: 1,
+        resetTime: now + windowMs,
+      });
+      return { totalHits: 1, resetTime: new Date(now + windowMs) };
+    }
+    entry.count += 1;
+    return { totalHits: entry.count, resetTime: new Date(entry.resetTime) };
+  },
+
+  async decrement(key: string) {
+    const entry = memoryStore.store.get(key);
+    if (entry && entry.count > 0) {
+      entry.count -= 1;
+    }
+  },
+
+  async resetKey(key: string) {
+    memoryStore.store.delete(key);
+  },
+};
 
 function getClientIdentifier(req: Request): string {
-  // Prefer authenticated user ID, fallback to IP
   const authReq = req as any;
   const userId = authReq.auth?.userId || authReq.user?.userId;
   if (userId) return `user:${userId}`;
@@ -64,6 +241,9 @@ function createRateLimiter(options: {
   keyPrefix: string;
   message: string;
 }) {
+  const redisStore = new RedisRateLimitStore(options.keyPrefix, options.windowMs);
+  const isRedisAvailable = process.env.REDIS_URL !== undefined;
+
   return rateLimit({
     windowMs: options.windowMs,
     max: options.max,
@@ -81,31 +261,7 @@ function createRateLimiter(options: {
         retryAfter: Math.ceil(options.windowMs / 1000),
       });
     },
-    store: {
-      // Custom memory store with Redis fallback potential
-      increment: async (key: string) => {
-        const now = Date.now();
-        const entry = memoryStore.get(key);
-        if (!entry || now > entry.resetTime) {
-          memoryStore.set(key, {
-            count: 1,
-            resetTime: now + options.windowMs,
-          });
-          return { totalHits: 1, resetTime: new Date(now + options.windowMs) };
-        }
-        entry.count += 1;
-        return { totalHits: entry.count, resetTime: new Date(entry.resetTime) };
-      },
-      decrement: async (key: string) => {
-        const entry = memoryStore.get(key);
-        if (entry && entry.count > 0) {
-          entry.count -= 1;
-        }
-      },
-      resetKey: async (key: string) => {
-        memoryStore.delete(key);
-      },
-    } as any,
+    store: isRedisAvailable ? redisStore as any : memoryStore as any,
   });
 }
 
@@ -139,6 +295,14 @@ export const authLimiter = createRateLimiter({
   max: 20,
   keyPrefix: "auth",
   message: "Too many authentication attempts. Please try again later.",
+});
+
+// GraphQL rate limit — 100 requests per minute (stricter for complex queries)
+export const graphqlLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 100,
+  keyPrefix: "graphql",
+  message: "GraphQL rate limit exceeded. Please reduce query complexity.",
 });
 
 // ============================================================================

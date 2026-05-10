@@ -255,7 +255,7 @@ router.get(
 router.post(
   "/upload-video",
   requireAuth,
-  uploadMiddleware.single("video"),
+  uploadMiddleware.video.single("video"),
   async (req: express.Request, res: express.Response) => {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user?.userId || authReq.auth?.userId;

@@ -1,47 +1,145 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
 
-interface IWindow extends Window {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  webkitSpeechRecognition: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  SpeechRecognition: any;
+interface UseSpeechReturn {
+  isListening: boolean;
+  isSpeaking: boolean;
+  transcript: string;
+  startListening: () => void;
+  stopListening: () => void;
+  speak: (text: string, gender?: "male" | "female") => Promise<void>;
+  cancelSpeech: () => void;
+  setTranscript: (transcript: string) => void;
+  ttsProvider: "azure" | "browser" | "none";
 }
 
-export const useSpeech = () => {
+export const useSpeech = (): UseSpeechReturn => {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [ttsProvider, setTtsProvider] = useState<"azure" | "browser" | "none">("none");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const browserUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // 1. Initialize Speech Recognition
-  useEffect(() => {
-    const { webkitSpeechRecognition, SpeechRecognition } =
-      window as unknown as IWindow;
-    const Recognition = SpeechRecognition || webkitSpeechRecognition;
+  const isAzureAvailable = (): boolean => {
+    return !!import.meta.env.VITE_API_URL;
+  };
 
-    if (Recognition) {
-      const recognition = new Recognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
+  const speakWithBrowser = useCallback((text: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!("speechSynthesis" in window)) {
+        reject(new Error("Browser TTS not supported"));
+        return;
+      }
 
-      recognition.onstart = () => setIsListening(true);
-      recognition.onend = () => setIsListening(false);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      recognition.onresult = (event: any) => {
-        const current = event.results[0][0].transcript;
-        setTranscript(current);
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.05;
+      utterance.pitch = 1;
+
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v => 
+        v.lang.startsWith("en-") || v.lang.startsWith("hi-")
+      ) || voices[0];
+
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        resolve();
       };
-      recognitionRef.current = recognition;
+      utterance.onerror = (event) => {
+        setIsSpeaking(false);
+        reject(new Error(event.error));
+      };
+
+      browserUtteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    });
+  }, []);
+
+  const speakWithAzure = useCallback(async (text: string, gender: "male" | "female" = "female"): Promise<void> => {
+    const response = await api.post(
+      "/tts/speak",
+      { text, gender },
+      { responseType: "blob" }
+    );
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsSpeaking(false);
     }
 
-    // Cleanup on unmount
+    setIsSpeaking(true);
+
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+    }
+
+    const audioUrl = URL.createObjectURL(response.data);
+    audioUrlRef.current = audioUrl;
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+
+    audio.preload = "auto";
+
+    audio.onended = () => setIsSpeaking(false);
+    audio.onplay = () => setIsSpeaking(true);
+    audio.onerror = (e) => {
+      console.error("Audio Playback Error", e);
+      setIsSpeaking(false);
+    };
+
+    await audio.play();
+  }, []);
+
+  useEffect(() => {
+    const windowWithSpeech = window as unknown as {
+      SpeechRecognition?: new () => unknown;
+      webkitSpeechRecognition?: new () => unknown;
+    };
+    
+    const RecognitionClass = windowWithSpeech.SpeechRecognition || windowWithSpeech.webkitSpeechRecognition;
+
+    if (RecognitionClass) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const recognition: any = new RecognitionClass();
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+
+        recognition.onstart = () => setIsListening(true);
+        recognition.onend = () => setIsListening(false);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onresult = (event: any) => {
+          const result = event.results[0];
+          if (result.isFinal) {
+            setTranscript(result[0].transcript);
+          }
+        };
+
+        recognitionRef.current = recognition;
+      } catch (e) {
+        console.warn("Speech recognition initialization failed:", e);
+      }
+    }
+
     return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch { /* ignore */ }
+      }
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
@@ -65,58 +163,40 @@ export const useSpeech = () => {
   }, []);
 
   const stopListening = useCallback(() => {
-    if (recognitionRef.current) recognitionRef.current.stop();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
   }, []);
 
-  // ✅ UPDATED: GENDER SUPPORT ADDED
-  // Ab ye function 'gender' bhi leta hai (Default: female)
   const speak = useCallback(
     async (text: string, gender: "male" | "female" = "female") => {
-      try {
-        // Stop any current audio
-        if (audioRef.current) {
-          audioRef.current.pause();
-          setIsSpeaking(false);
-        }
-
-        setIsSpeaking(true);
-
-        // 1. Backend API Call (with Text & Gender)
-        const response = await api.post(
-          "/tts/speak",
-          { text, gender }, // <-- Backend ab gender use karega voice select karne ke liye
-          { responseType: "blob" }, // Azure Blob Format
-        );
-
-        // 2. Blob se Playable URL banao
-        // Cleanup previous URL to prevent memory leak
-        if (audioUrlRef.current) {
-          URL.revokeObjectURL(audioUrlRef.current);
-        }
-        const audioUrl = URL.createObjectURL(response.data);
-        audioUrlRef.current = audioUrl;
-        const audio = new Audio(audioUrl);
-        audioRef.current = audio;
-
-        // Fast Load Settings
-        audio.preload = "auto";
-
-        // Event Handlers
-        audio.onended = () => setIsSpeaking(false);
-        audio.onplay = () => setIsSpeaking(true);
-        audio.onerror = (e) => {
-          console.error("Audio Playback Error", e);
-          setIsSpeaking(false);
-        };
-
-        // 3. Play
-        await audio.play();
-      } catch (error) {
-        console.error("TTS Error:", error);
+      if (audioRef.current) {
+        audioRef.current.pause();
         setIsSpeaking(false);
       }
+      window.speechSynthesis.cancel();
+
+      if (isAzureAvailable()) {
+        try {
+          setTtsProvider("azure");
+          await speakWithAzure(text, gender);
+        } catch (azureError) {
+          console.warn("Azure TTS failed, falling back to browser:", azureError);
+          try {
+            setTtsProvider("browser");
+            await speakWithBrowser(text);
+          } catch (browserError) {
+            console.error("Browser TTS also failed:", browserError);
+            setTtsProvider("none");
+            throw new Error("Both Azure and browser TTS failed");
+          }
+        }
+      } else {
+        setTtsProvider("browser");
+        await speakWithBrowser(text);
+      }
     },
-    [],
+    [speakWithAzure, speakWithBrowser]
   );
 
   const cancelSpeech = useCallback(() => {
@@ -141,5 +221,6 @@ export const useSpeech = () => {
     speak,
     cancelSpeech,
     setTranscript,
+    ttsProvider,
   };
 };

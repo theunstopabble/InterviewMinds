@@ -10,13 +10,25 @@ services:
     volumes:
       - mongo_data:/data/db
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
+    command: ["-- WiredTigerCacheSizeGB=1", "--wiredTigerCollectionBlockCompressor=snappy"]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     image: redis:7-alpine
@@ -26,16 +38,30 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    command: redis-server --appendonly --maxmemory 256mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
 
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      args:
+        NODE_ENV: production
     container_name: interview-minds-api
     restart: unless-stopped
     ports:
@@ -43,9 +69,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 8000
-      MONGO_URI: mongodb://admin:password@mongo:27017/interviewminds?authSource=admin
+      MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-password}@mongo:27017/interviewminds?authSource=admin
       REDIS_URL: redis://redis:6379
-      CORS_ORIGINS: http://localhost:5173,http://localhost:80
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://yourdomain.com}
+    env_file:
+      - apps/api/.env
     depends_on:
       mongo:
         condition: service_healthy
@@ -56,17 +84,45 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
     container_name: interview-minds-web
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     depends_on:
       - api
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  default:
+    driver: bridge
 
 volumes:
   mongo_data:

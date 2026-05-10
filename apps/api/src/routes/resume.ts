@@ -1,12 +1,11 @@
 import express from "express";
 import multer from "multer";
 import { ResumeModel } from "../models/Resume";
-import PDFParser from "pdf2json";
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { requireAuth } from "../middleware/auth";
 import dotenv from "dotenv";
 import { logger } from "../lib/logger";
 import { resumesUploaded } from "../lib/metrics";
+import { resumeQueue } from "../lib/queue";
 
 dotenv.config();
 
@@ -16,20 +15,24 @@ interface AuthenticatedRequest extends express.Request {
 }
 
 const router = express.Router();
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
 
-// ✅ Singleton Pattern for Model Loading
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let cachedPipeline: any = null;
+const MAX_RESUME_SIZE = 5 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = ["application/pdf"];
 
-async function getPipeline() {
-  if (!cachedPipeline) {
-    const { pipeline } = await import("@xenova/transformers");
-    cachedPipeline = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+const fileFilter = (_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    cb(new Error("Only PDF files are allowed"));
+    return;
   }
-  return cachedPipeline;
-}
+  cb(null, true);
+};
+
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: MAX_RESUME_SIZE },
+  fileFilter,
+});
 
 router.post(
   "/upload",
@@ -44,85 +47,64 @@ router.post(
         return res.status(400).json({ error: "No file uploaded" });
       }
 
-      // 1. PDF Parse
-      // 1. PDF Parse
-      const pdfParser = new PDFParser(null, 1);
-      const rawText: string = await new Promise((resolve, reject) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        pdfParser.on("pdfParser_dataError", (errData: any) =>
-          reject(errData.parserError || new Error("PDF parsing failed")),
-        );
-        pdfParser.on("pdfParser_dataReady", () =>
-          resolve(pdfParser.getRawTextContent()),
-        );
-        try {
-          pdfParser.parseBuffer(req.file!.buffer);
-        } catch (syncErr) {
-          reject(syncErr instanceof Error ? syncErr : new Error("PDF parse failed"));
-        }
-      });
-
-      const cleanText = rawText.replace(/----------------/g, " ").trim();
-
-      if (!cleanText || cleanText.length < 50) {
-        throw new Error("Failed to extract sufficient text from PDF.");
-      }
-
-      // 2. CHUNKING
-      const splitter = new RecursiveCharacterTextSplitter({
-        chunkSize: 500,
-        chunkOverlap: 50,
-      });
-
-      const outputChunks = await splitter.createDocuments([cleanText]);
-
-      // 3. EMBEDDINGS (Local Execution)
-
-      const extractor = await getPipeline();
-      const chunksWithEmbeddings = [];
-
-      for (const chunk of outputChunks) {
-        // Local Model Inference
-        const output = await extractor(chunk.pageContent, {
-          pooling: "mean",
-          normalize: true,
-        });
-        // Output Tensor se Array convert karna
-        const vector = Array.from(output.data);
-
-        if (vector && vector.length > 0) {
-          chunksWithEmbeddings.push({
-            text: chunk.pageContent,
-            embedding: vector,
-          });
-        }
-      }
-
-      // console.log(
-      //   `✅ Success! Generated ${chunksWithEmbeddings.length} vectors.`,
-      // );
-
-      // 4. Save to MongoDB
+      // Create placeholder resume immediately
       const newResume = await ResumeModel.create({
         userId: userId,
         fileName: req.file.originalname,
-        content: cleanText,
-        chunks: chunksWithEmbeddings,
+        content: "",
+        chunks: [],
+      });
+
+      // Offload heavy processing to BullMQ
+      await resumeQueue.add("process-resume", {
+        resumeId: newResume._id.toString(),
+        userId: userId,
+        fileName: req.file.originalname,
+        fileBuffer: req.file.buffer.toString("base64"),
       });
 
       resumesUploaded.inc();
+      logger.info({ resumeId: newResume._id }, "Resume upload queued for processing");
+
       res.json({
-        message: "Resume processed successfully!",
+        message: "Resume uploaded successfully. Processing in background.",
         id: newResume._id,
-        previewText: cleanText.substring(0, 100) + "...",
+        previewText: "Processing...",
       });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ Critical Error:", msg);
+      logger.error({ err: msg }, "Resume upload failed");
       res.status(500).json({
-        error: "Failed to process resume",
+        error: "Failed to upload resume",
         details: msg,
       });
+    }
+  },
+);
+
+router.get(
+  "/:id/status",
+  requireAuth,
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.auth?.userId;
+      const resumeId = req.params.id;
+
+      const resume = await ResumeModel.findOne({ _id: resumeId, userId });
+      if (!resume) {
+        return res.status(404).json({ error: "Resume not found" });
+      }
+
+      const isProcessed = resume.content.length > 0;
+      res.json({
+        id: resume._id,
+        status: isProcessed ? "completed" : "processing",
+        previewText: isProcessed ? resume.content.substring(0, 100) + "..." : "Processing...",
+      });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      res.status(500).json({ error: "Failed to check status", details: msg });
     }
   },
 );

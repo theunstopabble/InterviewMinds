@@ -88,26 +88,36 @@ export const resolvers = {
       requireAuth(ctx);
       requirePermission(ctx, "audit:read");
 
-      const totalInterviews = await InterviewModel.countDocuments();
-      const interviews = await InterviewModel.find().lean();
-      const totalScore = interviews.reduce((sum, i) => sum + (i.score || 0), 0);
-      const avgScore = interviews.length > 0 ? totalScore / interviews.length : 0;
+      const [
+        totalInterviews,
+        avgScoreResult,
+        totalUsers,
+        activeToday,
+      ] = await Promise.all([
+        InterviewModel.countDocuments(),
+        InterviewModel.aggregate([
+          {
+            $group: {
+              _id: null,
+              avgScore: { $avg: "$score" },
+            },
+          },
+        ]),
+        UserRoleModel.countDocuments(),
+        InterviewModel.countDocuments({
+          createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        }),
+      ]);
 
-      // Distinct user count from UserRole
-      const totalUsers = await UserRoleModel.countDocuments();
-
-      // Active today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const activeToday = await InterviewModel.countDocuments({
-        createdAt: { $gte: today },
-      });
+      const avgScore = avgScoreResult[0]?.avgScore 
+        ? Math.round(avgScoreResult[0].avgScore * 100) / 100 
+        : 0;
 
       return {
         totalUsers,
         totalInterviews,
         totalResumes: 0,
-        avgScore: Math.round(avgScore * 100) / 100,
+        avgScore,
         activeToday,
         topLanguages: [],
       };

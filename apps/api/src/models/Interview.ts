@@ -1,36 +1,36 @@
 import mongoose from "mongoose";
 
 const interviewSchema = new mongoose.Schema({
-  // 🔗 Link to User (Clerk ID)
-  // ⚠️ FIX: Changed from ObjectId to String because Clerk IDs are strings
   userId: {
     type: String,
     required: true,
     index: true,
   },
 
-  // 📄 Link to Resume
   resumeId: {
     type: String,
     required: true,
     ref: "Resume",
+    index: true,
   },
 
-  // 🚦 State Management
   status: {
     type: String,
     enum: ["ongoing", "completed"],
     default: "ongoing",
+    index: true,
   },
 
-  // 📹 Phase 6: Video Recording (Cloudinary URL)
-  // ✅ NEW FIELD: Ye zaroori hai video save karne ke liye
+  completedAt: {
+    type: Date,
+    default: null,
+  },
+
   videoUrl: {
     type: String,
-    required: false, // Optional initially, upload ke baad update hoga
+    required: false,
   },
 
-  // 💬 Chat History
   messages: [
     {
       role: {
@@ -43,16 +43,14 @@ const interviewSchema = new mongoose.Schema({
     },
   ],
 
-  // 📊 Phase 4: Analytics Data (Radar Chart & Scorecard)
-  score: { type: Number, default: 0 }, // Overall Score (0-100)
+  score: { type: Number, default: 0 },
 
-  feedback: { type: String, default: "" }, // 2-3 line summary
+  feedback: { type: String, default: "" },
 
-  // Radar Chart Metrics
   metrics: [
     {
-      subject: String, // e.g., "Technical", "Communication"
-      A: Number, // User Score (e.g., 85)
+      subject: String,
+      A: Number,
       fullMark: { type: Number, default: 100 },
     },
   ],
@@ -60,14 +58,14 @@ const interviewSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-// Compound index for user history queries (sorted by newest first)
 interviewSchema.index({ userId: 1, createdAt: -1 });
+interviewSchema.index({ completedAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
 
-// TTL index: auto-delete completed interviews after 90 days for GDPR/compliance
-// Only applies to completed interviews; ongoing ones are kept
-interviewSchema.index(
-  { createdAt: 1 },
-  { expireAfterSeconds: 90 * 24 * 60 * 60, partialFilterExpression: { status: "completed" } },
-);
+interviewSchema.pre("save", function (next) {
+  if (this.isModified("status") && this.status === "completed") {
+    this.completedAt = new Date();
+  }
+  next();
+});
 
 export const InterviewModel = mongoose.model("Interview", interviewSchema);

@@ -28,13 +28,21 @@ interface UseSocketReturn {
   sendMessage: (content: string, type?: "text" | "code") => void;
   setTyping: (isTyping: boolean) => void;
   error: string | null;
+  reconnect: () => void;
 }
 
+const TOKEN_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 2000;
+
 export function useSocket(roomId?: string): UseSocketReturn {
-  const { getToken, userId } = useAuth();
+  const { getToken, userId, isLoaded: authLoaded } = useAuth();
   const { user } = useUser();
   const socketRef = useRef<Socket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tokenRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const isConnectingRef = useRef(false);
 
   const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -43,8 +51,31 @@ export function useSocket(roomId?: string): UseSocketReturn {
   const [error, setError] = useState<string | null>(null);
   const currentRoomRef = useRef<string | null>(null);
 
-  const connect = useCallback(async () => {
-    if (socketRef.current?.connected) return;
+  const disconnectSocket = useCallback(() => {
+    if (tokenRefreshIntervalRef.current) {
+      clearInterval(tokenRefreshIntervalRef.current);
+      tokenRefreshIntervalRef.current = null;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    setIsConnected(false);
+  }, []);
+
+  const connect = useCallback(async (isReconnect = false) => {
+    if (isConnectingRef.current || socketRef.current?.connected) {
+      return;
+    }
+
+    if (!authLoaded) {
+      setError("Auth not loaded yet");
+      return;
+    }
 
     const token = await getToken();
     if (!token || !userId) {
@@ -52,89 +83,133 @@ export function useSocket(roomId?: string): UseSocketReturn {
       return;
     }
 
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-    const socket = io(apiUrl, {
-      auth: {
-        token,
-        userId,
-        fullName: user?.fullName || user?.username || "Anonymous",
-      },
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      timeout: 20000,
-    });
+    isConnectingRef.current = true;
 
-    socketRef.current = socket;
-
-    socket.on("connect", () => {
-      setIsConnected(true);
-      setError(null);
-      // Re-join room if already had one
-      if (currentRoomRef.current) {
-        socket.emit("join-room", currentRoomRef.current);
-      }
-    });
-
-    socket.on("disconnect", (reason: string) => {
-      setIsConnected(false);
-      if (reason === "io server disconnect") {
-        // Server forced disconnect, wait for auto-reconnect
-        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, 2000);
-      }
-    });
-
-    socket.on("connect_error", (err: Error) => {
-      setError(`Connection error: ${err.message}`);
-    });
-
-    socket.on("error", (payload: { message: string }) => {
-      setError(payload.message);
-    });
-
-    socket.on("new-message", (msg: ChatMessage) => {
-      setMessages((prev) => [...prev, msg]);
-    });
-
-    socket.on("history", (history: ChatMessage[]) => {
-      setMessages(history);
-    });
-
-    socket.on("typing", (event: TypingEvent) => {
-      setTypingUsers((prev) => {
-        const next = new Map(prev);
-        if (event.isTyping) {
-          next.set(event.userId, event);
-        } else {
-          next.delete(event.userId);
-        }
-        return next;
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const socket = io(apiUrl, {
+        auth: {
+          token,
+          userId,
+          fullName: user?.fullName || user?.username || "Anonymous",
+        },
+        transports: ["websocket", "polling"],
+        reconnection: false,
+        timeout: 20000,
       });
-    });
 
-    socket.on("user-joined", (payload: { onlineCount: number }) => {
-      setOnlineCount(payload.onlineCount);
-    });
+      socketRef.current = socket;
 
-    socket.on("user-left", (payload: { onlineCount: number }) => {
-      setOnlineCount(payload.onlineCount);
-    });
-  }, [getToken, userId, user]);
+      socket.on("connect", () => {
+        setIsConnected(true);
+        setError(null);
+        reconnectAttemptsRef.current = 0;
+        isConnectingRef.current = false;
+
+        if (currentRoomRef.current) {
+          socket.emit("join-room", currentRoomRef.current);
+        }
+
+        if (!tokenRefreshIntervalRef.current) {
+          tokenRefreshIntervalRef.current = setInterval(async () => {
+            try {
+              const newToken = await getToken();
+              if (newToken && socketRef.current?.connected) {
+                const io = socketRef.current.io as { opts?: { auth?: Record<string, string> } };
+                if (io.opts?.auth) {
+                  io.opts.auth = {
+                    ...io.opts.auth,
+                    token: newToken,
+                  };
+                }
+              }
+            } catch (err) {
+              console.error("Token refresh failed:", err);
+            }
+          }, TOKEN_REFRESH_INTERVAL);
+        }
+      });
+
+      socket.on("disconnect", (reason: string) => {
+        setIsConnected(false);
+
+        if (tokenRefreshIntervalRef.current) {
+          clearInterval(tokenRefreshIntervalRef.current);
+          tokenRefreshIntervalRef.current = null;
+        }
+
+        if (reason === "io server disconnect" && !isReconnect) {
+          handleReconnect();
+        }
+      });
+
+      socket.on("connect_error", (err: Error) => {
+        isConnectingRef.current = false;
+        setError(`Connection error: ${err.message}`);
+        handleReconnect();
+      });
+
+      socket.on("error", (payload: { message: string }) => {
+        setError(payload.message);
+      });
+
+      socket.on("new-message", (msg: ChatMessage) => {
+        setMessages((prev) => [...prev, msg]);
+      });
+
+      socket.on("history", (history: ChatMessage[]) => {
+        setMessages(history);
+      });
+
+      socket.on("typing", (event: TypingEvent) => {
+        setTypingUsers((prev) => {
+          const next = new Map(prev);
+          if (event.isTyping) {
+            next.set(event.userId, event);
+          } else {
+            next.delete(event.userId);
+          }
+          return next;
+        });
+      });
+
+      socket.on("user-joined", (payload: { onlineCount: number }) => {
+        setOnlineCount(payload.onlineCount);
+      });
+
+      socket.on("user-left", (payload: { onlineCount: number }) => {
+        setOnlineCount(payload.onlineCount);
+      });
+    } catch (err) {
+      isConnectingRef.current = false;
+      setError("Failed to initialize connection");
+      console.error("Socket connection error:", err);
+    }
+  }, [getToken, userId, user, authLoaded]);
+
+  const handleReconnect = useCallback(() => {
+    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      setError("Maximum reconnection attempts reached");
+      return;
+    }
+
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+
+    reconnectAttemptsRef.current += 1;
+    reconnectTimeoutRef.current = setTimeout(() => {
+      connect(true);
+    }, RECONNECT_DELAY * reconnectAttemptsRef.current);
+  }, [connect]);
 
   useEffect(() => {
     connect();
 
     return () => {
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      socketRef.current?.disconnect();
-      socketRef.current = null;
+      disconnectSocket();
     };
-  }, [connect]);
+  }, [connect, disconnectSocket]);
 
   useEffect(() => {
     if (roomId && socketRef.current?.connected) {
@@ -177,6 +252,12 @@ export function useSocket(roomId?: string): UseSocketReturn {
     []
   );
 
+  const reconnect = useCallback(() => {
+    reconnectAttemptsRef.current = 0;
+    disconnectSocket();
+    connect();
+  }, [connect, disconnectSocket]);
+
   return {
     socket: socketRef.current,
     isConnected,
@@ -187,5 +268,6 @@ export function useSocket(roomId?: string): UseSocketReturn {
     sendMessage,
     setTyping,
     error,
+    reconnect,
   };
 }
