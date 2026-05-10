@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { UserButton, useAuth } from "@clerk/clerk-react";
-import { LayoutDashboard, PlusCircle, Download, Menu, X } from "lucide-react";
+import { LayoutDashboard, PlusCircle, Download, Menu, X, BarChart3, Shield, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 
@@ -121,6 +121,51 @@ export default function Navbar() {
                 >
                   <LayoutDashboard className="w-4 h-4" />
                   <span className="hidden lg:inline">Dashboard</span>
+                </Button>
+              </Link>
+
+              {/* 📊 Analytics */}
+              <Link to="/analytics">
+                <Button
+                  variant="ghost"
+                  className={`gap-2 hover:bg-white/5 transition-colors ${
+                    isActive("/analytics")
+                      ? "text-white bg-white/10"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span className="hidden lg:inline">Analytics</span>
+                </Button>
+              </Link>
+
+              {/* ⚙️ Settings */}
+              <Link to="/settings">
+                <Button
+                  variant="ghost"
+                  className={`gap-2 hover:bg-white/5 transition-colors ${
+                    isActive("/settings")
+                      ? "text-white bg-white/10"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden lg:inline">Settings</span>
+                </Button>
+              </Link>
+
+              {/* 🛡️ Admin */}
+              <Link to="/admin">
+                <Button
+                  variant="ghost"
+                  className={`gap-2 hover:bg-white/5 transition-colors ${
+                    isActive("/admin")
+                      ? "text-white bg-white/10"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Shield className="w-4 h-4" />
+                  <span className="hidden lg:inline">Admin</span>
                 </Button>
               </Link>
 

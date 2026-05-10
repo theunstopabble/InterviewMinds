@@ -21,6 +21,10 @@ import SignInPage from "./pages/SignInPage";
 import DashboardPage from "./pages/DashboardPage";
 import InterviewPage from "./pages/InterviewPage";
 import FeedbackPage from "./pages/FeedbackPage";
+import SettingsPage from "./pages/SettingsPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import AdminPage from "./pages/AdminPage";
+import CandidatePortal from "./pages/CandidatePortal";
 
 // 🏠 Home Component (Smart Resume Handling)
 function Home() {
@@ -193,6 +197,66 @@ function App() {
                 <>
                   <SignedIn>
                     <FeedbackPage />
+                  </SignedIn>
+                  <SignedOut>
+                    <Navigate to="/sign-in" replace />
+                  </SignedOut>
+                </>
+              }
+            />
+
+            {/* 🔒 Protected Route: Enterprise Settings */}
+            <Route
+              path="/settings"
+              element={
+                <>
+                  <SignedIn>
+                    <SettingsPage />
+                  </SignedIn>
+                  <SignedOut>
+                    <Navigate to="/sign-in" replace />
+                  </SignedOut>
+                </>
+              }
+            />
+
+            {/* 🔒 Protected Route: Analytics Dashboard */}
+            <Route
+              path="/analytics"
+              element={
+                <>
+                  <SignedIn>
+                    <AnalyticsPage />
+                  </SignedIn>
+                  <SignedOut>
+                    <Navigate to="/sign-in" replace />
+                  </SignedOut>
+                </>
+              }
+            />
+
+            {/* 🔒 Protected Route: Admin Dashboard */}
+            <Route
+              path="/admin"
+              element={
+                <>
+                  <SignedIn>
+                    <AdminPage />
+                  </SignedIn>
+                  <SignedOut>
+                    <Navigate to="/sign-in" replace />
+                  </SignedOut>
+                </>
+              }
+            />
+
+            {/* 🔒 Protected Route: Candidate Portal */}
+            <Route
+              path="/candidate-portal"
+              element={
+                <>
+                  <SignedIn>
+                    <CandidatePortal />
                   </SignedIn>
                   <SignedOut>
                     <Navigate to="/sign-in" replace />
