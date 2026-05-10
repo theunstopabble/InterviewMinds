@@ -1,0 +1,464 @@
+# InterviewMinds Workflows
+
+## Overview
+
+This document describes the core workflows, processes, and operational procedures for the InterviewMinds platform.
+
+---
+
+## User Flows
+
+### 1. New User Registration Flow
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   User      │     │   Clerk     │     │   Backend   │     │   MongoDB   │
+│             │     │  (Auth)     │     │   (API)     │     │  (Database) │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                    │                    │                    │
+       │  1. Visit site     │                    │                    │
+       │───────────────────>│                    │                    │
+       │                    │                    │                    │
+       │  2. Sign in (Google)│                   │                    │
+       │───────────────────>│                    │                    │
+       │                    │                    │                    │
+       │  3. JWT created    │                    │                    │
+       │<───────────────────│                    │                    │
+       │                    │                    │                    │
+       │  4. API request (with token)           │                    │
+       │───────────────────────────────────────>│                    │
+       │                    │                    │                    │
+       │                    │      5. Create default role "candidate"│
+       │                    │────────────────────>│                    │
+       │                    │                    │                    │
+       │                    │      6. Role saved                    │
+       │                    │<────────────────────│                    │
+       │                    │                    │                    │
+       │  7. Redirect to dashboard               │                    │
+       │<────────────────────────────────────────│                    │
+```
+
+### 2. Resume Upload Flow
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Client    │     │   Express   │     │   BullMQ    │     │   Worker    │
+│             │     │   Server     │     │   Queue     │     │  (Async)    │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                    │                    │                    │
+       │  POST /resume/upload                    │                    │
+       │───────────────────>│                    │                    │
+       │                    │                    │                    │
+       │              Create Resume (status: pending)                │
+       │                    │                    │                    │
+       │                    │   addJob("process-resume")            │
+       │                    │───────────────────>│                    │
+       │                    │                    │                    │
+       │           202 Accepted               │                    │
+       │<──────────────────│                    │                    │
+       │                    │                    │   Process Job      │
+       │                    │                    │<──────────────────│
+       │                    │                    │                    │
+       │                    │                    │   PDF Parse       │
+       │                    │                    │───────────────────>│
+       │                    │                    │                    │
+       │                    │                    │   Text Chunking   │
+       │                    │                    │───────────────────>│
+       │                    │                    │                    │
+       │                    │                    │   Embeddings      │
+       │                    │                    │───────────────────>│
+       │                    │                    │                    │
+       │                    │                    │   Update Resume   │
+       │                    │                    │───────────────────>│
+       │                    │                    │                    │
+       │  GET /resume/:id/status                │                    │
+       │───────────────────>│                    │                    │
+       │                    │                    │                    │
+       │           200 OK (status: completed)  │                    │
+       │<──────────────────│                    │                    │
+```
+
+### 3. Interview Session Flow
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Client    │     │   Express   │     │   Groq API  │     │   MongoDB   │
+│  (React)    │     │   Server     │     │   (AI)      │     │              │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                    │                    │                    │
+       │  Start Interview  │                    │                    │
+       │───────────────────>│                    │                    │
+       │                    │                    │                    │
+       │              POST /api/chat            │                    │
+       │                    │───────────────────>│                    │
+       │                    │                    │                    │
+       │                    │      AI Response  │                    │
+       │                    │<──────────────────│                    │
+       │                    │                    │                    │
+       │           200 OK (reply)               │                    │
+       │<──────────────────│                    │                    │
+       │                    │                    │                    │
+       │  [Repeat chat flow with Socket.IO]    │                    │
+       │                    │                    │                    │
+       │  End Interview    │                    │                    │
+       │───────────────────>│                    │                    │
+       │                    │                    │                    │
+       │              POST /api/interview/end   │                    │
+       │                    │───────────────────>│                    │
+       │                    │                    │                    │
+       │                    │      AI Scoring   │                    │
+       │                    │<──────────────────│                    │
+       │                    │                    │                    │
+       │                    │   Save Interview  │                    │
+       │                    │───────────────────>│                    │
+       │                    │                    │                    │
+       │           200 OK (score, metrics)     │                    │
+       │<──────────────────│                    │                    │
+```
+
+### 4. Real-time Chat Flow
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Client A  │     │  Socket.IO  │     │  Client B   │     │  MongoDB    │
+│  (User)     │     │   Server    │     │  (Interviewer)│    │              │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                    │                    │                    │
+       │  Connect (with JWT)│                    │                    │
+       │───────────────────>│                    │                    │
+       │                    │                    │                    │
+       │                    │   Verify Token    │                    │
+       │                    │───────────────────>│                    │
+       │                    │                    │                    │
+       │               Join Room                │                    │
+       │───────────────────>│                    │                    │
+       │                    │                    │                    │
+       │                    │   Emit user-joined │                    │
+       │                    │────────────────────>│                    │
+       │                    │                    │                    │
+       │ Send Message      │                    │                    │
+       │───────────────────>│                    │                    │
+       │                    │                    │                    │
+       │                    │   Save Message    │                    │
+       │                    │───────────────────>│                    │
+       │                    │                    │                    │
+       │               Broadcast                │                    │
+       │                    │────────────────────>│                    │
+       │                    │                    │                    │
+       │          (Receive new-message)         │                    │
+       │<──────────────────│                    │                    │
+```
+
+---
+
+## Development Workflow
+
+### 1. Local Development
+
+```bash
+# 1. Clone repository
+git clone https://github.com/theunstopabble/InterviewMinds.git
+
+# 2. Install dependencies
+npm install
+
+# 3. Start services (MongoDB, Redis)
+docker-compose up -d
+
+# 4. Configure .env files
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
+
+# 5. Start development servers
+npm run dev
+```
+
+### 2. Code Changes
+
+```bash
+# 1. Create feature branch
+git checkout -b feature/my-feature
+
+# 2. Make changes
+# - Write code
+# - Write tests
+# - Update docs
+
+# 3. Commit changes
+git add .
+git commit -m "Add: My feature description"
+
+# 4. Push branch
+git push origin feature/my-feature
+
+# 5. Create Pull Request
+# - CI/CD runs tests
+# - Review by maintainers
+# - Merge to main
+```
+
+### 3. Testing
+
+```bash
+# Run all tests
+npm run test
+
+# API tests
+cd apps/api && npm run test
+
+# Web tests
+cd apps/web && npm run test
+
+# Coverage
+npm run test:coverage
+```
+
+---
+
+## CI/CD Workflow
+
+### GitHub Actions Pipeline
+
+```yaml
+# .github/workflows/main.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # 1. Install and Build
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+  # 2. Type Checking
+  typecheck:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm run typecheck
+
+  # 3. Run Tests
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm run test
+
+  # 4. Deploy (on main branch push)
+  deploy:
+    needs: [build, typecheck, test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # Deploy to Vercel (web)
+      # Deploy to Render (api)
+```
+
+---
+
+## Operational Workflows
+
+### 1. Monitoring & Alerts
+
+```bash
+# Check service health
+curl https://api.interviewminds.com/health
+
+# Check metrics
+curl https://api.interviewminds.com/metrics
+
+# Check logs
+docker-compose logs -f api
+
+# Check circuit breakers
+curl https://api.interviewminds.com/health | jq '.circuitBreakers'
+```
+
+### 2. Scaling
+
+```bash
+# Scale API replicas (Docker)
+docker-compose up -d --scale api=3
+
+# Scale API replicas (Kubernetes)
+kubectl scale deployment interview-minds-api --replicas=5
+
+# Add Redis read replica (Cloud)
+# Configure in cloud provider dashboard
+```
+
+### 3. Backup & Recovery
+
+```bash
+# Backup MongoDB
+mongodump --uri="mongodb+srv://..." --out=./backup
+
+# Restore MongoDB
+mongorestore --uri="mongodb+srv://..." ./backup
+
+# Backup Redis
+redis-cli SAVE
+# Copy dump.rdb
+
+# Restore Redis
+# Copy dump.rdb to Redis data directory
+redis-server --appendonly no
+```
+
+### 4. Security Updates
+
+```bash
+# Update dependencies
+npm audit fix
+
+# Update Node.js version
+# 1. Update .nvmrc
+# 2. nvm install
+# 3. Update Dockerfiles
+
+# Rotate secrets
+# 1. Generate new JWT_SECRET
+# 2. Update environment variables
+# 3. Redeploy
+```
+
+---
+
+## Issue Resolution Workflow
+
+### 1. Incident Detection
+
+```
+Alert triggered
+    │
+    ▼
+Check logs (Sentry, Cloudwatch)
+    │
+    ▼
+Identify issue type
+    │
+    ├─► Code bug → Fix + Deploy
+    │
+    ├─► Infrastructure → Scale/Restart
+    │
+    └─► External → Monitor + Wait
+```
+
+### 2. Debugging Steps
+
+```bash
+# 1. Check health endpoint
+curl /health
+
+# 2. Check service logs
+docker-compose logs -f api
+
+# 3. Check circuit breakers
+curl /health | jq '.circuitBreakers'
+
+# 4. Check rate limits
+redis-cli keys "ratelimit:*"
+
+# 5. Check database
+mongosh
+> db.interviews.countDocuments({})
+
+# 6. Check queue
+redis-cli lrange "bull:resume-processing:wait"
+```
+
+---
+
+## Release Workflow
+
+### Version Numbering
+
+Format: `MAJOR.MINOR.PATCH`
+
+- **MAJOR**: Breaking changes
+- **MINOR**: New features (backward compatible)
+- **PATCH**: Bug fixes
+
+### Release Steps
+
+```bash
+# 1. Update version
+npm version minor
+
+# 2. Update CHANGELOG.md
+
+# 3. Create tag
+git tag -a v1.2.0 -m "Release v1.2.0"
+
+# 4. Push tag
+git push origin v1.2.0
+
+# 5. CI/CD triggers deployment
+```
+
+### Rollback Steps
+
+```bash
+# Vercel (automatic)
+# Go to Dashboard → Deployments → Previous
+
+# Render
+render deploy --service <service-id> --commit <previous-commit>
+
+# Docker
+docker-compose down
+docker-compose up -d --build
+```
+
+---
+
+## On-Call Procedures
+
+### Severity Levels
+
+| Level | Response Time | Examples |
+|-------|---------------|-----------|
+| P1 | 15 min | Complete outage |
+| P2 | 1 hour | Major feature broken |
+| P3 | 4 hours | Minor issue |
+| P4 | 24 hours | Feature request |
+
+### Escalation Path
+
+```
+On-Call Engineer
+    │
+    ▼ (if unresolved)
+Team Lead
+    │
+    ▼ (if unresolved)
+Engineering Manager
+    │
+    ▼ (if unresolved)
+CTO
+```
+
+---
+
+## Data Retention Policy
+
+| Data Type | Retention | Reason |
+|-----------|-----------|--------|
+| Interview transcripts | 90 days | Privacy |
+| Resume content | Until deleted | User data |
+| Chat messages | 90 days | Storage cost |
+| Audit logs | 1 year | Compliance |
+| Metrics | 30 days | Cost |
+| Error logs | 90 days | Debugging |
