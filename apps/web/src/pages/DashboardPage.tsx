@@ -17,7 +17,7 @@ interface InterviewHistory {
   metrics: unknown[];
 }
 
-export default function DashboardPage() {
+function DashboardPage() {
   const [interviews, setInterviews] = useState<InterviewHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();

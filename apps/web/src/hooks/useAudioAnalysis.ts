@@ -79,8 +79,8 @@ export function useAudioAnalysis(isListening: boolean, externalStream?: MediaStr
 
       streamRef.current = stream;
 
-      const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const audioContext = new AudioContext();
+      const AudioContextClass = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext) as new () => AudioContext;
+      const audioContext = new AudioContextClass();
       const analyser = audioContext.createAnalyser();
       const source = audioContext.createMediaStreamSource(stream);
 
