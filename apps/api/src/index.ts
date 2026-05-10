@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import { createServer } from "http";
+import { UserRoleModel } from "./models/Role";
 import resumeRoutes from "./routes/resume";
 import resumeVerificationRoutes from "./routes/resumeVerification";
 import answerValidationRoutes from "./routes/answerValidation";
@@ -209,6 +210,26 @@ app.get("/", (_req: Request, res: Response) => {
 // Ping endpoint
 app.get("/ping", (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Quick admin endpoint (temporary - for first admin setup only)
+app.get("/api/admin/setup-admin", async (_req: Request, res: Response) => {
+  try {
+    const userId = _req.query.userId as string;
+    if (!userId) {
+      res.status(400).json({ error: "userId required" });
+      return;
+    }
+    const role = await UserRoleModel.findOneAndUpdate(
+      { userId },
+      { role: "admin", assignedBy: "setup", assignedAt: new Date() },
+      { upsert: true, new: true }
+    );
+    res.json({ success: true, role });
+  } catch (err) {
+    logger.error({ err: (err as Error).message }, "Failed to set admin");
+    res.status(500).json({ error: "Failed to set admin" });
+  }
 });
 
 // 10. Protected Routes (RBAC + Audit)
