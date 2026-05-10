@@ -51,6 +51,7 @@ import { typeDefs } from "./graphql/schema";
 import { resolvers } from "./graphql/resolvers";
 import adminRoutes from "./routes/admin";
 import exportRoutes from "./routes/export";
+import userRoutes from "./routes/users";
 import { startWorkers, closeQueues } from "./lib/queue";
 import { requireEnvVars } from "./lib/envValidation";
 
@@ -363,6 +364,13 @@ app.use(
   requireAuth,
   attachRole,
   exportRoutes,
+);
+
+// 13. User Routes
+app.use(
+  "/api/users",
+  requireAuth,
+  userRoutes,
 );
 
 // 12. GraphQL Endpoint (Apollo Server)

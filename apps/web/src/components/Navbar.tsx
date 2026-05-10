@@ -13,10 +13,32 @@ declare global {
 }
 
 export default function Navbar() {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, userId } = useAuth();
   const location = useLocation();
   const isActive = (path: string) => location.pathname === path;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [userRole, setUserRole] = useState<string>("candidate");
+
+  useEffect(() => {
+    if (userId) {
+      fetchUserRole();
+    }
+  }, [userId]);
+
+  const fetchUserRole = async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || "http://localhost:8000/api"}/users/me/role`,
+        {
+          headers: { Authorization: `Bearer ${await window.Clerk?.session?.getToken()}` },
+        }
+      );
+      const data = await response.json();
+      setUserRole(data.role || "candidate");
+    } catch {
+      setUserRole("candidate");
+    }
+  };
 
   // ===========================================================================
   // 📱 PWA INSTALL LOGIC (Robust & Mobile Friendly)
@@ -199,20 +221,22 @@ export default function Navbar() {
                 </Button>
               </Link>
 
-              {/* 🛡️ Admin */}
-              <Link to="/admin">
-                <Button
-                  variant="ghost"
-                  className={`gap-2 hover:bg-white/5 transition-colors ${
-                    isActive("/admin")
-                      ? "text-white bg-white/10"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  <Shield className="w-4 h-4" />
-                  <span className="hidden lg:inline">Admin</span>
-                </Button>
-              </Link>
+              {/* 🛡️ Admin - Only for admin role */}
+              {userRole === "admin" && (
+                <Link to="/admin">
+                  <Button
+                    variant="ghost"
+                    className={`gap-2 hover:bg-white/5 transition-colors ${
+                      isActive("/admin")
+                        ? "text-white bg-white/10"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <Shield className="w-4 h-4" />
+                    <span className="hidden lg:inline">Admin</span>
+                  </Button>
+                </Link>
+              )}
 
               {/* 🚀 New Interview (Links to Home for Resume Check) */}
               <Link to="/">
