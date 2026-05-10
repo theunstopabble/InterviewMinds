@@ -4,6 +4,7 @@ import { AuditLogModel } from "../models/AuditLog";
 import { UserRoleModel } from "../models/Role";
 import { RBACRequest } from "../middleware/rbac";
 import { requirePermission } from "../middleware/rbac";
+import { requireAuth } from "../middleware/auth";
 
 const router = express.Router();
 
@@ -105,6 +106,7 @@ router.get(
 // Note: If no admin exists yet, anyone can create the first admin
 router.post(
   "/assign-role",
+  requireAuth,
   async (req: RBACRequest, res: Response) => {
     try {
       const { userId, role } = req.body;
