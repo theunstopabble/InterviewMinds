@@ -4,6 +4,9 @@ import { logger } from "../lib/logger";
 
 export interface RBACRequest extends Request {
   userRole?: RoleName;
+  auth?: {
+    userId?: string;
+  };
 }
 
 /**

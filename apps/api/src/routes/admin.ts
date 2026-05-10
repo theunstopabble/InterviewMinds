@@ -131,20 +131,6 @@ router.post(
         return;
       }
 
-      const currentUserId = req.auth?.userId;
-      const userRole = await UserRoleModel.findOne({ userId });
-      
-      // Only admins can assign admin role (or if no admin exists yet - bootstrap)
-      if (role === "admin" && userRole?.role !== "admin") {
-        const adminExists = await UserRoleModel.findOne({ role: "admin" });
-        const isCurrentUserAdmin = userRole?.role === "admin";
-        
-        if (adminExists && !isCurrentUserAdmin) {
-          res.status(403).json({ error: "Only admins can assign admin role" });
-          return;
-        }
-      }
-
       const updatedRole = await UserRoleModel.findOneAndUpdate(
         { userId },
         { 

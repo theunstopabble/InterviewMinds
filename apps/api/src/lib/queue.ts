@@ -181,7 +181,7 @@ export async function closeWorkers(): Promise<void> {
 
 export async function closeQueues(): Promise<void> {
   await closeWorkers();
-  await resumeQueue.close();
-  await interviewQueue.close();
+  if (resumeQueue) await resumeQueue.close();
+  if (interviewQueue) await interviewQueue.close();
   logger.info("BullMQ queues closed");
 }
