@@ -244,6 +244,11 @@ function createRateLimiter(options: {
   const redisStore = new RedisRateLimitStore(options.keyPrefix, options.windowMs);
   const isRedisAvailable = process.env.REDIS_URL !== undefined;
 
+  const memoryStoreInstance = {
+    ...memoryStore,
+    prefix: options.keyPrefix,
+  };
+
   return rateLimit({
     windowMs: options.windowMs,
     max: options.max,
@@ -261,7 +266,7 @@ function createRateLimiter(options: {
         retryAfter: Math.ceil(options.windowMs / 1000),
       });
     },
-    store: isRedisAvailable ? redisStore as any : memoryStore as any,
+    store: isRedisAvailable ? redisStore as any : memoryStoreInstance as any,
   });
 }
 
