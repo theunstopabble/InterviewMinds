@@ -5,6 +5,7 @@ import PDFParser from "pdf2json";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+const isRedisAvailable = REDIS_URL && REDIS_URL !== "redis://localhost:6379";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let embeddingPipeline: any = null;
@@ -17,7 +18,7 @@ async function getPipeline() {
   return embeddingPipeline;
 }
 
-export const resumeQueue = new Queue("resume-processing", {
+export const resumeQueue = isRedisAvailable ? new Queue("resume-processing", {
   connection: { url: REDIS_URL },
   defaultJobOptions: {
     attempts: 3,
@@ -25,9 +26,9 @@ export const resumeQueue = new Queue("resume-processing", {
     removeOnComplete: { count: 100 },
     removeOnFail: { count: 50 },
   },
-});
+}) : null;
 
-export const interviewQueue = new Queue("interview-scoring", {
+export const interviewQueue = isRedisAvailable ? new Queue("interview-scoring", {
   connection: { url: REDIS_URL },
   defaultJobOptions: {
     attempts: 2,
@@ -35,11 +36,16 @@ export const interviewQueue = new Queue("interview-scoring", {
     removeOnComplete: { count: 50 },
     removeOnFail: { count: 20 },
   },
-});
+}) : null;
 
 const workers: Worker[] = [];
 
 export function startWorkers() {
+  if (!isRedisAvailable) {
+    logger.warn("Redis not available - skipping BullMQ workers");
+    return;
+  }
+
   const resumeWorker = new Worker(
     "resume-processing",
     async (job: Job) => {

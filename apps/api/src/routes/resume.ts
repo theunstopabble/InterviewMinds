@@ -55,13 +55,15 @@ router.post(
         chunks: [],
       });
 
-      // Offload heavy processing to BullMQ
-      await resumeQueue.add("process-resume", {
-        resumeId: newResume._id.toString(),
-        userId: userId,
-        fileName: req.file.originalname,
-        fileBuffer: req.file.buffer.toString("base64"),
-      });
+      // Offload heavy processing to BullMQ (if Redis available)
+      if (resumeQueue) {
+        await resumeQueue.add("process-resume", {
+          resumeId: newResume._id.toString(),
+          userId: userId,
+          fileName: req.file.originalname,
+          fileBuffer: req.file.buffer.toString("base64"),
+        });
+      }
 
       resumesUploaded.inc();
       logger.info({ resumeId: newResume._id }, "Resume upload queued for processing");

@@ -1,5 +1,5 @@
 import Redis from "ioredis";
-import { logger } from "./logger.js";
+import { logger } from "./logger";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 

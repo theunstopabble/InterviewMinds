@@ -101,4 +101,65 @@ router.get(
   },
 );
 
+// ─── POST /api/admin/assign-role ────────────────────────────────────────────────
+// Note: If no admin exists yet, anyone can create the first admin
+router.post(
+  "/assign-role",
+  async (req: RBACRequest, res: Response) => {
+    try {
+      const { userId, role } = req.body;
+      const currentUserId = req.auth?.userId;
+      
+      // Check if admin already exists
+      const adminExists = await UserRoleModel.findOne({ role: "admin" });
+      const currentUserRole = currentUserId ? await UserRoleModel.findOne({ userId: currentUserId }) : null;
+      const isCurrentUserAdmin = currentUserRole?.role === "admin";
+
+      // If admin exists and current user is not admin, require permission
+      if (adminExists && !isCurrentUserAdmin) {
+        res.status(403).json({ error: "Admin access required" });
+        return;
+      }
+
+      if (!userId || !role) {
+        res.status(400).json({ error: "userId and role are required" });
+        return;
+      }
+
+      if (!["candidate", "interviewer", "admin"].includes(role)) {
+        res.status(400).json({ error: "Invalid role" });
+        return;
+      }
+
+      const currentUserId = req.auth?.userId;
+      const userRole = await UserRoleModel.findOne({ userId });
+      
+      // Only admins can assign admin role (or if no admin exists yet - bootstrap)
+      if (role === "admin" && userRole?.role !== "admin") {
+        const adminExists = await UserRoleModel.findOne({ role: "admin" });
+        const isCurrentUserAdmin = userRole?.role === "admin";
+        
+        if (adminExists && !isCurrentUserAdmin) {
+          res.status(403).json({ error: "Only admins can assign admin role" });
+          return;
+        }
+      }
+
+      const updatedRole = await UserRoleModel.findOneAndUpdate(
+        { userId },
+        { 
+          role, 
+          assignedBy: currentUserId || "system",
+          assignedAt: new Date(),
+        },
+        { upsert: true, new: true }
+      );
+
+      res.json({ success: true, role: updatedRole });
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Failed to assign role" });
+    }
+  },
+);
+
 export default router;

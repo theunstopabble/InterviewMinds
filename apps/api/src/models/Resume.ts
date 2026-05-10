@@ -4,7 +4,7 @@ import { IResume } from "@interview-minds/shared";
 const ResumeSchema = new mongoose.Schema<IResume>({
   userId: { type: String, required: true, index: true },
   fileName: { type: String, required: true },
-  content: { type: String, required: true },
+  content: { type: String, default: "" },
 
   chunks: [
     {
