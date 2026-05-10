@@ -3,6 +3,7 @@ import { InterviewModel } from "../models/Interview";
 import { UserRoleModel, hasPermission } from "../models/Role";
 import { AuditLogModel } from "../models/AuditLog";
 import { WebhookModel } from "../models/Webhook";
+import { ResumeModel } from "../models/Resume";
 
 interface Context {
   userId: string;
@@ -30,8 +31,10 @@ export const resolvers = {
     async me(_parent: unknown, _args: unknown, ctx: Context) {
       requireAuth(ctx);
       const roleRecord = await UserRoleModel.findOne({ userId: ctx.userId }).lean();
-      const interviewCount = await InterviewModel.countDocuments({ userId: ctx.userId });
-      const resumeCount = 0; // TODO: hook up ResumeModel
+      const [interviewCount, resumeCount] = await Promise.all([
+        InterviewModel.countDocuments({ userId: ctx.userId }),
+        ResumeModel.countDocuments({ userId: ctx.userId }),
+      ]);
 
       return {
         id: ctx.userId,
@@ -79,9 +82,20 @@ export const resolvers = {
       };
     },
 
-    async resumes(_parent: unknown, _args: unknown, _ctx: Context) {
-      // Placeholder — return empty for now
-      return [];
+    async resumes(_parent: unknown, _args: unknown, ctx: Context) {
+      requireAuth(ctx);
+      const resumes = await ResumeModel.find({ userId: ctx.userId })
+        .select("fileName content createdAt")
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+      return resumes.map((r: any) => ({
+        id: r._id?.toString?.() || String(r._id),
+        fileName: r.fileName,
+        previewText: r.content?.substring(0, 200) || "",
+        createdAt: r.createdAt?.toISOString?.() || r.createdAt,
+      }));
     },
 
     async adminStats(_parent: unknown, _args: unknown, ctx: Context) {
@@ -93,6 +107,7 @@ export const resolvers = {
         avgScoreResult,
         totalUsers,
         activeToday,
+        totalResumes,
       ] = await Promise.all([
         InterviewModel.countDocuments(),
         InterviewModel.aggregate([
@@ -107,6 +122,7 @@ export const resolvers = {
         InterviewModel.countDocuments({
           createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
         }),
+        ResumeModel.countDocuments(),
       ]);
 
       const avgScore = avgScoreResult[0]?.avgScore 
@@ -116,7 +132,7 @@ export const resolvers = {
       return {
         totalUsers,
         totalInterviews,
-        totalResumes: 0,
+        totalResumes,
         avgScore,
         activeToday,
         topLanguages: [],

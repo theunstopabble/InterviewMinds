@@ -13,7 +13,7 @@ import { logger } from "./lib/logger";
 import { correlationMiddleware, CorrelatedRequest } from "./lib/correlation";
 import { getRedisClient, closeRedisClient } from "./lib/redis";
 import { initSentry, captureException } from "./lib/sentry";
-import { createSocketServer } from "./lib/socket";
+import { createSocketServer, closeSocketServer } from "./lib/socket";
 import {
   securityHeaders,
   configureTrustProxy,
@@ -45,7 +45,7 @@ requireEnvVars();
 const apolloServer = new ApolloServer({
   typeDefs,
   resolvers,
-  introspection: process.env.NODE_ENV !== "production",
+  introspection: process.env.NODE_ENV === "development",
 });
 
 const app = express();
@@ -314,6 +314,7 @@ if (!MONGO_URI) {
 // 15. Graceful shutdown
 process.on("SIGTERM", async () => {
   logger.info("SIGTERM received, shutting down gracefully");
+  await closeSocketServer();
   await closeQueues();
   await closeRedisClient();
   await mongoose.connection.close();
@@ -323,6 +324,7 @@ process.on("SIGTERM", async () => {
 
 process.on("SIGINT", async () => {
   logger.info("SIGINT received, shutting down gracefully");
+  await closeSocketServer();
   await closeQueues();
   await closeRedisClient();
   await mongoose.connection.close();
@@ -334,7 +336,7 @@ process.on("SIGINT", async () => {
 const httpServer = createServer(app);
 
 if (require.main === module) {
-  createSocketServer(httpServer, allowedOrigins);
+  const io = createSocketServer(httpServer, allowedOrigins);
   httpServer.listen(PORT, () => {
     logger.info({ port: PORT, env: process.env.NODE_ENV || "development" }, "server started with Socket.IO");
   });

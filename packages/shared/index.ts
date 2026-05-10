@@ -15,6 +15,9 @@ export interface IResume {
   createdAt: Date;
 }
 
+// 2. Vector Embedding Type (compatible with MongoDB)
+export type VectorEmbedding = number[];
+
 // 2. Chat Message Structure
 export interface ChatMessage {
   role: "user" | "model" | "system";

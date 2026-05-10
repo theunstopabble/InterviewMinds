@@ -48,12 +48,16 @@ router.post("/execute", requireAuth, validateBody(CompilerRequestSchema), async 
     });
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+
   try {
     const cacheKey = createHash("sha256").update(`${language}:${code}`).digest("hex");
     const cached = await cacheGet<Record<string, unknown>>("compiler", cacheKey);
     if (cached) {
       logger.debug({ cacheKey }, "compiler cache hit");
       codeExecutions.inc({ language, status: "cached" });
+      clearTimeout(timeoutId);
       res.json(cached);
       return;
     }
@@ -70,15 +74,25 @@ router.post("/execute", requireAuth, validateBody(CompilerRequestSchema), async 
             },
           ],
         },
-        { timeout: 15000 },
+        { 
+          timeout: 15000,
+          signal: controller.signal,
+        },
       );
     });
 
+    clearTimeout(timeoutId);
     await cacheSet("compiler", cacheKey, response.data, 3600);
     codeExecutions.inc({ language, status: "fresh" });
     res.json(response.data);
   } catch (error: unknown) {
+    clearTimeout(timeoutId);
     const msg = error instanceof Error ? error.message : "Unknown error";
+    
+    if (msg.includes("abort")) {
+      return res.status(504).json({ error: "Code execution timed out" });
+    }
+    
     logger.error({ err: msg }, "compiler request failed");
     
     const circuitState = pistonCircuitBreaker.getState();

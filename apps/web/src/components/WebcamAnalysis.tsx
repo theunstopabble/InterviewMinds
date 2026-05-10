@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import * as faceapi from "face-api.js";
 import { Loader2, VideoOff, BrainCircuit } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,28 +28,45 @@ export default function WebcamAnalysis({
   const [isVideoOn, setIsVideoOn] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState<string>("Neutral");
+  const [modelError, setModelError] = useState<string | null>(null);
 
-  // Timer Ref
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 3;
 
   // 1. Load AI Models & Auto-Start Camera
-  useEffect(() => {
-    const initCamera = async () => {
-      const MODEL_URL = "/models";
-      try {
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-        ]);
-        setIsModelLoaded(true);
-        console.log("✅ AI Models Loaded");
-        startVideo();
-      } catch (err) {
-        console.error("❌ Model Load Error:", err);
-        toast.error("Failed to load AI Models");
+  const loadModels = useCallback(async (isRetry = false) => {
+    const MODEL_URL = "/models";
+    
+    if (isRetry) {
+      retryCountRef.current += 1;
+      if (retryCountRef.current > MAX_RETRIES) {
+        setModelError("Failed to load AI models after multiple attempts");
+        toast.error("AI models unavailable. Please refresh the page.");
+        return;
       }
-    };
-    initCamera();
+      toast.warning(`Retrying model load (${retryCountRef.current}/${MAX_RETRIES})...`);
+    }
+
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+      ]);
+      setIsModelLoaded(true);
+      setModelError(null);
+      console.log("✅ AI Models Loaded");
+      startVideo();
+    } catch (err) {
+      console.error("❌ Model Load Error:", err);
+      setModelError("Failed to load AI models");
+      toast.error("Failed to load AI Models. Retrying...");
+      setTimeout(() => loadModels(true), 2000);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadModels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -211,13 +228,25 @@ export default function WebcamAnalysis({
       {/* Fallback UI */}
       {!isVideoOn && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 gap-2">
-          {isModelLoaded ? (
+          {modelError ? (
+            <>
+              <VideoOff className="w-10 h-10 text-red-500" />
+              <span className="text-xs text-red-400">{modelError}</span>
+              <Button
+                size="sm"
+                onClick={() => { setModelError(null); retryCountRef.current = 0; loadModels(); }}
+                className="mt-2"
+              >
+                Retry
+              </Button>
+            </>
+          ) : isModelLoaded ? (
             <VideoOff className="w-10 h-10" />
           ) : (
             <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
           )}
           <span className="text-xs">
-            {isModelLoaded ? "Starting Camera..." : "Loading AI Models..."}
+            {modelError ? "Error" : isModelLoaded ? "Starting Camera..." : "Loading AI Models..."}
           </span>
         </div>
       )}

@@ -4,13 +4,20 @@ import Groq from "groq-sdk";
 import dotenv from "dotenv";
 import { logger } from "../lib/logger";
 import { validateBody, ChatMessageSchema } from "../lib/validation";
+import { groqCircuitBreaker } from "../lib/circuitBreaker";
+import axios from "axios";
 
 dotenv.config();
 
 const router = express.Router();
 
-// ✅ 1. SETUP GROQ (Using Llama 3 70B for Deep Analysis)
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+function getGroqClient(): Groq {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) {
+    throw new Error("GROQ_API_KEY is not configured");
+  }
+  return new Groq({ apiKey: key });
+}
 
 // 🎭 PERSONA DEFINITIONS
 interface Persona {
@@ -158,22 +165,55 @@ router.post("/", validateBody(ChatMessageSchema), async (req: express.Request, r
 
     messages.push({ role: "user", content: message });
 
-    // AI Call
-    const completion = await groq.chat.completions.create({
-      messages: messages,
-      model: "llama-3.3-70b-versatile", // Using the smartest model for deep reasoning
-      temperature: 0.5, // Slightly lower temp for more focused/professional answers
-      max_tokens: 200,
-    });
+    // Check circuit breaker state
+    const circuitState = groqCircuitBreaker.getState();
+    if (circuitState.state === "open") {
+      logger.warn({ nextAttempt: circuitState.nextAttempt }, "Groq circuit breaker open");
+      return res.status(503).json({
+        error: "AI service temporarily unavailable",
+        retryAfter: Math.ceil((circuitState.nextAttempt - Date.now()) / 1000),
+      });
+    }
+
+    // AI Call with circuit breaker and timeout
+    let completion;
+    try {
+      completion = await groqCircuitBreaker.execute(async () => {
+        return getGroqClient().chat.completions.create({
+          messages: messages,
+          model: "llama-3.3-70b-versatile",
+          temperature: 0.5,
+          max_tokens: 200,
+          timeout: 20000,
+        });
+      });
+    } catch (err) {
+      const circuitState = groqCircuitBreaker.getState();
+      if (circuitState.state === "open") {
+        return res.status(503).json({
+          error: "AI service temporarily unavailable",
+          retryAfter: Math.ceil((circuitState.nextAttempt - Date.now()) / 1000),
+        });
+      }
+      throw err;
+    }
 
     const aiText = completion.choices[0]?.message?.content || "Server Error.";
 
     res.json({ reply: aiText });
   } catch (error: unknown) {
-    logger.error({ err: (error as Error).message }, "chat generation error");
-    res
-      .status(500)
-      .json({ error: "AI Service Failed", details: (error as Error).message });
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    logger.error({ err: msg }, "chat generation error");
+    
+    const circuitState = groqCircuitBreaker.getState();
+    if (circuitState.state === "open") {
+      return res.status(503).json({
+        error: "AI service unavailable",
+        retryAfter: Math.ceil((circuitState.nextAttempt - Date.now()) / 1000),
+      });
+    }
+    
+    res.status(500).json({ error: "AI Service Failed", details: msg });
   }
 });
 
