@@ -694,4 +694,117 @@ jobs:
 | Medium (P3) | 4 hrs | Minor bug | 24 hrs | Documentation issues |
 | Low (P4) | 24 hrs | Feature request | 1 week | Cosmetic issues |
 
-**All 18 Enterprise Features Workflows Documented** ✅
+---
+
+## Phase 8: Advanced Features Workflows
+
+### 1. Interview Scheduling Flow
+
+```
+Candidate → Select Date/Time → Choose Timezone → Book Slot → Receive Confirmation
+```
+
+| Step | Action | API |
+|------|--------|-----|
+| 1 | Browse available slots | GET /scheduling/slots/:id |
+| 2 | Select timezone | GET /scheduling/timezones |
+| 3 | Book slot | POST /scheduling/book |
+| 4 | Receive confirmation | Notification sent |
+
+### 2. Preparation Mode Flow
+
+```
+Candidate → Start Preparation → System Check → Practice Questions → Break Timer
+```
+
+| Step | Action | API |
+|------|--------|-----|
+| 1 | Run system check | GET /preparation/system-check |
+| 2 | Practice questions | GET /questions |
+| 3 | Use break timer | POST /preparation/break-timer/start |
+
+### 3. Pipeline Management Flow
+
+```
+Admin → View Kanban → Drag Candidate → Update Stage → Auto-notify
+```
+
+| Step | Action | API |
+|------|--------|-----|
+| 1 | View pipeline | GET /pipeline |
+| 2 | Drag to new stage | PUT /pipeline/:id/stage |
+| 3 | Notify candidate | POST /notifications/send |
+
+### 4. Report Generation Flow
+
+```
+Admin → Select Candidate → Generate Report → Export (PDF/CSV/JSON)
+```
+
+| Step | Action | API |
+|------|--------|-----|
+| 1 | Select candidate | GET /reports/candidate/:id |
+| 2 | Generate report | POST /reports/generate |
+| 3 | Export | GET /reports/:id/pdf, /reports/export/csv |
+
+### 5. AI Resume Screening Flow
+
+```
+Upload Resume → AI Analysis → Score Match → Recommend Action
+```
+
+| Step | Action | API |
+|------|--------|-----|
+| 1 | Upload resume | POST /resume/upload |
+| 2 | Trigger screening | POST /resume-screener/screen |
+| 3 | Get results | GET /resume-screener/result/:id |
+
+### 6. SQL Challenge Flow
+
+```
+Admin → Create Challenge → Candidate Takes Test → Auto-Grade → Results
+```
+
+| Step | Action | API |
+|------|--------|-----|
+| 1 | Create challenge | POST /sql-challenges |
+| 2 | Submit query | POST /sql-challenges/:id/submit |
+| 3 | Auto-grade | Built-in validation |
+
+### 7. Panel Interview Flow
+
+```
+Admin → Create Panel → Add Interviewers → Start Session → Collect Scores → Finalize
+```
+
+| Step | Action | API |
+|------|--------|-----|
+| 1 | Create panel | POST /panel-interview/create |
+| 2 | Add panelists | POST /panel-interview/:id/panelist |
+| 3 | Join session | POST /panel-interview/:id/join |
+| 4 | Submit scores | POST /panel-interview/:id/score |
+| 5 | Complete | POST /panel-interview/:id/complete |
+
+### 8. GitHub Integration Flow
+
+```
+Connect GitHub → Select Repository → Analyze → View Report
+```
+
+| Step | Action | API |
+|------|--------|-----|
+| 1 | Connect | POST /git/connect |
+| 2 | Select repo | GET /git/repositories |
+| 3 | Analyze | POST /git/repositories/:id/analyze |
+| 4 | View report | GET /git/report |
+
+---
+
+## Complete Workflow Summary
+
+| Phase | Features | Workflows |
+|-------|----------|-----------|
+| Phase 1-7 | 18 Core Features | Documented ✅ |
+| Phase 8 | 15 Advanced Features | Documented above ✅ |
+
+**All 68 Features Workflows Documented** ✅

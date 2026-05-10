@@ -599,4 +599,37 @@ db.dataSubjectRequests.createIndex({ userId: 1, status: 1 });
 db.biometricTemplates.createIndex({ userId: 1, type: 1 });
 db.webhooks.createIndex({ tenantId: 1, enabled: 1 });
 db.analyticsSnapshots.createIndex({ tenantId: 1, date: -1 });
+
+// Phase 8 new collections
+db.scheduledInterviews.createIndex({ candidateId: 1, status: 1 });
+db.questionBank.createIndex({ category: 1, difficulty: 1 });
+db.scorecards.createIndex({ interviewId: 1, interviewerId: 1 });
+db.reports.createIndex({ candidateId: 1, generatedAt: -1 });
+db.asyncInterviews.createIndex({ candidateId: 1, status: 1 });
+db.takeHomeChallenges.createIndex({ companyId: 1, status: 1 });
+db.preparationSessions.createIndex({ userId: 1, status: 1 });
+db.mockInterviews.createIndex({ userId: 1, status: 1 });
+db.panelInterviews.createIndex({ candidateId: 1, status: 1 });
+db.notifications.createIndex({ userId: 1, readAt: 1 });
+db.sqlChallenges.createIndex({ difficulty: 1, category: 1 });
+db.gitRepositories.createIndex({ candidateId: 1 });
 ```
+
+---
+
+## Phase 8 New Collections Summary
+
+| Collection | Purpose |
+|------------|---------|
+| `scheduledInterviews` | Interview scheduling & calendar |
+| `questionBank` | Question library management |
+| `scorecards` | Evaluation rubrics & scoring |
+| `reports` | Candidate report generation |
+| `asyncInterviews` | Async video interviews |
+| `takeHomeChallenges` | Take-home coding challenges |
+| `preparationSessions` | System check & practice |
+| `mockInterviews` | Practice mode interviews |
+| `panelInterviews` | Multi-interviewer sessions |
+| `notifications` | Email/SMS/Slack notifications |
+| `sqlChallenges` | SQL query challenges |
+| `gitRepositories` | GitHub integration data |

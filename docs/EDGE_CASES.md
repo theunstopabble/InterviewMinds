@@ -625,9 +625,47 @@ logger.error({
 | SSO001 | SSO authentication failed | 401 |
 | ATS001 | ATS sync failed | 500 |
 | ANL001 | Analytics computation failed | 500 |
+| SCH001 | Scheduling conflict | 409 |
+| QBK001 | Question not found | 404 |
+| SCD001 | Scorecard not submitted | 400 |
+| RPT001 | Report generation failed | 500 |
+| ASY001 | Async interview expired | 410 |
+| THK001 | Challenge submission failed | 500 |
+| PRT001 | System check failed | 400 |
+| MKI001 | Mock interview timeout | 408 |
+| PNL001 | Panelist not joined | 400 |
+| AI001 | AI analysis timeout | 504 |
+| NTF001 | Notification delivery failed | 500 |
+| RSS001 | Resume screening failed | 500 |
+| SQL001 | SQL query syntax error | 400 |
+| GIT001 | GitHub authentication failed | 401 |
+
+---
+
+## Phase 8 Advanced Edge Cases
+
+### Scheduling Edge Cases
+- Double booking prevention
+- Timezone conversion errors
+- Past date booking attempts
+
+### Pipeline Edge Cases
+- Drag-drop to same stage
+- Stage transition validation
+- Bulk operations failure
+
+### Report Edge Cases
+- Large dataset export timeout
+- PDF generation failure
+- CSV encoding issues
+
+### AI Analysis Edge Cases
+- Confidence score below threshold
+- Sentiment analysis timeout
+- Comparative data insufficient
 
 ---
 
 **All Enterprise Edge Cases Documented** ✅
 
-**18 Enterprise Features | 7 Phases | Complete Implementation**
+**68 Enterprise Features | 8 Phases | Complete Implementation**
