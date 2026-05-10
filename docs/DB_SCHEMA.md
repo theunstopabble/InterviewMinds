@@ -404,3 +404,199 @@ schema.remove('oldName');
 | Resumes | High | 1hr | 4hr |
 | Users (Roles) | Critical | 15min | 1hr |
 | AuditLogs | Medium | 24hr | 24hr |
+
+---
+
+## Enterprise Schema Extensions
+
+### Multi-Tenancy Collections
+
+```javascript
+// Tenants Collection
+{
+  _id: ObjectId,
+  tenantId: String,           // tn_xxxxxxxxxxxx
+  name: String,
+  domain: String,
+  plan: String,               // free, starter, professional, enterprise
+  status: String,              // active, suspended, trial
+  settings: {
+    isolationLevel: String,  // database, schema, row, application
+    storageLimit: Number,
+    apiRateLimit: Number,
+    features: [String],
+    customBranding: {
+      primaryColor: String,
+      secondaryColor: String,
+      logoUrl: String,
+      companyName: String
+    }
+  },
+  createdAt: Date,
+  updatedAt: Date
+}
+
+// TenantUsers Collection
+{
+  _id: ObjectId,
+  tenantId: String,
+  userId: String,              // Clerk user ID
+  role: String,               // admin, manager, interviewer, candidate
+  permissions: [String],
+  joinedAt: Date
+}
+```
+
+### Compliance Collections
+
+```javascript
+// AuditLogs Collection (Enhanced)
+{
+  _id: ObjectId,
+  tenantId: String,
+  userId: String,
+  action: String,
+  resource: String,
+  resourceId: String,
+  details: Object,
+  ipAddress: String,
+  userAgent: String,
+  timestamp: Date,
+  correlationId: String
+}
+
+// ConsentRecords Collection
+{
+  _id: ObjectId,
+  userId: String,
+  consentType: String,        // gdpr_marketing, gdpr_analytics, etc.
+  granted: Boolean,
+  version: String,
+  timestamp: Date,
+  ipAddress: String,
+  expiresAt: Date
+}
+
+// DataSubjectRequests Collection
+{
+  _id: ObjectId,
+  userId: String,
+  type: String,               // access, deletion, rectification, portability
+  status: String,             // pending, processing, completed, rejected
+  createdAt: Date,
+  completedAt: Date,
+  data: Object,
+  processedBy: String
+}
+```
+
+### Enterprise Feature Collections
+
+```javascript
+// BiometricTemplates Collection
+{
+  _id: ObjectId,
+  userId: String,
+  type: String,               // face, voice, fingerprint
+  templateData: String,      // Encrypted template
+  createdAt: Date,
+  lastVerified: Date,
+  isActive: Boolean
+}
+
+// SSOAuth Configs Collection
+{
+  _id: ObjectId,
+  tenantId: String,
+  provider: String,          // okta, azure-ad, google-workspace, custom
+  enabled: Boolean,
+  samlSettings: {
+    entryPoint: String,
+    issuer: String,
+    cert: String,
+    callbackUrl: String
+  },
+  oauthSettings: {
+    clientId: String,
+    redirectUri: String,
+    scope: [String]
+  },
+  attributeMapping: {
+    email: String,
+    firstName: String,
+    lastName: String,
+    department: String,
+    role: String
+  }
+}
+
+// Webhooks Collection
+{
+  _id: ObjectId,
+  tenantId: String,
+  url: String,
+  events: [String],          // interview.started, etc.
+  secret: String,
+  enabled: Boolean,
+  retryPolicy: {
+    maxRetries: Number,
+    retryInterval: Number,
+    backoffMultiplier: Number
+  },
+  createdAt: Date
+}
+
+// ATSIntegrations Collection
+{
+  _id: ObjectId,
+  tenantId: String,
+  provider: String,          // workday, greenhouse, lever, bamboohr
+  apiKey: String,
+  clientId: String,
+  tenantUrl: String,
+  webhookUrl: String,
+  lastSyncAt: Date,
+  status: String
+}
+
+// AnalyticsSnapshots Collection
+{
+  _id: ObjectId,
+  tenantId: String,
+  date: Date,
+  metrics: {
+    totalInterviews: Number,
+    completionRate: Number,
+    averageScore: Number,
+    scoreDistribution: {
+      range90_100: Number,
+      range80_89: Number,
+      range70_79: Number,
+      range60_69: Number,
+      below60: Number
+    },
+    proctoringViolations: Number,
+    flagRate: Number
+  }
+}
+```
+
+### Enterprise Indexes
+
+```javascript
+// Tenants indexes
+db.tenants.createIndex({ tenantId: 1 }, { unique: true });
+db.tenants.createIndex({ domain: 1 });
+db.tenants.createIndex({ plan: 1 });
+
+// Compliance indexes
+db.auditLogs.createIndex({ tenantId: 1, timestamp: -1 });
+db.auditLogs.createIndex({ userId: 1, timestamp: -1 });
+db.consentRecords.createIndex({ userId: 1, consentType: 1 });
+db.dataSubjectRequests.createIndex({ userId: 1, status: 1 });
+
+// Enterprise feature indexes
+db.biometricTemplates.createIndex({ userId: 1, type: 1 });
+db.webhooks.createIndex({ tenantId: 1, enabled: 1 });
+db.analyticsSnapshots.createIndex({ tenantId: 1, date: -1 });
+```

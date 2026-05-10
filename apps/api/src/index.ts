@@ -4,6 +4,23 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import { createServer } from "http";
 import resumeRoutes from "./routes/resume";
+import resumeVerificationRoutes from "./routes/resumeVerification";
+import answerValidationRoutes from "./routes/answerValidation";
+import dynamicQuestionsRoutes from "./routes/dynamicQuestions";
+import fraudDetectionRoutes from "./routes/fraudDetection";
+import geoFencingRoutes from "./routes/geoFencing";
+import videoProctoringRoutes from "./routes/videoProctoring";
+import ssoIntegrationRoutes from "./routes/ssoIntegration";
+import webhooksRoutes from "./routes/webhooks";
+import multiTenancyRoutes from "./routes/multiTenancy";
+import jobMatchingRoutes from "./routes/jobMatching";
+import questionGenerationRoutes from "./routes/questionGeneration";
+import codeAnalysisRoutes from "./routes/codeAnalysis";
+import e2eEncryptionRoutes from "./routes/e2eEncryption";
+import biometricAuthRoutes from "./routes/biometricAuth";
+import atsIntegrationRoutes from "./routes/atsIntegration";
+import analyticsRoutes from "./routes/analytics";
+import complianceRoutes from "./routes/compliance";
 import chatRoutes from "./routes/chat";
 import interviewRoutes from "./routes/interview";
 import { requireAuth } from "./middleware/auth";
@@ -198,6 +215,109 @@ app.use(
   uploadLimiter,
   auditLog("resume"),
   resumeRoutes,
+);
+
+app.use(
+  "/api/resume",
+  requireAuth,
+  attachRole,
+  auditLog("resume-verification"),
+  resumeVerificationRoutes,
+);
+
+app.use(
+  "/api/answer-validation",
+  requireAuth,
+  attachRole,
+  auditLog("answer-validation"),
+  answerValidationRoutes,
+);
+
+app.use(
+  "/api/dynamic-questions",
+  requireAuth,
+  attachRole,
+  auditLog("dynamic-questions"),
+  dynamicQuestionsRoutes,
+);
+
+app.use(
+  "/api/fraud-detection",
+  requireAuth,
+  attachRole,
+  auditLog("fraud-detection"),
+  fraudDetectionRoutes,
+);
+
+app.use(
+  "/api/geo-fencing",
+  requireAuth,
+  attachRole,
+  auditLog("geo-fencing"),
+  geoFencingRoutes,
+);
+
+app.use(
+  "/api/proctoring",
+  requireAuth,
+  attachRole,
+  auditLog("proctoring"),
+  videoProctoringRoutes,
+);
+
+app.use(
+  "/api/sso",
+  ssoIntegrationRoutes,
+);
+
+app.use(
+  "/api/webhooks",
+  webhooksRoutes,
+);
+
+app.use(
+  "/api/tenants",
+  multiTenancyRoutes,
+);
+
+app.use(
+  "/api/compliance",
+  complianceRoutes,
+);
+
+app.use(
+  "/api/job-matching",
+  jobMatchingRoutes,
+);
+
+app.use(
+  "/api/questions",
+  questionGenerationRoutes,
+);
+
+app.use(
+  "/api/code-analysis",
+  codeAnalysisRoutes,
+);
+
+app.use(
+  "/api/e2e-encryption",
+  e2eEncryptionRoutes,
+);
+
+app.use(
+  "/api/biometric",
+  biometricAuthRoutes,
+);
+
+app.use(
+  "/api/ats",
+  atsIntegrationRoutes,
+);
+
+app.use(
+  "/api/analytics",
+  analyticsRoutes,
 );
 app.use(
   "/api/chat",
