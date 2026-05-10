@@ -206,6 +206,11 @@ app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "InterviewMinds Backend is Running!" });
 });
 
+// Ping endpoint
+app.get("/ping", (_req: Request, res: Response) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // 10. Protected Routes (RBAC + Audit)
 // attachRole must run after requireAuth so req.auth.userId is populated
 
