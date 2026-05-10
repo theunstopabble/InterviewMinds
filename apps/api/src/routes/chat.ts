@@ -184,7 +184,6 @@ router.post("/", validateBody(ChatMessageSchema), async (req: express.Request, r
           model: "llama-3.3-70b-versatile",
           temperature: 0.5,
           max_tokens: 200,
-          timeout: 20000,
         });
       });
     } catch (err) {

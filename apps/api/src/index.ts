@@ -13,7 +13,7 @@ import { logger } from "./lib/logger";
 import { correlationMiddleware, CorrelatedRequest } from "./lib/correlation";
 import { getRedisClient, closeRedisClient } from "./lib/redis";
 import { initSentry, captureException } from "./lib/sentry";
-import { createSocketServer, closeSocketServer } from "./lib/socket";
+import { createSocketServer } from "./lib/socket";
 import {
   securityHeaders,
   configureTrustProxy,
@@ -314,7 +314,6 @@ if (!MONGO_URI) {
 // 15. Graceful shutdown
 process.on("SIGTERM", async () => {
   logger.info("SIGTERM received, shutting down gracefully");
-  await closeSocketServer();
   await closeQueues();
   await closeRedisClient();
   await mongoose.connection.close();
@@ -324,7 +323,6 @@ process.on("SIGTERM", async () => {
 
 process.on("SIGINT", async () => {
   logger.info("SIGINT received, shutting down gracefully");
-  await closeSocketServer();
   await closeQueues();
   await closeRedisClient();
   await mongoose.connection.close();
