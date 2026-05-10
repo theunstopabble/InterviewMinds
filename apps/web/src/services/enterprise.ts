@@ -417,3 +417,405 @@ export const analyticsService = {
   getReport: (type: 'summary' | 'detailed' | 'export') =>
     fetchAPI<any>(`/analytics/report/${type}`),
 };
+
+// ============== Scheduling ==============
+export const schedulingService = {
+  getTimezones: () => fetchAPI<string[]>('/scheduling/timezones'),
+
+  getUserTimezone: () => fetchAPI<string>('/scheduling/user-timezone'),
+
+  getAvailableSlots: (interviewerId: string, date: string, timezone: string) =>
+    fetchAPI<{ slots: any[] }>(`/scheduling/slots/${interviewerId}?date=${date}&timezone=${timezone}`),
+
+  bookSlot: (interviewerId: string, slotId: string, interviewType: 'live' | 'async' | 'take-home') =>
+    fetchAPI<any>('/scheduling/book', {
+      method: 'POST',
+      body: JSON.stringify({ interviewerId, slotId, interviewType }),
+    }),
+
+  reschedule: (interviewId: string, newSlotId: string) =>
+    fetchAPI<any>('/scheduling/reschedule', {
+      method: 'POST',
+      body: JSON.stringify({ interviewId, newSlotId }),
+    }),
+
+  cancel: (interviewId: string, reason?: string) =>
+    fetchAPI<any>('/scheduling/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ interviewId, reason }),
+    }),
+
+  getUpcoming: () => fetchAPI<{ interviews: any[] }>('/scheduling/upcoming'),
+
+  getSchedule: (interviewerId: string) =>
+    fetchAPI<{ interviews: any[] }>(`/scheduling/schedule/${interviewerId}`),
+};
+
+// ============== Question Bank ==============
+export const questionBankService = {
+  getQuestions: (category?: string, filters?: { difficulty?: string; type?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (category) params.set('category', category);
+    if (filters?.difficulty) params.set('difficulty', filters.difficulty);
+    if (filters?.type) params.set('type', filters.type);
+    if (filters?.limit) params.set('limit', filters.limit.toString());
+    return fetchAPI<{ questions: any[] }>(`/question-bank?${params}`);
+  },
+
+  getQuestion: (id: string) => fetchAPI<any>(`/question-bank/${id}`),
+
+  search: (query: string, filters?: { category?: string; difficulty?: string; tags?: string[] }) => {
+    const params = new URLSearchParams({ q: query });
+    if (filters?.category) params.set('category', filters.category);
+    if (filters?.difficulty) params.set('difficulty', filters.difficulty);
+    return fetchAPI<{ questions: any[] }>(`/question-bank/search?${params}`);
+  },
+
+  create: (data: any) =>
+    fetchAPI<any>('/question-bank', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, updates: any) =>
+    fetchAPI<any>(`/question-bank/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    }),
+
+  delete: (id: string) =>
+    fetchAPI<any>(`/question-bank/${id}`, { method: 'DELETE' }),
+
+  getCategories: () => fetchAPI<{ categories: any[] }>('/question-bank/categories'),
+
+  getStats: () => fetchAPI<{ stats: any }>('/question-bank/stats'),
+};
+
+// ============== Scorecard ==============
+export const scorecardService = {
+  getTemplates: (role?: string) =>
+    fetchAPI<{ templates: any[] }>(`/scorecard/templates${role ? `?role=${role}` : ''}`),
+
+  getTemplate: (id: string) => fetchAPI<any>(`/scorecard/templates/${id}`),
+
+  createTemplate: (data: any) =>
+    fetchAPI<any>('/scorecard/templates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  createScorecard: (interviewId: string, templateId: string) =>
+    fetchAPI<any>('/scorecard', {
+      method: 'POST',
+      body: JSON.stringify({ interviewId, templateId }),
+    }),
+
+  getScorecard: (id: string) => fetchAPI<any>(`/scorecard/${id}`),
+
+  updateScore: (scorecardId: string, criterionId: string, score: number, comments: string) =>
+    fetchAPI<any>(`/scorecard/${scorecardId}/score`, {
+      method: 'POST',
+      body: JSON.stringify({ criterionId, score, comments }),
+    }),
+
+  addNote: (scorecardId: string, content: string, timestamp: number, category: string) =>
+    fetchAPI<any>(`/scorecard/${scorecardId}/note`, {
+      method: 'POST',
+      body: JSON.stringify({ content, timestamp, category }),
+    }),
+
+  submit: (id: string) =>
+    fetchAPI<any>(`/scorecard/${id}/submit`, { method: 'POST' }),
+
+  getInterviewScorecards: (interviewId: string) =>
+    fetchAPI<{ scorecards: any[] }>(`/scorecard/interview/${interviewId}`),
+};
+
+// ============== Reports ==============
+export const reportService = {
+  generate: (candidateId: string, interviewIds: string[]) =>
+    fetchAPI<any>('/reports/generate', {
+      method: 'POST',
+      body: JSON.stringify({ candidateId, interviewIds }),
+    }),
+
+  getReport: (reportId: string) => fetchAPI<any>(`/reports/${reportId}`),
+
+  getCandidateReports: (candidateId: string) =>
+    fetchAPI<{ reports: any[] }>(`/reports/candidate/${candidateId}`),
+
+  downloadPDF: (reportId: string) =>
+    fetchAPI<any>(`/reports/${reportId}/pdf`),
+
+  downloadCSV: (reportIds: string[]) =>
+    fetchAPI<string>('/reports/export/csv', {
+      method: 'POST',
+      body: JSON.stringify({ reportIds }),
+    }),
+
+  downloadJSON: (reportIds: string[]) =>
+    fetchAPI<string>('/reports/export/json', {
+      method: 'POST',
+      body: JSON.stringify({ reportIds }),
+    }),
+};
+
+// ============== Async Video ==============
+export const asyncVideoService = {
+  create: (data: any) =>
+    fetchAPI<any>('/async-video/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  send: (interviewId: string) =>
+    fetchAPI<any>(`/async-video/${interviewId}/send`, { method: 'POST' }),
+
+  start: (interviewId: string) =>
+    fetchAPI<any>(`/async-video/${interviewId}/start`, { method: 'POST' }),
+
+  saveAnswer: (interviewId: string, questionId: string, answer: any) =>
+    fetchAPI<any>(`/async-video/${interviewId}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ questionId, answer }),
+    }),
+
+  complete: (interviewId: string) =>
+    fetchAPI<any>(`/async-video/${interviewId}/complete`, { method: 'POST' }),
+
+  getInterview: (id: string) => fetchAPI<any>(`/async-video/${id}`),
+
+  getPending: () => fetchAPI<{ interviews: any[] }>('/async-video/pending'),
+
+  getCompleted: () => fetchAPI<{ interviews: any[] }>('/async-video/completed'),
+
+  getProgress: (interviewId: string) =>
+    fetchAPI<{ answered: number; total: number; percentage: number }>(`/async-video/${interviewId}/progress`),
+};
+
+// ============== Take-home Challenges ==============
+export const takeHomeService = {
+  create: (data: any) =>
+    fetchAPI<any>('/take-home/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  invite: (challengeId: string, candidateEmail: string) =>
+    fetchAPI<any>(`/take-home/${challengeId}/invite`, {
+      method: 'POST',
+      body: JSON.stringify({ candidateEmail }),
+    }),
+
+  bulkInvite: (challengeId: string, candidates: { id: string; email: string }[]) =>
+    fetchAPI<any>(`/take-home/${challengeId}/bulk-invite`, {
+      method: 'POST',
+      body: JSON.stringify({ candidates }),
+    }),
+
+  start: (inviteId: string) =>
+    fetchAPI<any>(`/take-home/${inviteId}/start`, { method: 'POST' }),
+
+  submit: (challengeId: string, answers: any[]) =>
+    fetchAPI<any>(`/take-home/${challengeId}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    }),
+
+  getChallenge: (id: string) => fetchAPI<any>(`/take-home/${id}`),
+
+  getPending: () => fetchAPI<{ challenges: any[] }>('/take-home/pending'),
+
+  getSubmitted: () => fetchAPI<{ challenges: any[] }>('/take-home/submitted'),
+
+  getStats: (challengeId: string) =>
+    fetchAPI<{ stats: any }>(`/take-home/${challengeId}/stats`),
+};
+
+// ============== Preparation Mode ==============
+export const preparationService = {
+  checkSystem: () => fetchAPI<any>('/preparation/system-check'),
+
+  startSession: (role: string) =>
+    fetchAPI<any>('/preparation/start', {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    }),
+
+  getSession: (sessionId: string) => fetchAPI<any>(`/preparation/session/${sessionId}`),
+
+  completeSession: (sessionId: string) =>
+    fetchAPI<any>(`/preparation/session/${sessionId}/complete`, { method: 'POST' }),
+
+  getBreakTimer: (interviewId: string) => fetchAPI<any>(`/preparation/break-timer/${interviewId}`),
+
+  startBreakTimer: (interviewId: string, totalDuration: number, breakDuration: number) =>
+    fetchAPI<any>('/preparation/break-timer/start', {
+      method: 'POST',
+      body: JSON.stringify({ interviewId, totalDuration, breakDuration }),
+    }),
+
+  takeBreak: (interviewId: string) =>
+    fetchAPI<any>(`/preparation/break-timer/${interviewId}/take-break`, { method: 'POST' }),
+};
+
+// ============== Mock Interview ==============
+export const mockInterviewService = {
+  create: (role: string, difficulty: string, questionCount: number) =>
+    fetchAPI<any>('/mock-interview/create', {
+      method: 'POST',
+      body: JSON.stringify({ role, difficulty, questionCount }),
+    }),
+
+  start: (mockId: string) =>
+    fetchAPI<any>(`/mock-interview/${mockId}/start`, { method: 'POST' }),
+
+  submitAnswer: (mockId: string, questionId: string, answer: string, code?: string) =>
+    fetchAPI<any>(`/mock-interview/${mockId}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ questionId, answer, code }),
+    }),
+
+  complete: (mockId: string) =>
+    fetchAPI<any>(`/mock-interview/${mockId}/complete`, { method: 'POST' }),
+
+  getFeedback: (mockId: string) => fetchAPI<any>(`/mock-interview/${mockId}/feedback`),
+
+  getMyMocks: () => fetchAPI<{ mocks: any[] }>('/mock-interview/my-mocks'),
+};
+
+// ============== Panel Interview ==============
+export const panelInterviewService = {
+  create: (data: any) =>
+    fetchAPI<any>('/panel-interview/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  get: (panelId: string) => fetchAPI<any>(`/panel-interview/${panelId}`),
+
+  addPanelist: (panelId: string, panelist: any) =>
+    fetchAPI<any>(`/panel-interview/${panelId}/panelist`, {
+      method: 'POST',
+      body: JSON.stringify(panelist),
+    }),
+
+  join: (panelId: string, panelistId: string) =>
+    fetchAPI<any>(`/panel-interview/${panelId}/join`, {
+      method: 'POST',
+      body: JSON.stringify({ panelistId }),
+    }),
+
+  sendMessage: (panelId: string, content: string, isPrivate: boolean) =>
+    fetchAPI<any>(`/panel-interview/${panelId}/message`, {
+      method: 'POST',
+      body: JSON.stringify({ content, isPrivate }),
+    }),
+
+  submitScore: (panelId: string, score: number, feedback: string) =>
+    fetchAPI<any>(`/panel-interview/${panelId}/score`, {
+      method: 'POST',
+      body: JSON.stringify({ score, feedback }),
+    }),
+
+  complete: (panelId: string) =>
+    fetchAPI<any>(`/panel-interview/${panelId}/complete`, { method: 'POST' }),
+};
+
+// ============== AI Analysis ==============
+export const aiAnalysisService = {
+  getConfidence: (evaluationId: string) => fetchAPI<any>(`/ai-analysis/confidence/${evaluationId}`),
+
+  getComparative: (candidateId: string, role: string) =>
+    fetchAPI<any>(`/ai-analysis/comparative`, {
+      method: 'POST',
+      body: JSON.stringify({ candidateId, role }),
+    }),
+
+  getSkillRadar: (candidateId: string) => fetchAPI<any>(`/ai-analysis/skill-radar/${candidateId}`),
+
+  analyzeSentiment: (text: string) =>
+    fetchAPI<any>('/ai-analysis/sentiment', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+};
+
+// ============== Notifications ==============
+export const notificationService = {
+  send: (userId: string, type: string, channel: string, title: string, message: string, data?: any) =>
+    fetchAPI<any>('/notifications/send', {
+      method: 'POST',
+      body: JSON.stringify({ userId, type, channel, title, message, data }),
+    }),
+
+  sendTemplated: (templateId: string, variables: any) =>
+    fetchAPI<any>('/notifications/send-template', {
+      method: 'POST',
+      body: JSON.stringify({ templateId, variables }),
+    }),
+
+  getTemplates: () => fetchAPI<{ templates: any[] }>('/notifications/templates'),
+
+  getUserNotifications: (unreadOnly: boolean) =>
+    fetchAPI<{ notifications: any[] }>(`/notifications/my${unreadOnly ? '?unread=true' : ''}`),
+
+  markAsRead: (notificationId: string) =>
+    fetchAPI<any>(`/notifications/${notificationId}/read`, { method: 'POST' }),
+
+  getUnreadCount: () => fetchAPI<{ count: number }>('/notifications/unread-count'),
+};
+
+// ============== Resume Screener ==============
+export const resumeScreenerService = {
+  screen: (resumeId: string, targetRole: string, resumeText: string) =>
+    fetchAPI<any>('/resume-screener/screen', {
+      method: 'POST',
+      body: JSON.stringify({ resumeId, targetRole, resumeText }),
+    }),
+
+  getResult: (resultId: string) => fetchAPI<any>(`/resume-screener/result/${resultId}`),
+
+  getCandidateResults: (candidateId: string) =>
+    fetchAPI<{ results: any[] }>(`/resume-screener/candidate/${candidateId}`),
+};
+
+// ============== SQL Challenges ==============
+export const sqlChallengeService = {
+  getChallenges: (filters?: { difficulty?: string; category?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.difficulty) params.set('difficulty', filters.difficulty);
+    if (filters?.category) params.set('category', filters.category);
+    return fetchAPI<{ challenges: any[] }>(`/sql-challenges?${params}`);
+  },
+
+  getChallenge: (id: string) => fetchAPI<any>(`/sql-challenges/${id}`),
+
+  submitQuery: (challengeId: string, query: string) =>
+    fetchAPI<any>(`/sql-challenges/${challengeId}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    }),
+
+  getStats: (challengeId: string) => fetchAPI<any>(`/sql-challenges/${challengeId}/stats`),
+};
+
+// ============== Git Integration ==============
+export const gitIntegrationService = {
+  connect: (accessToken: string) =>
+    fetchAPI<any>('/git/connect', {
+      method: 'POST',
+      body: JSON.stringify({ accessToken }),
+    }),
+
+  disconnect: () => fetchAPI<any>('/git/disconnect', { method: 'POST' }),
+
+  getRepositories: () => fetchAPI<{ repositories: any[] }>('/git/repositories'),
+
+  analyzeRepository: (repoId: number) =>
+    fetchAPI<any>(`/git/repositories/${repoId}/analyze`, { method: 'POST' }),
+
+  getAnalysis: (repoId: number) => fetchAPI<any>(`/git/repositories/${repoId}/analysis`),
+
+  getReport: () => fetchAPI<any>('/git/report'),
+};

@@ -25,6 +25,11 @@ import SettingsPage from "./pages/SettingsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AdminPage from "./pages/AdminPage";
 import CandidatePortal from "./pages/CandidatePortal";
+import SchedulingPage from "./pages/SchedulingPage";
+import QuestionBankPage from "./pages/QuestionBankPage";
+import ReportsPage from "./pages/ReportsPage";
+import PreparationPage from "./pages/PreparationPage";
+import PipelinePage from "./pages/PipelinePage";
 
 // 🏠 Home Component (Smart Resume Handling)
 function Home() {
@@ -254,6 +259,81 @@ function App() {
                 <>
                   <SignedIn>
                     <CandidatePortal />
+                  </SignedIn>
+                  <SignedOut>
+                    <Navigate to="/sign-in" replace />
+                  </SignedOut>
+                </>
+              }
+            />
+
+            {/* 🔒 Protected Route: Scheduling */}
+            <Route
+              path="/scheduling"
+              element={
+                <>
+                  <SignedIn>
+                    <SchedulingPage />
+                  </SignedIn>
+                  <SignedOut>
+                    <Navigate to="/sign-in" replace />
+                  </SignedOut>
+                </>
+              }
+            />
+
+            {/* 🔒 Protected Route: Question Bank */}
+            <Route
+              path="/questions"
+              element={
+                <>
+                  <SignedIn>
+                    <QuestionBankPage />
+                  </SignedIn>
+                  <SignedOut>
+                    <Navigate to="/sign-in" replace />
+                  </SignedOut>
+                </>
+              }
+            />
+
+            {/* 🔒 Protected Route: Reports */}
+            <Route
+              path="/reports"
+              element={
+                <>
+                  <SignedIn>
+                    <ReportsPage />
+                  </SignedIn>
+                  <SignedOut>
+                    <Navigate to="/sign-in" replace />
+                  </SignedOut>
+                </>
+              }
+            />
+
+            {/* 🔒 Protected Route: Preparation */}
+            <Route
+              path="/preparation"
+              element={
+                <>
+                  <SignedIn>
+                    <PreparationPage />
+                  </SignedIn>
+                  <SignedOut>
+                    <Navigate to="/sign-in" replace />
+                  </SignedOut>
+                </>
+              }
+            />
+
+            {/* 🔒 Protected Route: Pipeline */}
+            <Route
+              path="/pipeline"
+              element={
+                <>
+                  <SignedIn>
+                    <PipelinePage />
                   </SignedIn>
                   <SignedOut>
                     <Navigate to="/sign-in" replace />
