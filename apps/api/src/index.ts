@@ -387,9 +387,10 @@ app.use(
     "/graphql",
     graphqlLimiter,
     expressMiddleware(apolloServer, {
-      context: async ({ req }: { req: any }) => {
-        const userId = req.auth?.userId || null;
-        const userRole = req.userRole || "candidate";
+      context: async ({ req }: { req: unknown }) => {
+        const r = req as { auth?: { userId?: string }; userRole?: string };
+        const userId = r.auth?.userId || "";
+        const userRole: "candidate" | "interviewer" | "admin" = (r.userRole as "candidate" | "interviewer" | "admin") || "candidate";
         return { userId, userRole };
       },
     }),
@@ -399,12 +400,13 @@ app.use(
 });
 
 // 13. Global Error Handler (must be last)
-app.use((err: Error, _req: Request, res: Response, _next: () => void) => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: Error, _req: Request, res: Response, _next: unknown) => {
   if (err.message && err.message.startsWith("CORS policy")) {
     return res.status(403).json({ error: "CORS Forbidden", details: err.message });
   }
   logger.error({ err: err.message, stack: err.stack }, "unhandled error");
-  captureException(err, { path: (_req as any).path, method: _req.method });
+  captureException(err, { path: _req.path, method: _req.method });
   res.status(500).json({ error: "Internal Server Error" });
 });
 
@@ -467,7 +469,7 @@ process.on("SIGINT", async () => {
 const httpServer = createServer(app);
 
 if (require.main === module) {
-  const io = createSocketServer(httpServer, allowedOrigins);
+  createSocketServer(httpServer, allowedOrigins);
   httpServer.listen(PORT, () => {
     logger.info({ port: PORT, env: process.env.NODE_ENV || "development" }, "server started with Socket.IO");
   });
