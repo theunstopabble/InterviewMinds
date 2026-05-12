@@ -19,236 +19,160 @@
 # InterviewMinds
 **Production-Grade Enterprise AI Mock Interview Platform**
 
-> Transform your interview preparation with a hyper-realistic, AI-driven simulation that analyzes your resume, proctors your session, verifies truthfulness, and provides actionable feedback with complete enterprise security.
+> An enterprise-grade interview simulation platform featuring AI-driven assessment, real-time proctoring, truthfulness verification, and comprehensive analytics—built for organizations requiring secure, scalable, and compliance-ready candidate evaluation.
 
 ---
 
 ## Table of Contents
-- [Screenshots](#screenshots)
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [Tech Stack](#tech-stack)
-- [Frontend Pages](#frontend-pages)
-- [Backend Services](#backend-services)
-- [Folder Structure](#folder-structure)
-- [Quick Start](#quick-start)
-- [Environment Variables](#environment-variables)
-- [API Endpoints](#api-endpoints)
+- [Architecture Overview](#architecture-overview)
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Configuration](#configuration)
+- [API Reference](#api-reference)
+- [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
 
 ---
 
-## Screenshots
+## Architecture Overview
 
-<div align="center">
+InterviewMinds implements a **monolithic Turborepo architecture** optimized for enterprise deployment. The system comprises three primary layers:
 
-### Dashboard
-<img src="screenshots/dashboard.png" alt="Dashboard" width="100%"/>
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Frontend** | React 18 + Vite | Dynamic UI with Shadcn UI components |
+| **API Gateway** | Express + TypeScript | RESTful services with middleware pipeline |
+| **Data Layer** | MongoDB + Redis | Persistent storage with caching |
 
-### Live Interview
-<img src="screenshots/interview.png" alt="Interview Session" width="100%"/>
-
-### Code Editor
-<img src="screenshots/code-editor.png" alt="Code Editor" width="100%"/>
-
-### AI Proctoring
-<img src="screenshots/proctoring.png" alt="AI Proctoring" width="100%"/>
-
-</div>
-
----
-
-## Overview
-
-InterviewMinds is a **production-grade, enterprise-ready AI platform** designed to simulate high-pressure technical interviews with complete accuracy, security, and truthfulness verification.
-
-**Architecture:**
-- **Turborepo Monorepo** for efficient builds
-- **React 18/Vite** frontend with **Shadcn UI**
-- **Node.js 20/Express** backend with **MongoDB**
-- **Groq (Llama 3)** for ultra-low latency AI
-- **TensorFlow.js** for real-time proctoring
-- **Redis** for rate limiting & caching
-- **BullMQ** for async job processing
-
-**Live Demo**: [https://interviewminds.vercel.app/](https://interviewminds.vercel.app/)
+**Infrastructure Pattern:**
+- **Compute**: Node.js 20 (containerized via Docker)
+- **AI Inference**: Groq API (Llama 3) for sub-500ms response latency
+- **Real-time Processing**: TensorFlow.js for client-side ML inference
+- **Async Jobs**: BullMQ for background task processing
+- **Observability**: Sentry (tracing), Prometheus (metrics)
 
 ---
 
-## Key Features
+## Features
 
-### AI-Driven Intelligence
-- **Deep Resume Analysis**: PDF parsing → tech stack extraction → personalized questions
-- **Resume-Job Matching**: Skill gap analysis, experience matching, job fit scoring
-- **Adaptive Personas**: Vikram (Strict Tech), Neha (HR Friendly), Sam (System Design)
-- **Contextual Questioning**: Questions evolve based on your responses
+### Core Interview Engine
+- **AI-Powered Assessment**: LLM-driven interviewer with conversation memory and contextual follow-ups
+- **Multi-Modal Analysis**: Voice (STT/TTS), facial expressions, gesture recognition
+- **Live Coding Environment**: Sandboxed code execution with security analysis
 
-### Immersive Interview Experience
-- **Voice-to-Voice**: Real-time STT + TTS for natural conversation
-- **Live Coding Sandbox**: CodeEditor + compiler with instant execution + security analysis
-- **Ultra Low Latency**: Groq API (<500ms responses)
+### Intelligent Proctoring
+- **Behavioral Analytics**: Face detection, eye tracking, expression analysis
+- **Environment Monitoring**: Tab-switch detection, full-screen enforcement
+- **Audio Metrics**: Speech pace, filler word detection, voice stress analysis
 
-### Smart Proctoring
-- **Face Detection**: Monitors presence (TensorFlow.js)
-- **Eye Tracking**: Gaze direction, blink rate, eye contact percentage
-- **Expression Analysis**: Emotion detection (happy, anxious, confused, etc.)
-- **Anti-Cheating**: Tab-switch + full-screen enforcement + fraud detection
-- **Audio Analysis**: Voice count, filler words, pace/volume
-
-### Truthfulness Verification
-- **Resume Fact Verification**: Entity extraction, timeline analysis, skill gap detection
-- **Answer Validation**: Red flag detection (vague, inconsistent, memorized, copied)
-- **Dynamic Follow-ups**: Context-aware probing questions
+### Resume Intelligence
+- **Parsing & Analysis**: PDF extraction with tech stack mapping
+- **Job Matching**: Skill gap analysis with weighted scoring
+- **Verification Engine**: Fact-checking, timeline validation, red flag detection
 
 ### Enterprise Security
-- **E2E Encryption**: RSA + AES-256 encryption for all sensitive data
-- **Biometric Auth**: Face/Voice/Fingerprint verification with liveness detection
-- **IP/Geo Controls**: Country blocking, VPN detection, CIDR whitelisting
-- **Fraud Detection**: Browser fingerprinting, behavior analysis, anomaly detection
+- **Data Protection**: E2E encryption (RSA + AES-256)
+- **Access Control**: RBAC, biometric authentication
+- **Fraud Prevention**: Browser fingerprinting, anomaly detection, geo-blocking
 
-### Advanced Features (NEW)
-- **Scheduling**: Calendar-based interview booking with timezone support
-- **Pipeline Management**: Drag-drop Kanban board for candidate tracking
-- **AI Resume Screener**: Automatic candidate screening with chatbot pre-screening
-- **Panel Interviews**: Multiple interviewers with real-time collaboration
-- **Reports**: PDF/CSV/JSON exports with branding
-
-### Analytics & Insights
-- **Dashboard**: Score distribution, competency trends, proctoring metrics
-- **Predictive**: Success prediction, pipeline analysis, training recommendations
-- **Compliance**: Audit logging, GDPR data export, consent management
+### Enterprise Operations
+- **Scheduling**: Calendar-based booking with timezone handling
+- **Pipeline Management**: Kanban-based candidate tracking
+- **Reporting**: PDF/CSV/JSON exports with brand customization
+- **Compliance**: Audit logging, GDPR export, consent management
 
 ---
 
-## Tech Stack
+## Technology Stack
 
-| Category | Technologies |
-|----------|-------------|
-| **Monorepo** | TurboRepo, npm workspaces |
+| Category | Implementation |
+|----------|----------------|
+| **Monorepo** | Turborepo, npm workspaces |
 | **Frontend** | React 18, Vite, TypeScript, Tailwind CSS, Shadcn UI |
 | **Backend** | Node.js 20, Express, TypeScript |
 | **Database** | MongoDB (Mongoose ODM) |
 | **Cache/Queue** | Redis, BullMQ |
-| **Auth** | Clerk (Google/GitHub/Email), Biometric |
-| **AI/ML** | Groq (Llama 3), Google Gemini, Azure Speech, TensorFlow.js |
-| **Security** | E2E Encryption (RSA/AES), RBAC, CSRF |
+| **Authentication** | Clerk (OAuth), Custom JWT, Biometric |
+| **AI/ML** | Groq (Llama 3), Google Gemini, TensorFlow.js |
+| **Security** | E2E Encryption, RBAC, CSRF Protection |
 | **Observability** | Sentry, Prometheus |
 | **Media** | Cloudinary, WebRTC |
-| **Compliance** | SOC 2, GDPR, HIPAA, ISO 27001 |
 
 ---
 
-## Frontend Pages
-
-| Route | Page | Purpose |
-|-------|------|---------|
-| `/sign-in` | SignInPage | Authentication |
-| `/` | DashboardPage | Resume & Job Matching |
-| `/dashboard` | DashboardPage | History & Stats |
-| `/interview` | InterviewPage | Live Interview |
-| `/feedback/:id` | FeedbackPage | Results |
-| `/settings` | SettingsPage | Enterprise Settings |
-| `/analytics` | AnalyticsPage | Dashboard & Trends |
-| `/admin` | AdminPage | Compliance & Audit |
-| `/candidate-portal` | CandidatePortal | Self-service |
-| `/scheduling` | SchedulingPage | Calendar & Booking |
-| `/questions` | QuestionBankPage | Question Library |
-| `/reports` | ReportsPage | PDF/CSV Export |
-| `/preparation` | PreparationPage | System Check |
-| `/pipeline` | PipelinePage | Kanban Board |
-
-**Total: 13 Pages | 31 Service Modules**
-
----
-
-## Backend Services
-
-### Enterprise Services (40+)
-- Core: jobMatching, questionGeneration, codeAnalysis
-- Security: e2eEncryption, biometricAuth, fraudDetection, geoFencing
-- Proctoring: videoProctoring
-- Assessment: resumeVerification, answerValidation, dynamicQuestions
-- Integrations: ssoIntegration, webhooks, atsIntegration
-- Infrastructure: multiTenancy, compliance
-- Analytics: analytics
-- Scheduling: scheduling, waitingRoom, preparation
-- Assessment: questionBank, scorecard, sqlChallenges
-- Collaboration: mockInterview, panelInterview, asyncVideo, takeHome
-- AI: aiAnalysis, resumeScreener
-- Communication: notifications, gitIntegration
-- Reporting: reportGenerator
-
----
-
-## Folder Structure
+## Project Structure
 
 ```
 InterviewMinds/
 ├── apps/
-│   ├── api/                           # Backend Server
+│   ├── api/                           # Backend API Server
 │   │   ├── src/
-│   │   │   ├── lib/                   # Enterprise Services (70+ files)
-│   │   │   ├── routes/                # API Routes (32+ files)
-│   │   │   ├── middleware/            # Auth, RBAC, Audit
-│   │   │   ├── models/                # MongoDB schemas
+│   │   │   ├── lib/                   # Business logic services (79 modules)
+│   │   │   ├── routes/                # REST API routes (32 endpoints)
+│   │   │   ├── middleware/            # Auth, validation, audit
+│   │   │   ├── models/                # MongoDB schemas (10 collections)
 │   │   │   └── index.ts               # Entry point
 │   │   └── Dockerfile
 │   └── web/                          # Frontend Client
 │       ├── src/
-│       │   ├── components/            # UI components (26)
+│       │   ├── components/            # Reusable UI components
 │       │   ├── hooks/                 # Custom React hooks
 │       │   ├── pages/                 # Route pages (13)
-│       │   ├── services/              # API services (31)
+│       │   ├── services/              # API client services (45)
 │       │   └── lib/                   # Utilities
 │       ├── public/models/             # TensorFlow.js models
 │       └── Dockerfile
 ├── packages/
-│   └── shared/                       # Shared types
-├── docs/                             # Documentation
-│   ├── ENTERPRISE_ENHANCEMENTS.md    # Full feature spec
-│   ├── API.md                       # API documentation
-│   ├── ARCHITECTURE.md              # System architecture
-│   ├── DB_SCHEMA.md                 # Database schema
+│   └── shared/                       # Shared TypeScript types
+├── docs/                             # System documentation
+│   ├── API.md                        # REST API reference
+│   ├── ARCHITECTURE.md               # System architecture
+│   ├── DB_SCHEMA.md                  # Database schema
 │   ├── WORKFLOW.md                   # Process flows
-│   ├── TECH_STACK.md                # Technology details
-│   ├── EDGE_CASES.md                 # Edge case handling
-│   └── DEPLOYMENT.md                # Deployment guide
-└── docker-compose.yml                # Local development
+│   └── DEPLOYMENT.md                 # Deployment guide
+└── docker-compose.yml                # Container orchestration
 ```
 
 ---
 
-## Quick Start
+## Getting Started
 
 ### Prerequisites
-- Node.js **v20+**
-- MongoDB (Atlas recommended)
-- Redis (for rate limiting)
-- Clerk Account (https://clerk.com)
-- Groq API Key
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Node.js | v20+ | LTS recommended |
+| MongoDB | v6.0+ | Atlas or local |
+| Redis | v7.0+ | For caching/queue |
+| npm | v10+ | Package management |
 
 ### Installation
 
 ```bash
+# Clone repository
 git clone https://github.com/theunstopabble/InterviewMinds.git
 cd InterviewMinds
+
+# Install dependencies
 npm install
 ```
 
-### Development
+### Development Environment
 
 ```bash
-# Run all apps (API + Web)
+# Start all services (API + Web)
 npm run dev
 ```
 
-```
-Backend: http://localhost:8000
-Frontend: http://localhost:5173
-```
+| Service | Endpoint |
+|---------|----------|
+| Backend API | http://localhost:8000 |
+| Frontend | http://localhost:5173 |
 
-### Docker (Production)
+### Production (Docker)
 
 ```bash
 docker-compose up -d
@@ -256,12 +180,14 @@ docker-compose up -d
 
 ---
 
-## Environment Variables
+## Configuration
 
-### Backend (apps/api/.env)
+### Backend Environment
+
+Create `apps/api/.env`:
 
 ```bash
-# Environment
+# Server
 NODE_ENV=development
 PORT=8000
 
@@ -270,10 +196,10 @@ MONGO_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/interviewminds
 REDIS_URL=redis://localhost:6379
 
 # Security
-JWT_SECRET=<generate-strong-secret-min-32-chars>
+JWT_SECRET=<32-char-minimum-secret>
 CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 
-# Auth (Clerk)
+# Authentication (Clerk)
 CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 
@@ -281,20 +207,22 @@ CLERK_SECRET_KEY=sk_test_...
 GROQ_API_KEY=gsk_...
 GEMINI_API_KEY=...
 
-# Azure TTS (Optional)
+# Azure Speech (TTS/STT)
 AZURE_SPEECH_KEY=...
 AZURE_SPEECH_REGION=centralindia
 
-# Cloudinary (Optional)
+# Media Storage
 CLOUDINARY_CLOUD_NAME=...
 CLOUDINARY_API_KEY=...
 CLOUDINARY_API_SECRET=...
 
-# Observability (Optional)
+# Monitoring
 SENTRY_DSN=https://...
 ```
 
-### Frontend (apps/web/.env)
+### Frontend Environment
+
+Create `apps/web/.env`:
 
 ```bash
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
@@ -304,75 +232,55 @@ VITE_SENTRY_DSN=https://...
 
 ---
 
-## API Endpoints
+## API Reference
 
-### Authentication & Security
-- `/api/auth/*` - Login, register, JWT tokens
-- `/api/e2e-encryption/*` - End-to-end encryption
-- `/api/biometric/*` - Face/Voice/Fingerprint auth
-- `/api/fraud-detection/*` - Browser fingerprinting
-- `/api/geo-fencing/*` - IP/Country blocking
+| Domain | Endpoints | Description |
+|--------|-----------|-------------|
+| **Authentication** | `/api/auth/*` | JWT-based auth with Clerk integration |
+| **Security** | `/api/e2e-encryption/*`, `/api/biometric/*`, `/api/fraud-detection/*`, `/api/geo-fencing/*` | Enterprise security layer |
+| **Interview** | `/api/interview/*`, `/api/chat/*`, `/api/compiler/*` | Core interview functionality |
+| **Proctoring** | `/api/proctoring/*` | Real-time monitoring |
+| **Assessment** | `/api/resume/*`, `/api/job-matching/*`, `/api/questions/*`, `/api/answer-validation/*` | Candidate evaluation |
+| **Scheduling** | `/api/scheduling/*`, `/api/question-bank/*`, `/api/scorecard/*` | Interview management |
+| **AI/ML** | `/api/llm-interviewer/*`, `/api/multimodal-ai/*`, `/api/smart-assessment/*`, `/api/analytics/*` | Intelligence layer |
+| **Collaboration** | `/api/collaboration/*`, `/api/panel-interview/*` | Real-time features |
+| **Enterprise** | `/api/sso/*`, `/api/ats/*`, `/api/tenants/*`, `/api/compliance/*` | Organizational features |
+| **Reporting** | `/api/reports/*`, `/api/infrastructure/*`, `/api/developer/*` | Operations |
 
-### Core Interview
-- `/api/interview/*` - Interview sessions
-- `/api/chat/*` - AI chat with Groq
-- `/api/compiler/*` - Multi-language code execution
-- `/api/proctoring/*` - Video proctoring with TensorFlow.js
+> Full API documentation available in `docs/API.md`
 
-### Resume & Assessment
-- `/api/resume/*` - Resume parsing & upload
-- `/api/job-matching/*` - Resume-job matching
-- `/api/questions/*` - Question generation
-- `/api/answer-validation/*` - Answer evaluation
-- `/api/dynamic-questions/*` - Follow-up questions
-- `/api/code-analysis/*` - Code quality analysis
+---
 
-### Scheduling & Management
-- `/api/scheduling/*` - Calendar-based booking
-- `/api/question-bank/*` - Question library
-- `/api/scorecard/*` - Evaluation rubrics
-- `/api/reports/*` - PDF/CSV exports
-- `/api/panel-interview/*` - Multi-interviewer panels
+## Documentation
 
-### AI & Machine Learning
-- `/api/llm-interviewer/*` - LLM-powered interviewer with memory
-- `/api/multimodal-ai/*` - Voice, facial, gesture analysis
-- `/api/smart-assessment/*` - AI predictions & competency gaps
-- `/api/analytics/*` - Predictive analytics, sentiment analysis
-
-### Real-Time Collaboration
-- `/api/collaboration/*` - Code editor, whiteboard, video calls
-
-### Developer Tools
-- `/api/infrastructure/*` - DB pooling, Redis caching, CDN
-- `/api/developer/*` - GitHub/GitLab integration, code review, sandbox
-
-### Enterprise Features
-- `/api/sso/*` - Single sign-on
-- `/api/ats/*` - ATS integration (Greenhouse, Lever)
-- `/api/tenants/*` - Multi-tenancy support
-- `/api/compliance/*` - Data retention, PII masking, audit trail
+| Document | Content |
+|----------|---------|
+| `docs/API.md` | Complete REST API reference with request/response schemas |
+| `docs/ARCHITECTURE.md` | System design, component relationships, data flow |
+| `docs/DB_SCHEMA.md` | MongoDB collections, indexes, relationships |
+| `docs/WORKFLOW.md` | User journeys, process diagrams, state machines |
+| `docs/DEPLOYMENT.md` | Infrastructure setup, CI/CD, monitoring |
 
 ---
 
 ## Contributing
 
-1. Fork the project
-2. Create feature branch: `git checkout -b feature/AmazingFeature`
-3. Commit changes: `git commit -m 'Add AmazingFeature'`
-4. Push to branch: `git push origin feature/AmazingFeature`
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/FeatureName`
+3. Commit with conventional commits: `git commit -m 'feat: add feature'`
+4. Push to branch: `git push origin feature/FeatureName`
 5. Open Pull Request
 
 ---
 
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+MIT License. See `LICENSE` for details.
 
 ---
 
 <div align="center">
-  <p>Built with ❤️ by <a href="https://gautam-kr.vercel.app" target="_blank">Gautam Kumar</a></p>
+  <p>Built by <a href="https://gautam-kr.vercel.app" target="_blank">Gautam Kumar</a></p>
   <p>
     <a href="https://www.linkedin.com/in/gautamkr62" target="_blank">
       <img src="https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" />

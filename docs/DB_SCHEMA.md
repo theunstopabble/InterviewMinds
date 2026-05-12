@@ -1,635 +1,652 @@
 # InterviewMinds Database Schema
 
+> **Version:** 1.0.0 | **Last Updated:** May 2026 | **Database:** MongoDB Atlas
+
+## Table of Contents
+- [Overview](#overview)
+- [Entity Relationship](#entity-relationship)
+- [Collections](#collections)
+- [Indexes](#indexes)
+- [Data Models](#data-models)
+
+---
+
 ## Overview
 
-InterviewMinds uses MongoDB as its primary database. The schema is designed to support:
-- Multi-tenant user management with role-based access
-- Resume storage with vector embeddings for RAG
-- Interview sessions with real-time messaging
-- Audit logging for compliance
+InterviewMinds uses **MongoDB** as its primary database with the following design principles:
 
-## Entity Relationship Diagram
+- **Multi-tenant architecture** with tenant isolation
+- **Document-based design** for flexible schema evolution
+- **Vector embeddings** for semantic search (RAG)
+- **Time-series optimized** for audit logging
+- **Real-time ready** with change streams
+
+---
+
+## Entity Relationship
 
 ```
-┌─────────────┐       ┌─────────────┐       ┌─────────────┐
-│  UserRole  │──────<│ Interview  │>──────│   Resume    │
-│  (Clerk)   │       │             │       │             │
-└──────┬──────┘       └──────┬──────┘       └──────┬──────┘
-       │                      │                      │
-       │              ┌───────┴───────┐              │
-       │              │               │              │
-       ▼              ▼               ▼              ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│   Audit    │ │  Message    │ │   Webhook   │ │  System     │
-│   Log      │ │             │ │             │ │  Config     │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           Entity Relationship Diagram                                │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│     ┌─────────┐      ┌─────────┐      ┌─────────┐      ┌─────────┐                 │
+│     │  Tenant │<───>│  User   │<───>│  Role   │      │ Resume  │                 │
+│     │ (Multi) │      │(Clerk)  │      │ (RBAC)  │      │         │                 │
+│     └────┬────┘      └────┬────┘      └────┬────┘      └────┬────┘                 │
+│          │               │               │               │                        │
+│          │               │               │               │                        │
+│          ▼               ▼               ▼               ▼                        │
+│     ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐        │
+│     │  Audit  │   │Interview│   │ Message │   │ Question│   │  Score  │        │
+│     │   Log   │   │Session  │   │         │   │  Bank   │   │  Card   │        │
+│     └─────────┘   └────┬────┘   └─────────┘   └────┬────┘   └────┬────┘        │
+│                        │                         │               │               │
+│                        ▼                         ▼               ▼               │
+│                   ┌─────────┐              ┌─────────┐     ┌─────────┐         │
+│                   │  Job    │              │   Code  │     │  Report │         │
+│                   │ Matching│              │Analysis │     │         │         │
+│                   └─────────┘              └─────────┘     └─────────┘         │
+│                                                                                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Collections
 
-### 1. UserRoles Collection
+### Core Collections
 
-Stores user roles and permissions. Uses Clerk for authentication.
+| Collection | Purpose | Size Estimate |
+|------------|---------|---------------|
+| `users` | User accounts (Clerk) | Small |
+| `tenants` | Multi-tenant orgs | Small |
+| `resumes` | Resume documents | Medium |
+| `interviews` | Interview sessions | Large |
+| `questions` | Question bank | Medium |
+| `messages` | Chat messages | Large |
+| `scores` | Evaluations | Large |
+| `audit_logs` | Compliance trail | Large |
+| `notifications` | User alerts | Medium |
+| `reports` | Generated reports | Medium |
+| `webhooks` | Event handlers | Small |
+| `jobs` | Async queue | Small |
+
+---
+
+## Data Models
+
+### 1. Users Collection
 
 ```javascript
 {
   _id: ObjectId,
-  userId: String,           // Clerk user ID (unique)
-  role: String,             // 'candidate' | 'interviewer' | 'admin'
-  assignedBy: String,       // Admin user ID who assigned role
-  assignedAt: Date,
+  clerkId: String,              // Clerk user ID (unique)
+  email: String,
+  firstName: String,
+  lastName: String,
+  avatar: String,
+  tenantId: ObjectId,          // Multi-tenant reference
+  
+  // Profile
+  phone: String,
+  location: String,
+  timezone: String,
+  
+  // Status
+  status: "active" | "inactive" | "suspended",
+  emailVerified: Boolean,
+  lastLoginAt: Date,
+  
+  // Metadata
   createdAt: Date,
-  updatedAt: Date
+  updatedAt: Date,
+  
+  // Indexes
+  { clerkId: 1 },              // unique
+  { tenantId: 1, email: 1 },
+  { status: 1 }
 }
-
-// Indexes
-{ userId: 1 }              // unique
-{ userId: 1, role: 1 }    // compound
 ```
 
-**Roles & Permissions:**
-
-| Role | Permissions |
-|------|-------------|
-| `candidate` | resume:create, resume:read_own, interview:start, interview:end, chat:send, compiler:use, tts:use |
-| `interviewer` | All candidate + resume:read_any, interview:read_any, audit:read, user:read |
-| `admin` | All permissions (wildcard *) |
-
----
-
-### 2. Resumes Collection
-
-Stores user resumes with extracted text and vector embeddings for RAG.
+### 2. Tenants Collection (Multi-tenant)
 
 ```javascript
 {
   _id: ObjectId,
-  userId: String,           // Owner user ID (indexed)
-  fileName: String,         // Original filename
-  content: String,          // Extracted full text (indexed for search)
-  chunks: [
-    {
-      text: String,        // Chunk text
-      embedding: Number[]   // Vector embedding (384-dim from all-MiniLM-L6-v2)
+  name: String,                // Organization name
+  slug: String,                 // URL-friendly identifier
+  
+  // Branding
+  logo: String,
+  primaryColor: String,
+  customDomain: String,
+  
+  // Settings
+  settings: {
+    maxUsers: Number,
+    maxInterviews: Number,
+    features: {
+      aiProctoring: Boolean,
+      videoRecording: Boolean,
+      backgroundChecks: Boolean
     }
-  ],
-  createdAt: Date,
-  updatedAt: Date
-}
-
-// Indexes
-{ userId: 1 }              // User lookups
-{ userId: 1, createdAt: -1 } // Compound for user + time
-{ "chunks.text": "text" } // Text search index
-```
-
-**Processing Pipeline:**
-1. PDF parsing (pdf2json)
-2. Text cleaning (remove artifacts)
-3. Chunking (RecursiveCharacterTextSplitter, 500 chars, 50 overlap)
-4. Embedding generation (Xenova/all-MiniLM-L6-v2)
-5. MongoDB storage
-
----
-
-### 3. Interviews Collection
-
-Stores interview sessions with messages and AI-generated feedback.
-
-```javascript
-{
-  _id: ObjectId,
-  userId: String,           // Owner user ID
-  resumeId: String,          // Reference to Resume
-  status: String,           // 'ongoing' | 'completed'
-  completedAt: Date,       // Set when status becomes 'completed'
-  videoUrl: String,         // Cloudinary URL (optional)
-  messages: [
-    {
-      role: String,        // 'user' | 'model' | 'ai' | 'system'
-      text: String,
-      timestamp: Date
-    }
-  ],
-  score: Number,           // 0-100 AI-generated score
-  feedback: String,         // AI-generated feedback text
-  metrics: [               // Radar chart data
-    {
-      subject: String,      // e.g., "Content Quality"
-      A: Number,           // Score (0-100)
-      fullMark: Number      // Always 100
-    }
-  ],
-  createdAt: Date,
-  updatedAt: Date
-}
-
-// Indexes
-{ userId: 1 }
-{ resumeId: 1 }
-{ status: 1 }
-{ userId: 1, createdAt: -1 }  // Compound
-{ completedAt: 1 }             // TTL index (90 days)
-```
-
-**Scoring Metrics (Weighted Ensemble):**
-- Content Quality (40%) - Technical accuracy, code logic
-- Communication Skills (30%) - Clarity, articulation
-- Behavioral Indicators (20%) - Confidence, problem-solving approach
-- Domain Expertise (10%) - Depth in tech stack
-
----
-
-### 4. Messages Collection
-
-Stores real-time chat messages for Socket.IO functionality.
-
-```javascript
-{
-  _id: ObjectId,
-  roomId: String,           // Interview room ID
-  senderId: String,         // Clerk user ID
-  senderName: String,       // Display name
-  content: String,         // Message text (max 10000 chars)
-  type: String,             // 'text' | 'system' | 'code'
-  editedAt: Date,           // If edited
-  deletedAt: Date,         // If soft-deleted
-  createdAt: Date,         // Timestamp
-  updatedAt: Date
-}
-
-// Indexes
-{ roomId: 1 }              // Room queries
-{ senderId: 1 }           // User queries
-{ roomId: 1, createdAt: -1 } // Compound for pagination
-```
-
----
-
-### 5. AuditLogs Collection
-
-Stores audit trail for compliance and security monitoring.
-
-```javascript
-{
-  _id: ObjectId,
-  userId: String,           // Actor user ID
-  role: String,             // Actor role at time of action
-  action: String,           // e.g., "POST /api/interview/end"
-  resource: String,          // e.g., "interview", "resume"
-  resourceId: String,        // MongoDB _id of affected document
-  status: String,           // 'success' | 'failure' | 'denied'
-  statusCode: Number,       // HTTP status code
-  ip: String,               // Client IP (from X-Forwarded-For)
-  userAgent: String,        // Browser/client info
-  correlationId: String,    // Request correlation ID
-  metadata: {               // Sanitized additional info
-    params: Object,
-    query: Object,
-    bodyKeys: String[]
   },
+  
+  // Subscription
+  plan: "free" | "pro" | "enterprise",
+  stripeCustomerId: String,
+  billingEmail: String,
+  
+  // Compliance
+  gdprEnabled: Boolean,
+  dataRetentionDays: Number,
+  
   createdAt: Date,
   updatedAt: Date
 }
-
-// Indexes
-{ userId: 1 }
-{ action: 1 }
-{ resource: 1 }
-{ status: 1 }
-{ userId: 1, createdAt: -1 }   // Compound
-{ resource: 1, action: 1, createdAt: -1 } // Compound
-{ status: 1, createdAt: -1 }    // Compound
 ```
 
-**Audit Events:**
-- All API requests (method, path, status)
-- Authentication events (login, logout, failures)
-- Role changes
-- Resource CRUD operations
-
----
-
-### 6. Webhooks Collection
-
-Stores webhook configurations for external integrations.
+### 3. Resumes Collection
 
 ```javascript
 {
   _id: ObjectId,
-  userId: String,           // Owner user ID
-  url: String,              // Webhook URL
-  events: [String],         // Subscribed events
-  secret: String,           // HMAC-SHA256 signing secret
-  active: Boolean,          // Enable/disable flag
-  lastDeliveredAt: Date,    // Last successful delivery
-  lastStatusCode: Number,   // Last HTTP status
-  failureCount: Number,    // Consecutive failures
+  userId: ObjectId,
+  tenantId: ObjectId,
+  
+  // File Info
+  fileName: String,
+  originalName: String,
+  mimeType: String,
+  size: Number,                 // bytes
+  
+  // Content
+  content: String,             // Extracted text
+  extractedData: {
+    name: String,
+    email: String,
+    phone: String,
+    location: String,
+    summary: String,
+    skills: [String],
+    experience: [{
+      company: String,
+      title: String,
+      duration: String,
+      description: String
+    }],
+    education: [{
+      school: String,
+      degree: String,
+      year: Number
+    }],
+    certifications: [String],
+    languages: [String]
+  },
+  
+  // Vector Embeddings (RAG)
+  chunks: [{
+    text: String,
+    embedding: Number[],         // 384-dim from all-MiniLM-L6-v2
+    page: Number
+  }],
+  
+  // AI Analysis
+  analysis: {
+    score: Number,              // 0-100
+    strengths: [String],
+    weaknesses: [String],
+    recommendations: [String],
+    jobMatches: [{
+      jobId: ObjectId,
+      matchScore: Number,
+      missingSkills: [String]
+    }]
+  },
+  
+  // Status
+  status: "processing" | "ready" | "failed",
+  processedAt: Date,
+  
   createdAt: Date,
   updatedAt: Date
 }
-
-// Indexes
-{ userId: 1 }
-{ userId: 1, active: 1 }
-{ events: 1 }
 ```
 
-**Webhook Events:**
-- `interview.completed` - Interview ended with score
-- `user.registered` - New user signup
-- `resume.processed` - Resume processing complete
-
----
-
-## Data Models (TypeScript Interfaces)
-
-### IResume
-
-```typescript
-interface ResumeChunk {
-  text: string;
-  embedding: number[];  // 384-dimensional vector
-}
-
-interface IResume {
-  _id?: string;
-  userId: string;
-  fileName: string;
-  content: string;
-  chunks?: ResumeChunk[];
-  createdAt: Date;
-}
-```
-
-### IInterview
-
-```typescript
-interface ChatMessage {
-  role: 'user' | 'model' | 'ai' | 'system';
-  text: string;
-  timestamp: Date;
-}
-
-interface Metric {
-  subject: string;
-  A: number;
-  fullMark: number;
-}
-
-interface IInterview {
-  _id?: string;
-  userId: string;
-  resumeId: string;
-  status: 'ongoing' | 'completed';
-  completedAt?: Date;
-  videoUrl?: string;
-  messages: ChatMessage[];
-  score: number;
-  feedback: string;
-  metrics: Metric[];
-  createdAt: Date;
-}
-```
-
-### IMessage
-
-```typescript
-interface IMessage {
-  _id?: string;
-  roomId: string;
-  senderId: string;
-  senderName: string;
-  content: string;
-  type: 'text' | 'system' | 'code';
-  editedAt?: Date;
-  deletedAt?: Date;
-  createdAt: Date;
-}
-```
-
----
-
-## Query Optimization
-
-### Common Query Patterns
-
-| Query | Index Used | Expected Performance |
-|-------|------------|----------------------|
-| `find({ userId })` | { userId: 1 } | O(log n) |
-| `find({ userId }).sort({ createdAt: -1 })` | { userId: 1, createdAt: -1 } | O(log n) |
-| `find({ roomId }).sort({ createdAt: -1 })` | { roomId: 1, createdAt: -1 } | O(log n) |
-| `countDocuments({ userId })` | { userId: 1 } | O(log n) |
-| `aggregate([{ $group: { _id: ... } }])` | Various | O(n) |
-
-### Connection Settings
+### 4. Interviews Collection
 
 ```javascript
 {
-  maxPoolSize: 20,           // Max concurrent connections
-  minPoolSize: 5,            // Min connections to maintain
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-  bufferCommands: false     // Disable command buffering
+  _id: ObjectId,
+  tenantId: ObjectId,
+  
+  // Participants
+  candidateId: ObjectId,
+  interviewerIds: [ObjectId],
+  
+  // Job Context
+  jobId: ObjectId,
+  jobTitle: String,
+  requiredSkills: [String],
+  
+  // Session Config
+  type: "technical" | "behavioral" | "mixed" | "mock",
+  mode: "live" | "async" | "take-home",
+  duration: Number,             // minutes
+  
+  // State
+  status: "scheduled" | "waiting" | "in-progress" | "completed" | "cancelled",
+  startedAt: Date,
+  completedAt: Date,
+  
+  // Questions
+  questions: [{
+    id: ObjectId,
+    type: "coding" | "behavioral" | "technical",
+    question: String,
+    codeTemplate: String,
+    answer: String,
+    codeAnswer: String,
+    score: Number,
+    feedback: String,
+    timeSpent: Number
+  }],
+  
+  // AI Interviewer (Phase 9)
+  llmSession: {
+    sessionId: String,
+    persona: String,
+    memory: [{
+      role: "user" | "assistant",
+      content: String,
+      timestamp: Date
+    }],
+    followUpCount: Number
+  },
+  
+  // Proctoring (Phase 3)
+  proctoring: {
+    enabled: Boolean,
+    violations: [{
+      type: String,
+      timestamp: Date,
+      evidence: String,
+      severity: "low" | "medium" | "high"
+    }],
+    engagementScore: Number,
+    faceDetection: [{
+      timestamp: Date,
+      present: Boolean,
+      emotions: [String]
+    }]
+  },
+  
+  // Collaboration (Phase 11)
+  collaboration: {
+    editorEnabled: Boolean,
+    whiteboardEnabled: Boolean,
+    videoEnabled: Boolean,
+    participants: [{
+      userId: ObjectId,
+      joinedAt: Date,
+      role: "host" | "participant"
+    }]
+  },
+  
+  // Results
+  finalScore: Number,
+  recommendation: "strong_yes" | "yes" | "neutral" | "no" | "strong_no",
+  summary: String,
+  strengths: [String],
+  areasForImprovement: [String],
+  
+  createdAt: Date,
+  updatedAt: Date
 }
+```
+
+### 5. Questions Collection
+
+```javascript
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  
+  // Content
+  type: "coding" | "behavioral" | "technical" | "system-design" | "sql",
+  category: String,
+  difficulty: "easy" | "medium" | "hard",
+  
+  // Question
+  title: String,
+  description: String,
+  constraints: [String],
+  
+  // For Coding
+  codeTemplate: String,
+  testCases: [{
+    input: String,
+    expectedOutput: String,
+    isHidden: Boolean
+  }],
+  solution: String,
+  timeLimit: Number,            // seconds
+  
+  // For Behavioral
+  sampleAnswer: String,
+  keyPoints: [String],
+  
+  // Metadata
+  tags: [String],
+  role: String,
+  experienceLevel: String,
+  
+  // Usage
+  usedCount: Number,
+  successRate: Number,          // % of candidates who answered correctly
+  
+  // Status
+  status: "active" | "deprecated" | "draft",
+  
+  createdBy: ObjectId,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### 6. Audit Logs Collection
+
+```javascript
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  
+  // Event
+  action: String,               // "user.create", "interview.update"
+  resource: String,            // "user", "interview", "resume"
+  resourceId: ObjectId,
+  
+  // Actor
+  userId: ObjectId,
+  userEmail: String,
+  ipAddress: String,
+  userAgent: String,
+  
+  // Changes
+  changes: {
+    before: Object,
+    after: Object
+  },
+  
+  // Context
+  correlationId: String,       // Trace ID
+  requestId: String,
+  
+  // Compliance
+  piiDetected: Boolean,
+  maskedFields: [String],
+  
+  timestamp: Date
+}
+// Indexed on timestamp for time-series queries
+// TTL: 7 years for compliance
+```
+
+### 7. Scorecards Collection
+
+```javascript
+{
+  _id: ObjectId,
+  interviewId: ObjectId,
+  evaluatorId: ObjectId,
+  
+  // Rubric
+  categories: [{
+    name: String,              // "Technical Skills", "Communication"
+    weight: Number,            // 0-1
+    criteria: [{
+      name: String,
+      description: String,
+      score: Number,            // 1-5
+      notes: String
+    }]
+  }],
+  
+  // Overall
+  totalScore: Number,
+  recommendation: String,
+  
+  // Notes
+  timestampedNotes: [{
+    timestamp: Number,         // seconds into interview
+    content: String,
+    category: String
+  }],
+  
+  // Panel (Phase 8)
+  panelVotes: [{
+    evaluatorId: ObjectId,
+    scores: Object,
+    comment: String,
+    submittedAt: Date
+  }],
+  
+  createdAt: Date,
+  submittedAt: Date
+}
+```
+
+### 8. Reports Collection
+
+```javascript
+{
+  _id: ObjectId,
+  tenantId: ObjectId,
+  
+  // Type
+  type: "candidate" | "interview" | "department" | "custom",
+  
+  // Content
+  title: String,
+  data: Object,
+  
+  // Format
+  format: "pdf" | "csv" | "json" | "excel",
+  fileUrl: String,
+  fileSize: Number,
+  
+  // Branding
+  includeLogo: Boolean,
+  primaryColor: String,
+  
+  // Scheduling
+  isScheduled: Boolean,
+  schedule: {
+    frequency: "daily" | "weekly" | "monthly",
+    recipients: [String],
+    nextRun: Date
+  },
+  
+  createdBy: ObjectId,
+  createdAt: Date,
+  expiresAt: Date               // TTL for cleanup
+}
+```
+
+### 9. Notifications Collection
+
+```javascript
+{
+  _id: ObjectId,
+  userId: ObjectId,
+  tenantId: ObjectId,
+  
+  // Content
+  type: "email" | "sms" | "push" | "in-app",
+  channel: String,              // "slack", "teams", "sendgrid"
+  
+  title: String,
+  message: String,
+  data: Object,                // Additional payload
+  
+  // Delivery
+  status: "pending" | "sent" | "delivered" | "failed",
+  sentAt: Date,
+  deliveredAt: Date,
+  
+  // Template
+  templateId: String,
+  variables: Object,
+  
+  // Tracking
+  clickCount: Number,
+  
+  createdAt: Date
+}
+```
+
+### 10. Jobs Collection (Async Queue)
+
+```javascript
+{
+  _id: ObjectId,
+  
+  // Job Info
+  name: String,                 // "processResume", "sendReminder"
+  data: Object,
+  
+  // Queue
+  queue: String,               // "default", "ai", "email"
+  priority: Number,            // 1-5 (higher = more urgent)
+  
+  // State
+  status: "pending" | "processing" | "completed" | "failed",
+  attempts: Number,
+  maxAttempts: Number,
+  
+  // Result
+  result: Object,
+  error: String,
+  
+  // Timing
+  scheduledAt: Date,
+  startedAt: Date,
+  completedAt: Date,
+  
+  createdAt: Date
+}
+```
+
+---
+
+## Indexes
+
+### Performance Indexes
+
+```javascript
+// Users
+{ clerkId: 1 }                                    // unique
+{ tenantId: 1, email: 1 }
+{ status: 1 }
+
+// Interviews
+{ tenantId: 1, status: 1 }
+{ candidateId: 1, status: 1 }
+{ "questions.id": 1 }
+{ startedAt: -1 }
+
+// Resumes
+{ userId: 1 }
+{ tenantId: 1, status: 1 }
+{ "analysis.score": 1 }
+
+// Audit Logs (Time-series optimized)
+{ tenantId: 1, timestamp: -1 }                   // compound for queries
+{ userId: 1, timestamp: -1 }
+{ action: 1, timestamp: -1 }
+
+// Questions
+{ tenantId: 1, status: 1 }
+{ role: 1, difficulty: 1 }
+
+// Text Search
+{ content: "text" }                              // full-text search
+{ "chunks.text": "text" }                       // RAG search
 ```
 
 ---
 
 ## TTL (Time-To-Live) Indexes
 
-Interview data is automatically deleted after 90 days:
-
 ```javascript
-interviewSchema.index(
-  { completedAt: 1 },
-  { expireAfterSeconds: 90 * 24 * 60 * 60 }
-);
+// Auto-delete after retention period
+{ expiresAt: 1 }                                 // Reports
+{ createdAt: 1 }                                // Failed jobs (7 days)
 ```
-
-This maintains:
-- GDPR compliance (data retention limits)
-- Cost optimization (storage cleanup)
-- Privacy protection (old interviews purged)
 
 ---
 
-## Migration Strategy
+## Data Retention
 
-### Adding New Fields (Backward Compatible)
-```javascript
-// Add with default value
-schema.add({ newField: { type: String, default: 'default' } });
-```
+| Data Type | Retention | Reason |
+|-----------|-----------|---------|
+| Audit Logs | 7 years | Compliance (SOC2) |
+| Interview Recordings | 90 days | Storage cost |
+| Failed Jobs | 7 days | Debugging |
+| Temporary Tokens | 1 hour | Security |
+| Reports | 30 days | Storage management |
 
-### Renaming Fields (Two-Step)
-```javascript
-// Step 1: Add new field, copy data
-schema.add({ newName: String });
-// Run migration: db.collection.updateMany({}, { $set: { newName: "$oldName" } })
+---
 
-// Step 2: After migration, remove old field
-schema.remove('oldName');
-```
+## Relationships
 
-### Schema Versioning
-```javascript
-{
-  _id: ...,
-  schemaVersion: 2,
-  // ... fields
-}
+### User ↔ Interview
+- One user (candidate) → Many interviews
+- One user (interviewer) → Many interviews
+
+### Interview ↔ Question
+- One interview → Many questions (sequenced)
+
+### Interview ↔ Scorecard
+- One interview → Many scorecards (multi-evaluator)
+
+### Tenant ↔ Users
+- One tenant → Many users
+
+---
+
+## Schema Best Practices
+
+1. **Denormalization**: Store frequently accessed data together
+2. **Soft Deletes**: Use `status` field instead of hard deletes
+3. **Immutable Audit**: Never update audit logs, only insert
+4. **Tenant Isolation**: Always filter by `tenantId`
+5. **Time-Series**: Use indexed timestamps for queries
+6. **Arrays**: Keep small (<100 elements) for performance
+
+---
+
+## Migrations
+
+All schema changes are managed through migration scripts:
+
+```bash
+# Run migrations
+npm run migrate
+
+# Create new migration
+npm run migrate:create <name>
 ```
 
 ---
 
 ## Backup & Recovery
 
-### Backup Strategy
-- **Full Backup**: Daily (mongodump)
-- **Incremental**: Hourly (oplog)
-- **Offsite**: Weekly to S3/GCS
-
-### Recovery Procedures
-1. **Point-in-time Recovery**: Using oplog
-2. **Full Restore**: From latest full backup
-3. **Collection-specific**: Restore single collection
-
-### Important Collections
-| Collection | Priority | RPO | RTO |
-|------------|----------|-----|-----|
-| Interviews | High | 1hr | 4hr |
-| Resumes | High | 1hr | 4hr |
-| Users (Roles) | Critical | 15min | 1hr |
-| AuditLogs | Medium | 24hr | 24hr |
+- **Primary**: MongoDB Atlas automated backups (daily)
+- **Point-in-time**: 7-day recovery window
+- **Cross-region**: Replica sets in 3 regions
 
 ---
 
-## Enterprise Schema Extensions
-
-### Multi-Tenancy Collections
-
-```javascript
-// Tenants Collection
-{
-  _id: ObjectId,
-  tenantId: String,           // tn_xxxxxxxxxxxx
-  name: String,
-  domain: String,
-  plan: String,               // free, starter, professional, enterprise
-  status: String,              // active, suspended, trial
-  settings: {
-    isolationLevel: String,  // database, schema, row, application
-    storageLimit: Number,
-    apiRateLimit: Number,
-    features: [String],
-    customBranding: {
-      primaryColor: String,
-      secondaryColor: String,
-      logoUrl: String,
-      companyName: String
-    }
-  },
-  createdAt: Date,
-  updatedAt: Date
-}
-
-// TenantUsers Collection
-{
-  _id: ObjectId,
-  tenantId: String,
-  userId: String,              // Clerk user ID
-  role: String,               // admin, manager, interviewer, candidate
-  permissions: [String],
-  joinedAt: Date
-}
-```
-
-### Compliance Collections
-
-```javascript
-// AuditLogs Collection (Enhanced)
-{
-  _id: ObjectId,
-  tenantId: String,
-  userId: String,
-  action: String,
-  resource: String,
-  resourceId: String,
-  details: Object,
-  ipAddress: String,
-  userAgent: String,
-  timestamp: Date,
-  correlationId: String
-}
-
-// ConsentRecords Collection
-{
-  _id: ObjectId,
-  userId: String,
-  consentType: String,        // gdpr_marketing, gdpr_analytics, etc.
-  granted: Boolean,
-  version: String,
-  timestamp: Date,
-  ipAddress: String,
-  expiresAt: Date
-}
-
-// DataSubjectRequests Collection
-{
-  _id: ObjectId,
-  userId: String,
-  type: String,               // access, deletion, rectification, portability
-  status: String,             // pending, processing, completed, rejected
-  createdAt: Date,
-  completedAt: Date,
-  data: Object,
-  processedBy: String
-}
-```
-
-### Enterprise Feature Collections
-
-```javascript
-// BiometricTemplates Collection
-{
-  _id: ObjectId,
-  userId: String,
-  type: String,               // face, voice, fingerprint
-  templateData: String,      // Encrypted template
-  createdAt: Date,
-  lastVerified: Date,
-  isActive: Boolean
-}
-
-// SSOAuth Configs Collection
-{
-  _id: ObjectId,
-  tenantId: String,
-  provider: String,          // okta, azure-ad, google-workspace, custom
-  enabled: Boolean,
-  samlSettings: {
-    entryPoint: String,
-    issuer: String,
-    cert: String,
-    callbackUrl: String
-  },
-  oauthSettings: {
-    clientId: String,
-    redirectUri: String,
-    scope: [String]
-  },
-  attributeMapping: {
-    email: String,
-    firstName: String,
-    lastName: String,
-    department: String,
-    role: String
-  }
-}
-
-// Webhooks Collection
-{
-  _id: ObjectId,
-  tenantId: String,
-  url: String,
-  events: [String],          // interview.started, etc.
-  secret: String,
-  enabled: Boolean,
-  retryPolicy: {
-    maxRetries: Number,
-    retryInterval: Number,
-    backoffMultiplier: Number
-  },
-  createdAt: Date
-}
-
-// ATSIntegrations Collection
-{
-  _id: ObjectId,
-  tenantId: String,
-  provider: String,          // workday, greenhouse, lever, bamboohr
-  apiKey: String,
-  clientId: String,
-  tenantUrl: String,
-  webhookUrl: String,
-  lastSyncAt: Date,
-  status: String
-}
-
-// AnalyticsSnapshots Collection
-{
-  _id: ObjectId,
-  tenantId: String,
-  date: Date,
-  metrics: {
-    totalInterviews: Number,
-    completionRate: Number,
-    averageScore: Number,
-    scoreDistribution: {
-      range90_100: Number,
-      range80_89: Number,
-      range70_79: Number,
-      range60_69: Number,
-      below60: Number
-    },
-    proctoringViolations: Number,
-    flagRate: Number
-  }
-}
-```
-
-### Enterprise Indexes
-
-```javascript
-// Tenants indexes
-db.tenants.createIndex({ tenantId: 1 }, { unique: true });
-db.tenants.createIndex({ domain: 1 });
-db.tenants.createIndex({ plan: 1 });
-
-// Compliance indexes
-db.auditLogs.createIndex({ tenantId: 1, timestamp: -1 });
-db.auditLogs.createIndex({ userId: 1, timestamp: -1 });
-db.consentRecords.createIndex({ userId: 1, consentType: 1 });
-db.dataSubjectRequests.createIndex({ userId: 1, status: 1 });
-
-// Enterprise feature indexes
-db.biometricTemplates.createIndex({ userId: 1, type: 1 });
-db.webhooks.createIndex({ tenantId: 1, enabled: 1 });
-db.analyticsSnapshots.createIndex({ tenantId: 1, date: -1 });
-
-// Phase 8 new collections
-db.scheduledInterviews.createIndex({ candidateId: 1, status: 1 });
-db.questionBank.createIndex({ category: 1, difficulty: 1 });
-db.scorecards.createIndex({ interviewId: 1, interviewerId: 1 });
-db.reports.createIndex({ candidateId: 1, generatedAt: -1 });
-db.asyncInterviews.createIndex({ candidateId: 1, status: 1 });
-db.takeHomeChallenges.createIndex({ companyId: 1, status: 1 });
-db.preparationSessions.createIndex({ userId: 1, status: 1 });
-db.mockInterviews.createIndex({ userId: 1, status: 1 });
-db.panelInterviews.createIndex({ candidateId: 1, status: 1 });
-db.notifications.createIndex({ userId: 1, readAt: 1 });
-db.sqlChallenges.createIndex({ difficulty: 1, category: 1 });
-db.gitRepositories.createIndex({ candidateId: 1 });
-```
-
----
-
-## Phase 8 New Collections Summary
-
-| Collection | Purpose |
-|------------|---------|
-| `scheduledInterviews` | Interview scheduling & calendar |
-| `questionBank` | Question library management |
-| `scorecards` | Evaluation rubrics & scoring |
-| `reports` | Candidate report generation |
-| `asyncInterviews` | Async video interviews |
-| `takeHomeChallenges` | Take-home coding challenges |
-| `preparationSessions` | System check & practice |
-| `mockInterviews` | Practice mode interviews |
-| `panelInterviews` | Multi-interviewer sessions |
-| `notifications` | Email/SMS/Slack notifications |
-| `sqlChallenges` | SQL query challenges |
-| `gitRepositories` | GitHub integration data |
+*InterviewMinds Database Schema - Production Ready*
