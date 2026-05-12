@@ -765,6 +765,33 @@ export const preparationService = {
     fetchAPI<any>(`/preparation/break-timer/${interviewId}/take-break`, { method: 'POST' }),
 };
 
+// ============== Waiting Room ==============
+export const waitingRoomService = {
+  joinRoom: (interviewId: string) =>
+    fetchAPI<any>('/waiting-room/join', {
+      method: 'POST',
+      body: JSON.stringify({ interviewId }),
+    }),
+
+  leaveRoom: () =>
+    fetchAPI<any>('/waiting-room/leave', { method: 'POST' }),
+
+  getStatus: () =>
+    fetchAPI<any>('/waiting-room/status'),
+
+  checkTech: () =>
+    fetchAPI<any>('/waiting-room/tech-check', { method: 'POST' }),
+
+  getEstimatedTime: () =>
+    fetchAPI<any>('/waiting-room/estimated-time'),
+
+  notifyReady: () =>
+    fetchAPI<any>('/waiting-room/ready', { method: 'POST' }),
+
+  getAnnouncements: () =>
+    fetchAPI<any>('/waiting-room/announcements'),
+};
+
 // ============== Mock Interview ==============
 export const mockInterviewService = {
   create: (role: string, difficulty: string, questionCount: number) =>
