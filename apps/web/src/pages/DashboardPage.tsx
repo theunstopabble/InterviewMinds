@@ -25,11 +25,10 @@ function DashboardPage() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        // ✅ Endpoint: Fetches user's past interviews
         const res = await api.get("/interview/history");
         setInterviews(res.data);
       } catch (error) {
-        console.error(error);
+        console.error("Failed to load history:", error);
         toast.error("Failed to load history");
       } finally {
         setLoading(false);
