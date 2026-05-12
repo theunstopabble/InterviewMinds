@@ -25,6 +25,7 @@ import complianceRoutes from "./routes/compliance";
 import integrationRoutes from "./routes/integration";
 import mobileRoutes from "./routes/mobile";
 import observabilityRoutes from "./routes/observability";
+import agentRoutes from "./routes/agent";
 import chatRoutes from "./routes/chat";
 import interviewRoutes from "./routes/interview";
 import { requireAuth } from "./middleware/auth";
@@ -446,6 +447,14 @@ app.use(
   requireAuth,
   attachRole,
   observabilityRoutes,
+);
+
+// Phase 18: AI Agent & Automation
+app.use(
+  "/api/agent",
+  requireAuth,
+  attachRole,
+  agentRoutes,
 );
 
 app.use(
