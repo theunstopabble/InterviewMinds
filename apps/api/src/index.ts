@@ -54,6 +54,9 @@ import adminRoutes from "./routes/admin";
 import exportRoutes from "./routes/export";
 import userRoutes from "./routes/users";
 import schedulingRoutes from "./routes/scheduling";
+import llmInterviewerRoutes from "./routes/llmInterviewer";
+import multimodalAIRoutes from "./routes/multimodalAI";
+import smartAssessmentRoutes from "./routes/smartAssessment";
 import { startWorkers, closeQueues } from "./lib/queue";
 import { requireEnvVars } from "./lib/envValidation";
 
@@ -350,6 +353,33 @@ app.use(
 app.use(
   "/api/scheduling",
   schedulingRoutes,
+);
+
+// Phase 9: Next-Gen AI & LLM Features
+app.use(
+  "/api/llm-interviewer",
+  requireAuth,
+  attachRole,
+  aiLimiter,
+  auditLog("llm-interviewer"),
+  llmInterviewerRoutes,
+);
+
+app.use(
+  "/api/multimodal-ai",
+  requireAuth,
+  attachRole,
+  auditLog("multimodal-ai"),
+  multimodalAIRoutes,
+);
+
+app.use(
+  "/api/smart-assessment",
+  requireAuth,
+  attachRole,
+  aiLimiter,
+  auditLog("smart-assessment"),
+  smartAssessmentRoutes,
 );
 app.use(
   "/api/chat",
