@@ -819,3 +819,65 @@ export const gitIntegrationService = {
 
   getReport: () => fetchAPI<any>('/git/report'),
 };
+
+// ==================== Phase 18: AI Agent & Automation ====================
+
+export const agentService = {
+  getAgents: () => fetchAPI<{ agents: any[] }>('/agent/agents'),
+  getAgent: (name: string) => fetchAPI<any>(`/agent/agents/${name}`),
+  createAgent: (config: any) =>
+    fetchAPI<any>('/agent/agents', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+  updateAgent: (name: string, updates: any) =>
+    fetchAPI<any>(`/agent/agents/${name}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+  deleteAgent: (name: string) =>
+    fetchAPI<{ success: boolean }>(`/agent/agents/${name}`, { method: 'DELETE' }),
+  runAgent: (agentName: string, input: any) =>
+    fetchAPI<any>('/agent/agents/run', {
+      method: 'POST',
+      body: JSON.stringify({ agentName, input }),
+    }),
+  getTasks: (agentId?: string) =>
+    fetchAPI<{ tasks: any[] }>(`/agent/tasks${agentId ? `?agentId=${agentId}` : ''}`),
+  getTask: (taskId: string) => fetchAPI<any>(`/agent/tasks/${taskId}`),
+};
+
+export const automationService = {
+  getAutomations: () => fetchAPI<{ automations: any[] }>('/agent/automations'),
+  getAutomation: (id: string) => fetchAPI<any>(`/agent/automations/${id}`),
+  createAutomation: (config: any) =>
+    fetchAPI<any>('/agent/automations', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+  updateAutomation: (id: string, updates: any) =>
+    fetchAPI<any>(`/agent/automations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+  deleteAutomation: (id: string) =>
+    fetchAPI<{ success: boolean }>(`/agent/automations/${id}`, { method: 'DELETE' }),
+  runAutomation: (id: string, context?: any) =>
+    fetchAPI<any>(`/agent/automations/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify({ context }),
+    }),
+  testAutomation: (id: string, testContext?: any) =>
+    fetchAPI<any>(`/agent/automations/${id}/test`, {
+      method: 'POST',
+      body: JSON.stringify({ testContext }),
+    }),
+  getRuns: (automationId?: string) =>
+    fetchAPI<{ runs: any[] }>(`/agent/runs${automationId ? `?automationId=${automationId}` : ''}`),
+  getRun: (runId: string) => fetchAPI<any>(`/agent/runs/${runId}`),
+  trigger: (event: string, context?: any) =>
+    fetchAPI<any>('/agent/trigger', {
+      method: 'POST',
+      body: JSON.stringify({ event, context }),
+    }),
+};
