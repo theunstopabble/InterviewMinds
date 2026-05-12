@@ -333,6 +333,12 @@ app.use(
   questionGenerationRoutes,
 );
 
+import questionBankRoutes from "./routes/questionBank";
+app.use(
+  "/api/question-bank",
+  questionBankRoutes,
+);
+
 app.use(
   "/api/code-analysis",
   codeAnalysisRoutes,
