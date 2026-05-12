@@ -455,7 +455,7 @@ export const complianceService = {
 
   queryAudit: (filters: any) => {
     const params = new URLSearchParams(filters).toString();
-    return fetchAPI<{ logs: any[]; count: number }>(`/compliance/audit?${params}`, {
+    return fetchAPI<{ data: any[] }>(`/compliance/audit/logs?${params}`, {
       method: 'GET',
     });
   },

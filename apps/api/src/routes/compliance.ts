@@ -16,6 +16,7 @@ import {
   anonymizeCandidate,
   sanitizeForExport,
 } from "../lib/piiMasking";
+import { checkSecurityControls } from "../lib/compliance";
 import {
   createAccessRequest,
   approveRequest,
@@ -239,6 +240,17 @@ router.post("/audit/log", requireAuth, (req, res) => {
     status,
   });
   res.json({ success: true, data: entry });
+});
+
+// GET /api/compliance/security-controls
+router.get("/security-controls", requireAuth, (_req, res) => {
+  try {
+    const controls = checkSecurityControls();
+    res.json({ controls, count: controls.length });
+  } catch (error) {
+    console.error('Error fetching security controls:', error);
+    res.status(500).json({ error: 'Failed to fetch security controls' });
+  }
 });
 
 export default router;
