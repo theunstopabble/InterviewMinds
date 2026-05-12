@@ -372,7 +372,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 ---
 
 <div align="center">
-  <p>Built with ❤️ by <a href="https://gautam.kr.vercel.app" target="_blank">Gautam Kumar</a></p>
+  <p>Built with ❤️ by <a href="https://gautam-kr.vercel.app" target="_blank">Gautam Kumar</a></p>
   <p>
     <a href="https://www.linkedin.com/in/gautamkr62" target="_blank">
       <img src="https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" />
