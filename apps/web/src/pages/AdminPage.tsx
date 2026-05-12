@@ -16,12 +16,12 @@ export default function AdminPage() {
   const loadAdminData = async () => {
     setLoading(true);
     try {
-      const [controls, logs] = await Promise.all([
+      const [controls, auditResponse] = await Promise.all([
         complianceService.getSecurityControls().catch(() => ({ controls: [] })),
-        complianceService.queryAudit({ limit: 50 }).catch(() => ({ logs: [] })),
+        complianceService.queryAudit({ limit: 50 }).catch(() => ({ data: [] })),
       ]);
       setSecurityControls(controls.controls || []);
-      setAuditLogs(logs.logs || []);
+      setAuditLogs(auditResponse.data || auditResponse.logs || []);
     } catch (e) {
       console.error('Error loading admin data:', e);
     }
