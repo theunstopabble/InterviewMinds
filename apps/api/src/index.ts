@@ -22,6 +22,9 @@ import biometricAuthRoutes from "./routes/biometricAuth";
 import atsIntegrationRoutes from "./routes/atsIntegration";
 import analyticsRoutes from "./routes/analytics";
 import complianceRoutes from "./routes/compliance";
+import integrationRoutes from "./routes/integration";
+import mobileRoutes from "./routes/mobile";
+import observabilityRoutes from "./routes/observability";
 import chatRoutes from "./routes/chat";
 import interviewRoutes from "./routes/interview";
 import { requireAuth } from "./middleware/auth";
@@ -419,6 +422,30 @@ app.use(
   requireAuth,
   attachRole,
   complianceRoutes,
+);
+
+// Phase 15: Integration Ecosystem
+app.use(
+  "/api/integration",
+  requireAuth,
+  attachRole,
+  integrationRoutes,
+);
+
+// Phase 16: Mobile & Multi-Platform
+app.use(
+  "/api/mobile",
+  requireAuth,
+  attachRole,
+  mobileRoutes,
+);
+
+// Phase 17: Observability & DevOps
+app.use(
+  "/api/observability",
+  requireAuth,
+  attachRole,
+  observabilityRoutes,
 );
 
 app.use(
