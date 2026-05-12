@@ -536,7 +536,7 @@ export const schedulingService = {
   bookSlot: (interviewerId: string, slotId: string, interviewType: 'live' | 'async' | 'take-home') =>
     fetchAPI<any>('/scheduling/book', {
       method: 'POST',
-      body: JSON.stringify({ interviewerId, slotId, interviewType }),
+      body: JSON.stringify({ tenantId: interviewerId, slotId, type: interviewType, candidateId: 'current' }),
     }),
 
   reschedule: (interviewId: string, newSlotId: string) =>

@@ -112,7 +112,24 @@ class SchedulingService {
     const dayEnd = new Date(date);
     dayEnd.setHours(23, 59, 59, 999);
 
-    const storedSlots = this.slots.get(interviewerId) || [];
+    let storedSlots = this.slots.get(interviewerId) || [];
+
+    // Generate default slots if none exist
+    if (storedSlots.length === 0) {
+      const startDate = new Date(date);
+      startDate.setDate(startDate.getDate() - 7);
+      const endDate = new Date(date);
+      endDate.setDate(endDate.getDate() + 14);
+      storedSlots = this.generateAvailableSlots(
+        interviewerId,
+        startDate,
+        endDate,
+        60,
+        { start: 9, end: 18 }
+      );
+      this.slots.set(interviewerId, storedSlots);
+    }
+
     const availableSlots = storedSlots.filter(
       (s) =>
         s.status === 'available' &&
@@ -121,6 +138,7 @@ class SchedulingService {
     );
 
     return availableSlots.map((slot) => ({
+      id: slot.id,
       date: slot.startTime.toISOString().split('T')[0],
       time: slot.startTime.toLocaleTimeString('en-US', {
         hour: '2-digit',
