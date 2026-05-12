@@ -21,7 +21,8 @@ export default function AdminPage() {
         complianceService.queryAudit({ limit: 50 }).catch(() => ({ data: [] })),
       ]);
       setSecurityControls(controls.controls || []);
-      setAuditLogs(auditResponse.data || auditResponse.logs || []);
+      const logsData = auditResponse as { data?: any[]; logs?: any[] };
+      setAuditLogs(logsData.data || logsData.logs || []);
     } catch (e) {
       console.error('Error loading admin data:', e);
     }
