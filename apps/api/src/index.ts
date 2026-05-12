@@ -53,6 +53,7 @@ import { resolvers } from "./graphql/resolvers";
 import adminRoutes from "./routes/admin";
 import exportRoutes from "./routes/export";
 import userRoutes from "./routes/users";
+import schedulingRoutes from "./routes/scheduling";
 import { startWorkers, closeQueues } from "./lib/queue";
 import { requireEnvVars } from "./lib/envValidation";
 
@@ -345,6 +346,10 @@ app.use(
 app.use(
   "/api/analytics",
   analyticsRoutes,
+);
+app.use(
+  "/api/scheduling",
+  schedulingRoutes,
 );
 app.use(
   "/api/chat",

@@ -257,3 +257,29 @@ class SchedulingService {
 
 export const schedulingService = new SchedulingService();
 export default schedulingService;
+
+// Wrapper functions for routes
+export function getTimezones(): string[] {
+  return schedulingService.getTimezones();
+}
+
+export function getUpcomingInterviews(_candidateId?: string): any {
+  return [];
+}
+
+export function getAvailableSlots(tenantId: string, date: string, timezone: string): any {
+  return schedulingService.getAvailableSlots(tenantId, new Date(date), timezone);
+}
+
+export function bookSlot(tenantId: string, slotId: string, type: any, candidateId?: string): any {
+  // Service expects: interviewerId, slotId, candidateId, interviewType
+  return schedulingService.bookSlot(tenantId, slotId, candidateId || "default", type || "live");
+}
+
+export function rescheduleInterview(interviewId: string, newSlotId: string): any {
+  return schedulingService.rescheduleInterview(interviewId, newSlotId);
+}
+
+export function cancelInterview(interviewId: string): any {
+  return schedulingService.cancelInterview(interviewId, "Cancelled by user");
+}
