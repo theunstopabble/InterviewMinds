@@ -515,7 +515,22 @@ export const analyticsService = {
       body: JSON.stringify({ candidateId, interviewId }),
     }),
 
-  getPipeline: (tenantId?: string) => fetchAPI<any>(`/analytics/pipeline${tenantId ? `?tenantId=${tenantId}` : ''}`),
+  getPipeline: (tenantId?: string) => fetchAPI<{ candidates: any[]; count: number }>(`/analytics/pipeline${tenantId ? `?tenantId=${tenantId}` : ''}`),
+
+  updateCandidateStage: (candidateId: string, stage: string) =>
+    fetchAPI<any>(`/analytics/pipeline/candidate/${candidateId}/stage`, {
+      method: 'PUT',
+      body: JSON.stringify({ stage }),
+    }),
+
+  addCandidate: (candidate: { name: string; email: string; role: string; tags?: string[] }) =>
+    fetchAPI<any>('/analytics/pipeline/candidate', {
+      method: 'POST',
+      body: JSON.stringify(candidate),
+    }),
+
+  deleteCandidate: (candidateId: string) =>
+    fetchAPI<any>(`/analytics/pipeline/candidate/${candidateId}`, { method: 'DELETE' }),
 
   getTrainingRecommendations: (candidateId: string) =>
     fetchAPI<{ candidateId: string; recommendations: any[] }>(`/analytics/training/${candidateId}`),
@@ -595,6 +610,13 @@ export const questionBankService = {
   getCategories: () => fetchAPI<{ categories: any[] }>('/question-bank/categories'),
 
   getStats: () => fetchAPI<{ stats: any }>('/question-bank/stats'),
+
+  getPracticeQuestions: (count: number = 5, type?: string, difficulty?: string) => {
+    const params = new URLSearchParams({ count: count.toString() });
+    if (type) params.set('type', type);
+    if (difficulty) params.set('difficulty', difficulty);
+    return fetchAPI<{ questions: any[] }>(`/questions/practice/random?${params}`);
+  },
 };
 
 // ============== Scorecard ==============

@@ -169,4 +169,43 @@ router.post("/anomaly/predict", requireAuth, (req, res) => {
   res.json({ success: true, data: result });
 });
 
+// Pipeline endpoints
+router.get("/pipeline", requireAuth, (req, res) => {
+  const { tenantId } = req.query;
+  const candidates = [
+    { id: '1', name: 'John Doe', email: 'john@example.com', role: 'Frontend Dev', score: 85, stage: 'interview', tags: ['React', 'TypeScript'], lastActivity: new Date().toISOString() },
+    { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'Backend Dev', score: 78, stage: 'screening', tags: ['Node', 'Python'], lastActivity: new Date(Date.now() - 86400000).toISOString() },
+    { id: '3', name: 'Bob Wilson', email: 'bob@example.com', role: 'Full Stack', score: 92, stage: 'offer', tags: ['React', 'Node'], lastActivity: new Date(Date.now() - 10800000).toISOString() },
+    { id: '4', name: 'Alice Brown', email: 'alice@example.com', role: 'Data Scientist', score: 65, stage: 'new', tags: ['Python', 'ML'], lastActivity: new Date().toISOString() },
+    { id: '5', name: 'Charlie Davis', email: 'charlie@example.com', role: 'DevOps', score: 45, stage: 'rejected', tags: ['AWS', 'Docker'], lastActivity: new Date(Date.now() - 432000000).toISOString() },
+  ];
+  res.json({ candidates, count: candidates.length });
+});
+
+router.put("/pipeline/candidate/:id/stage", requireAuth, (req, res) => {
+  const { id } = req.params;
+  const { stage } = req.body;
+  res.json({ success: true, candidateId: id, newStage: stage });
+});
+
+router.post("/pipeline/candidate", requireAuth, (req, res) => {
+  const { name, email, role, tags } = req.body;
+  const newCandidate = {
+    id: `cand_${Date.now()}`,
+    name,
+    email,
+    role,
+    score: 0,
+    stage: 'new',
+    tags: tags || [],
+    lastActivity: new Date().toISOString(),
+  };
+  res.json({ success: true, candidate: newCandidate });
+});
+
+router.delete("/pipeline/candidate/:id", requireAuth, (req, res) => {
+  const { id } = req.params;
+  res.json({ success: true, candidateId: id, deleted: true });
+});
+
 export default router;

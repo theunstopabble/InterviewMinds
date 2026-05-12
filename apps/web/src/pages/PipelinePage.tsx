@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { analyticsService } from '../services/enterprise';
 
 interface Candidate {
   id: string;
@@ -12,14 +13,6 @@ interface Candidate {
   tags: string[];
   lastActivity: string;
 }
-
-const initialCandidates: Candidate[] = [
-  { id: '1', name: 'John Doe', email: 'john@example.com', role: 'Frontend Dev', score: 85, stage: 'interview', tags: ['React', 'TypeScript'], lastActivity: '2 hours ago' },
-  { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'Backend Dev', score: 78, stage: 'screening', tags: ['Node', 'Python'], lastActivity: '1 day ago' },
-  { id: '3', name: 'Bob Wilson', email: 'bob@example.com', role: 'Full Stack', score: 92, stage: 'offer', tags: ['React', 'Node'], lastActivity: '3 hours ago' },
-  { id: '4', name: 'Alice Brown', email: 'alice@example.com', role: 'Data Scientist', score: 65, stage: 'new', tags: ['Python', 'ML'], lastActivity: 'Just now' },
-  { id: '5', name: 'Charlie Davis', email: 'charlie@example.com', role: 'DevOps', score: 45, stage: 'rejected', tags: ['AWS', 'Docker'], lastActivity: '5 days ago' },
-];
 
 const stages = ['new', 'screening', 'interview', 'offer', 'hired', 'rejected'] as const;
 
@@ -34,10 +27,33 @@ const stageLabels: Record<string, { label: string; color: string }> = {
 
 export default function PipelinePage() {
   const navigate = useNavigate();
-  const [candidates, setCandidates] = useState<Candidate[]>(initialCandidates);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [loading, setLoading] = useState(true);
   const [dragCandidate, setDragCandidate] = useState<Candidate | null>(null);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [filterRole, setFilterRole] = useState<string>('');
+
+  useEffect(() => {
+    loadCandidates();
+  }, []);
+
+  const loadCandidates = async () => {
+    try {
+      const data = await analyticsService.getPipeline();
+      if (data?.candidates) {
+        setCandidates(data.candidates.map((c: any) => ({
+          ...c,
+          stage: c.stage || 'new',
+          tags: c.tags || [],
+          lastActivity: c.lastActivity || new Date().toISOString(),
+        })));
+      }
+    } catch (e) {
+      console.error('Failed to load candidates:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDragStart = (candidate: Candidate) => {
     setDragCandidate(candidate);
@@ -47,11 +63,16 @@ export default function PipelinePage() {
     e.preventDefault();
   };
 
-  const handleDrop = (stage: string) => {
+  const handleDrop = async (stage: string) => {
     if (dragCandidate) {
-      setCandidates(prev => prev.map(c => 
-        c.id === dragCandidate.id ? { ...c, stage: stage as Candidate['stage'] } : c
-      ));
+      try {
+        await analyticsService.updateCandidateStage(dragCandidate.id, stage);
+        setCandidates(prev => prev.map(c => 
+          c.id === dragCandidate.id ? { ...c, stage: stage as Candidate['stage'] } : c
+        ));
+      } catch (e) {
+        console.error('Failed to update stage:', e);
+      }
       setDragCandidate(null);
     }
   };
@@ -68,6 +89,14 @@ export default function PipelinePage() {
     if (score >= 60) return 'text-yellow-400';
     return 'text-red-400';
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">

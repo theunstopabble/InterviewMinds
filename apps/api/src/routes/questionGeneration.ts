@@ -79,4 +79,38 @@ router.get('/competency/:competency/:difficulty', async (req, res) => {
   }
 });
 
+// Practice questions for preparation
+router.get('/practice/random', async (req, res) => {
+  try {
+    const { count = '5', type, difficulty } = req.query;
+    const questions = generateQuestions(
+      'fullstack',
+      3,
+      [],
+      parseInt(count as string) || 5
+    );
+    
+    let filtered = questions;
+    if (type) {
+      filtered = filtered.filter((q: any) => q.category === type);
+    }
+    if (difficulty) {
+      filtered = filtered.filter((q: any) => q.difficulty === difficulty);
+    }
+    
+    const formatted = filtered.map((q: any) => ({
+      id: q.id,
+      question: q.text,
+      type: q.category,
+      difficulty: q.difficulty,
+      sampleAnswer: q.modelAnswer,
+    }));
+    
+    res.json({ questions: formatted, count: formatted.length });
+  } catch (error) {
+    console.error('Error fetching practice questions:', error);
+    res.status(500).json({ error: 'Failed to fetch practice questions' });
+  }
+});
+
 export default router;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { questionBankService } from '../services/enterprise';
 
 interface SystemCheck {
   camera: boolean;
@@ -75,15 +76,32 @@ export default function PreparationPage() {
     }
   }, [breakTimerActive, breakTime]);
 
-  const sampleQuestions: PreparationQuestion[] = [
-    { id: '1', question: 'Tell me about yourself and why you are interested in this role.', type: 'behavioral', difficulty: 'easy', sampleAnswer: 'Start with current role, highlight relevant experience, end with why this role interests you.' },
-    { id: '2', question: 'Describe a challenging project you worked on and how you overcame the obstacle.', type: 'behavioral', difficulty: 'medium', sampleAnswer: 'Use STAR method: Situation, Task, Action, Result.' },
-    { id: '3', question: 'What are your strengths and weaknesses?', type: 'behavioral', difficulty: 'easy', sampleAnswer: 'Pick real strengths relevant to the job. For weaknesses, show how you are working on them.' },
-  ];
-
   useEffect(() => {
-    setQuestions(sampleQuestions);
-  }, []);
+    const loadQuestions = async () => {
+      try {
+        const data = await questionBankService.getPracticeQuestions(5);
+        if (data?.questions) {
+          setQuestions(data.questions.map((q: any) => ({
+            id: q.id || `q_${Math.random()}`,
+            question: q.question || q.text || '',
+            type: q.type || 'behavioral',
+            difficulty: q.difficulty || 'medium',
+            sampleAnswer: q.sampleAnswer || q.hint || 'Think about the STAR method for behavioral questions.',
+          })));
+        }
+      } catch (e) {
+        console.error('Failed to load questions:', e);
+        setQuestions([
+          { id: '1', question: 'Tell me about yourself and why you are interested in this role.', type: 'behavioral', difficulty: 'easy', sampleAnswer: 'Start with current role, highlight relevant experience, end with why this role interests you.' },
+          { id: '2', question: 'Describe a challenging project you worked on and how you overcame the obstacle.', type: 'behavioral', difficulty: 'medium', sampleAnswer: 'Use STAR method: Situation, Task, Action, Result.' },
+          { id: '3', question: 'What are your strengths and weaknesses?', type: 'behavioral', difficulty: 'easy', sampleAnswer: 'Pick real strengths relevant to the job. For weaknesses, show how you are working on them.' },
+        ]);
+      }
+    };
+    if (step === 'questions') {
+      loadQuestions();
+    }
+  }, [step]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
