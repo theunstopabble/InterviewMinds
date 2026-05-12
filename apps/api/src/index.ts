@@ -59,6 +59,7 @@ import multimodalAIRoutes from "./routes/multimodalAI";
 import smartAssessmentRoutes from "./routes/smartAssessment";
 import infrastructureRoutes from "./routes/infrastructure";
 import collaborationRoutes from "./routes/collaboration";
+import developerRoutes from "./routes/developer";
 import { startWorkers, closeQueues } from "./lib/queue";
 import { requireEnvVars } from "./lib/envValidation";
 
@@ -402,6 +403,22 @@ app.use(
   requireAuth,
   attachRole,
   analyticsRoutes,
+);
+
+// Phase 13: Developer Experience
+app.use(
+  "/api/developer",
+  requireAuth,
+  attachRole,
+  developerRoutes,
+);
+
+// Phase 14: Compliance & Governance
+app.use(
+  "/api/compliance",
+  requireAuth,
+  attachRole,
+  complianceRoutes,
 );
 
 app.use(

@@ -1,215 +1,244 @@
-import { Router } from 'express';
-import { 
-  logAuditEvent, 
-  queryAuditLogs, 
-  recordConsent, 
-  getUserConsents, 
-  hasValidConsent,
-  createDataSubjectRequest,
-  getDataSubjectRequests,
-  completeDataSubjectRequest,
-  exportUserData,
-  deleteUserData,
-  checkSecurityControls,
-  generateComplianceReport
-} from '../lib/compliance';
+import { Router } from "express";
+import {
+  getRetentionPolicies,
+  getRetentionPolicy,
+  createRetentionPolicy,
+  updateRetentionPolicy,
+  deleteRetentionPolicy,
+  runRetentionJob,
+  getRetentionStats,
+} from "../lib/dataRetention";
+import {
+  detectPII,
+  maskValue,
+  maskObject,
+  maskLogData,
+  anonymizeCandidate,
+  sanitizeForExport,
+} from "../lib/piiMasking";
+import {
+  createAccessRequest,
+  approveRequest,
+  rejectRequest,
+  getUserRequests,
+  getPendingApprovals,
+  getAllPermissionGroups,
+  createPermissionGroup,
+  addUserToGroup,
+  removeUserFromGroup,
+  getUserPermissions,
+} from "../lib/accessRequest";
+import {
+  logAuditEntry,
+  getAuditLogs,
+  exportAuditTrail,
+  generateAuditCSV,
+  getAuditStats,
+  searchAuditLogs,
+} from "../lib/auditTrail";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
-router.post('/audit', async (req, res) => {
-  try {
-    const { userId, action, resource, details, tenantId, ipAddress, userAgent } = req.body;
-
-    if (!userId || !action || !resource) {
-      res.status(400).json({ error: 'userId, action, and resource are required' });
-      return;
-    }
-
-    const auditLog = logAuditEvent(userId, action, resource, details, tenantId, ipAddress, userAgent);
-
-    res.json({ success: true, auditLog });
-  } catch (error) {
-    console.error('Error logging audit event:', error);
-    res.status(500).json({ error: 'Failed to log audit event' });
-  }
+router.get("/retention/policies", requireAuth, (req, res) => {
+  const policies = getRetentionPolicies();
+  res.json({ success: true, data: policies });
 });
 
-router.get('/audit', async (req, res) => {
-  try {
-    const filters = {
-      userId: req.query.userId as string,
-      tenantId: req.query.tenantId as string,
-      action: req.query.action as string,
-      resource: req.query.resource as string,
-      startDate: req.query.startDate as string,
-      endDate: req.query.endDate as string,
-      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined
-    };
-
-    const logs = queryAuditLogs(filters);
-
-    res.json({ logs, count: logs.length });
-  } catch (error) {
-    console.error('Error querying audit logs:', error);
-    res.status(500).json({ error: 'Failed to query audit logs' });
-  }
+router.get("/retention/policies/:id", requireAuth, (req, res) => {
+  const policy = getRetentionPolicy(req.params.id);
+  if (!policy) return res.status(404).json({ success: false, error: "Policy not found" });
+  res.json({ success: true, data: policy });
 });
 
-router.post('/consent', async (req, res) => {
-  try {
-    const { userId, consentType, granted, version, ipAddress } = req.body;
-
-    if (!userId || !consentType) {
-      res.status(400).json({ error: 'userId and consentType are required' });
-      return;
-    }
-
-    const record = recordConsent(userId, consentType, granted, version, ipAddress);
-
-    res.json({ success: true, record });
-  } catch (error) {
-    console.error('Error recording consent:', error);
-    res.status(500).json({ error: 'Failed to record consent' });
-  }
+router.post("/retention/policies", requireAuth, (req, res) => {
+  const policy = createRetentionPolicy(req.body);
+  res.json({ success: true, data: policy });
 });
 
-router.get('/consent/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const consents = getUserConsents(userId);
-
-    res.json({ userId, consents });
-  } catch (error) {
-    console.error('Error fetching consents:', error);
-    res.status(500).json({ error: 'Failed to fetch consents' });
-  }
+router.put("/retention/policies/:id", requireAuth, (req, res) => {
+  const policy = updateRetentionPolicy(req.params.id, req.body);
+  if (!policy) return res.status(404).json({ success: false, error: "Policy not found" });
+  res.json({ success: true, data: policy });
 });
 
-router.post('/consent/check', async (req, res) => {
-  try {
-    const { userId, consentType } = req.body;
-
-    if (!userId || !consentType) {
-      res.status(400).json({ error: 'userId and consentType are required' });
-      return;
-    }
-
-    const hasConsent = hasValidConsent(userId, consentType);
-
-    res.json({ userId, consentType, hasConsent });
-  } catch (error) {
-    console.error('Error checking consent:', error);
-    res.status(500).json({ error: 'Failed to check consent' });
-  }
+router.delete("/retention/policies/:id", requireAuth, (req, res) => {
+  const deleted = deleteRetentionPolicy(req.params.id);
+  res.json({ success: deleted });
 });
 
-router.post('/data-request', async (req, res) => {
-  try {
-    const { userId, type } = req.body;
-
-    if (!userId || !type) {
-      res.status(400).json({ error: 'userId and type are required' });
-      return;
-    }
-
-    const validTypes = ['access', 'deletion', 'rectification', 'portability'];
-    if (!validTypes.includes(type)) {
-      res.status(400).json({ error: 'Invalid request type' });
-      return;
-    }
-
-    const request = createDataSubjectRequest(userId, type);
-
-    res.status(201).json({ success: true, request });
-  } catch (error) {
-    console.error('Error creating data subject request:', error);
-    res.status(500).json({ error: 'Failed to create request' });
-  }
+router.post("/retention/run/:policyId", requireAuth, async (req, res) => {
+  const job = await runRetentionJob(req.params.policyId);
+  res.json({ success: true, data: job });
 });
 
-router.get('/data-request/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const requests = getDataSubjectRequests(userId);
-
-    res.json({ userId, requests });
-  } catch (error) {
-    console.error('Error fetching data requests:', error);
-    res.status(500).json({ error: 'Failed to fetch requests' });
-  }
+router.get("/retention/stats", requireAuth, (req, res) => {
+  const stats = getRetentionStats();
+  res.json({ success: true, data: stats });
 });
 
-router.post('/data-request/:requestId/complete', async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    const { data } = req.body;
-
-    const success = completeDataSubjectRequest(requestId, data);
-
-    if (!success) {
-      res.status(404).json({ error: 'Request not found' });
-      return;
-    }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error completing data request:', error);
-    res.status(500).json({ error: 'Failed to complete request' });
-  }
+router.post("/pii/detect", requireAuth, (req, res) => {
+  const { text } = req.body;
+  const detections = detectPII(text);
+  res.json({ success: true, data: { detections, count: detections.length } });
 });
 
-router.post('/export/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const data = exportUserData(userId);
-
-    res.json(data);
-  } catch (error) {
-    console.error('Error exporting user data:', error);
-    res.status(500).json({ error: 'Failed to export data' });
-  }
+router.post("/pii/mask", requireAuth, (req, res) => {
+  const { value, mode, char } = req.body;
+  const masked = maskValue(value, { mode, char, preserveLength: true });
+  res.json({ success: true, data: { masked } });
 });
 
-router.delete('/delete/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const result = deleteUserData(userId);
-
-    res.json(result);
-  } catch (error) {
-    console.error('Error deleting user data:', error);
-    res.status(500).json({ error: 'Failed to delete data' });
-  }
+router.post("/pii/mask-object", requireAuth, (req, res) => {
+  const { object, fields, config } = req.body;
+  const masked = maskObject(object, fields, config);
+  res.json({ success: true, data: masked });
 });
 
-router.get('/security-controls', async (req, res) => {
-  try {
-    const controls = checkSecurityControls();
-
-    res.json({ controls, count: controls.length });
-  } catch (error) {
-    console.error('Error checking security controls:', error);
-    res.status(500).json({ error: 'Failed to check controls' });
-  }
+router.post("/pii/anonymize", requireAuth, (req, res) => {
+  const { candidate } = req.body;
+  const anonymized = anonymizeCandidate(candidate);
+  res.json({ success: true, data: anonymized });
 });
 
-router.get('/report/:framework', async (req, res) => {
-  try {
-    const { framework } = req.params;
-    const validFrameworks = ['SOC2', 'GDPR', 'HIPAA', 'ISO27001'];
+router.post("/pii/sanitize-export", requireAuth, (req, res) => {
+  const { data } = req.body;
+  const sanitized = sanitizeForExport(data);
+  res.json({ success: true, data: sanitized });
+});
 
-    if (!validFrameworks.includes(framework)) {
-      res.status(400).json({ error: 'Invalid framework' });
-      return;
-    }
+router.post("/pii/mask-log", requireAuth, (req, res) => {
+  const { data } = req.body;
+  const masked = maskLogData(data);
+  res.json({ success: true, data: masked });
+});
 
-    const report = generateComplianceReport(framework as 'SOC2' | 'GDPR' | 'HIPAA' | 'ISO27001');
+router.post("/access/request", requireAuth, (req, res) => {
+  const { requestedPermission, justification, duration, expiryDate } = req.body;
+  const userId = (req as any).user?.id || "user_123";
+  const userName = (req as any).user?.name || "User";
+  const request = createAccessRequest({ userId, userName, requestedPermission, justification, duration, expiryDate });
+  res.json({ success: true, data: request });
+});
 
-    res.json(report);
-  } catch (error) {
-    console.error('Error generating compliance report:', error);
-    res.status(500).json({ error: 'Failed to generate report' });
-  }
+router.get("/access/my-requests", requireAuth, (req, res) => {
+  const userId = (req as any).user?.id || "user_123";
+  const requests = getUserRequests(userId);
+  res.json({ success: true, data: requests });
+});
+
+router.get("/access/pending", requireAuth, (req, res) => {
+  const approverId = (req as any).user?.id || "approver_123";
+  const requests = getPendingApprovals(approverId);
+  res.json({ success: true, data: requests });
+});
+
+router.post("/access/approve/:requestId", requireAuth, (req, res) => {
+  const { requestId } = req.params;
+  const approverId = (req as any).user?.id || "approver_123";
+  const { comment } = req.body;
+  const request = approveRequest(requestId, approverId, comment);
+  if (!request) return res.status(404).json({ success: false, error: "Request not found" });
+  res.json({ success: true, data: request });
+});
+
+router.post("/access/reject/:requestId", requireAuth, (req, res) => {
+  const { requestId } = req.params;
+  const approverId = (req as any).user?.id || "approver_123";
+  const { comment } = req.body;
+  const request = rejectRequest(requestId, approverId, comment);
+  if (!request) return res.status(404).json({ success: false, error: "Request not found" });
+  res.json({ success: true, data: request });
+});
+
+router.get("/access/groups", requireAuth, (req, res) => {
+  const groups = getAllPermissionGroups();
+  res.json({ success: true, data: groups });
+});
+
+router.post("/access/groups", requireAuth, (req, res) => {
+  const group = createPermissionGroup(req.body);
+  res.json({ success: true, data: group });
+});
+
+router.post("/access/groups/:groupId/user", requireAuth, (req, res) => {
+  const { userId } = req.body;
+  const group = addUserToGroup(req.params.groupId, userId);
+  if (!group) return res.status(404).json({ success: false, error: "Group not found" });
+  res.json({ success: true, data: group });
+});
+
+router.delete("/access/groups/:groupId/user", requireAuth, (req, res) => {
+  const { userId } = req.body;
+  const group = removeUserFromGroup(req.params.groupId, userId);
+  if (!group) return res.status(404).json({ success: false, error: "Group not found" });
+  res.json({ success: true, data: group });
+});
+
+router.get("/access/permissions", requireAuth, (req, res) => {
+  const userId = (req as any).user?.id || "user_123";
+  const permissions = getUserPermissions(userId);
+  res.json({ success: true, data: { permissions } });
+});
+
+router.get("/audit/logs", requireAuth, (req, res) => {
+  const { userId, action, resource, startDate, endDate } = req.query;
+  const logs = getAuditLogs({
+    userId: userId as string,
+    action: action as string,
+    resource: resource as string,
+    startDate: startDate ? new Date(startDate as string) : undefined,
+    endDate: endDate ? new Date(endDate as string) : undefined,
+  });
+  res.json({ success: true, data: logs });
+});
+
+router.post("/audit/export", requireAuth, (req, res) => {
+  const { startDate, endDate, userId, action, resource, status, format } = req.body;
+  const result = exportAuditTrail({
+    startDate: new Date(startDate),
+    endDate: new Date(endDate),
+    userId,
+    action,
+    resource,
+    status,
+    format: format || "json",
+  });
+  res.json({ success: true, data: result });
+});
+
+router.get("/audit/stats", requireAuth, (req, res) => {
+  const { startDate, endDate } = req.query;
+  const stats = getAuditStats({
+    start: new Date(startDate as string || Date.now() - 30 * 86400000),
+    end: new Date(endDate as string || Date.now()),
+  });
+  res.json({ success: true, data: stats });
+});
+
+router.get("/audit/search", requireAuth, (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ success: false, error: "Query required" });
+  const results = searchAuditLogs(q as string);
+  res.json({ success: true, data: { results, count: results.length } });
+});
+
+router.post("/audit/log", requireAuth, (req, res) => {
+  const { action, resource, resourceId, details, status } = req.body;
+  const userId = (req as any).user?.id || "system";
+  const userRole = (req as any).user?.role || "system";
+  const entry = logAuditEntry({
+    userId,
+    userRole,
+    action,
+    resource,
+    resourceId,
+    details,
+    ipAddress: req.ip || "127.0.0.1",
+    userAgent: req.get("User-Agent") || "Unknown",
+    status,
+  });
+  res.json({ success: true, data: entry });
 });
 
 export default router;
