@@ -24,6 +24,7 @@
 ---
 
 ## Table of Contents
+- [Screenshots](#screenshots)
 - [Overview](#overview)
 - [Key Features](#key-features)
 - [Tech Stack](#tech-stack)
@@ -35,6 +36,26 @@
 - [API Endpoints](#api-endpoints)
 - [Contributing](#contributing)
 - [License](#license)
+
+---
+
+## Screenshots
+
+<div align="center">
+
+### Dashboard
+<img src="screenshots/dashboard.png" alt="Dashboard" width="100%"/>
+
+### Live Interview
+<img src="screenshots/interview.png" alt="Interview Session" width="100%"/>
+
+### Code Editor
+<img src="screenshots/code-editor.png" alt="Code Editor" width="100%"/>
+
+### AI Proctoring
+<img src="screenshots/proctoring.png" alt="AI Proctoring" width="100%"/>
+
+</div>
 
 ---
 
@@ -167,8 +188,8 @@ InterviewMinds/
 ├── apps/
 │   ├── api/                           # Backend Server
 │   │   ├── src/
-│   │   │   ├── lib/                   # Enterprise Services (44 files)
-│   │   │   ├── routes/                # API Routes (24+ files)
+│   │   │   ├── lib/                   # Enterprise Services (70+ files)
+│   │   │   ├── routes/                # API Routes (32+ files)
 │   │   │   ├── middleware/            # Auth, RBAC, Audit
 │   │   │   ├── models/                # MongoDB schemas
 │   │   │   └── index.ts               # Entry point
@@ -285,47 +306,52 @@ VITE_SENTRY_DSN=https://...
 
 ## API Endpoints
 
+### Authentication & Security
+- `/api/auth/*` - Login, register, JWT tokens
+- `/api/e2e-encryption/*` - End-to-end encryption
+- `/api/biometric/*` - Face/Voice/Fingerprint auth
+- `/api/fraud-detection/*` - Browser fingerprinting
+- `/api/geo-fencing/*` - IP/Country blocking
+
 ### Core Interview
-- `/api/resume/*` - Resume management
-- `/api/chat/*` - AI chat
-- `/api/code/*` - Code execution
+- `/api/interview/*` - Interview sessions
+- `/api/chat/*` - AI chat with Groq
+- `/api/compiler/*` - Multi-language code execution
+- `/api/proctoring/*` - Video proctoring with TensorFlow.js
 
-### Security & Fraud
-- `/api/e2e-encryption/*` - E2E encryption
-- `/api/biometric/*` - Biometric auth
-- `/api/fraud-detection/*` - Fraud detection
-- `/api/geo-fencing/*` - Geo-fencing
-
-### Assessment
+### Resume & Assessment
+- `/api/resume/*` - Resume parsing & upload
 - `/api/job-matching/*` - Resume-job matching
 - `/api/questions/*` - Question generation
 - `/api/answer-validation/*` - Answer evaluation
 - `/api/dynamic-questions/*` - Follow-up questions
-- `/api/code-analysis/*` - Code analysis
+- `/api/code-analysis/*` - Code quality analysis
 
-### Enterprise
-- `/api/proctoring/*` - Video proctoring
-- `/api/sso/*` - SSO integration
-- `/api/webhooks/*` - Webhooks
-- `/api/ats/*` - ATS integration
-- `/api/tenants/*` - Multi-tenancy
-- `/api/compliance/*` - Compliance
-
-### Phase 8 Advanced
-- `/api/scheduling/*` - Interview scheduling
+### Scheduling & Management
+- `/api/scheduling/*` - Calendar-based booking
 - `/api/question-bank/*` - Question library
 - `/api/scorecard/*` - Evaluation rubrics
-- `/api/reports/*` - Report generation
-- `/api/async-video/*` - Async interviews
-- `/api/take-home/*` - Take-home challenges
-- `/api/preparation/*` - System check
-- `/api/mock-interview/*` - Practice mode
-- `/api/panel-interview/*` - Panel interviews
-- `/api/ai-analysis/*` - AI analysis
-- `/api/notifications/*` - Notifications
-- `/api/resume-screener/*` - Resume screening
-- `/api/sql-challenges/*` - SQL testing
-- `/api/git/*` - GitHub integration
+- `/api/reports/*` - PDF/CSV exports
+- `/api/panel-interview/*` - Multi-interviewer panels
+
+### AI & Machine Learning
+- `/api/llm-interviewer/*` - LLM-powered interviewer with memory
+- `/api/multimodal-ai/*` - Voice, facial, gesture analysis
+- `/api/smart-assessment/*` - AI predictions & competency gaps
+- `/api/analytics/*` - Predictive analytics, sentiment analysis
+
+### Real-Time Collaboration
+- `/api/collaboration/*` - Code editor, whiteboard, video calls
+
+### Developer Tools
+- `/api/infrastructure/*` - DB pooling, Redis caching, CDN
+- `/api/developer/*` - GitHub/GitLab integration, code review, sandbox
+
+### Enterprise Features
+- `/api/sso/*` - Single sign-on
+- `/api/ats/*` - ATS integration (Greenhouse, Lever)
+- `/api/tenants/*` - Multi-tenancy support
+- `/api/compliance/*` - Data retention, PII masking, audit trail
 
 ---
 
