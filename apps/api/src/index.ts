@@ -56,6 +56,7 @@ import { typeDefs } from "./graphql/schema";
 import { resolvers } from "./graphql/resolvers";
 import adminRoutes from "./routes/admin";
 import exportRoutes from "./routes/export";
+import reportRoutes from "./routes/reports";
 import userRoutes from "./routes/users";
 import schedulingRoutes from "./routes/scheduling";
 import llmInterviewerRoutes from "./routes/llmInterviewer";
@@ -507,6 +508,12 @@ app.use(
   requireAuth,
   attachRole,
   exportRoutes,
+);
+
+app.use(
+  "/api/reports",
+  requireAuth,
+  reportRoutes,
 );
 
 // 13. User Routes
