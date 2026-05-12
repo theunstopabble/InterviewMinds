@@ -43,14 +43,14 @@ This document describes the core workflows, processes, and operational procedure
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │   Client    │     │   Express   │     │   BullMQ    │     │   Worker    │
-│             │     │   Server     │     │   Queue     │     │  (Async)    │
+│             │     │   Server    │     │   Queue     │     │  (Async)    │
 └──────┬──────┘     └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-       │                    │                    │                    │
-       │  POST /resume/upload                    │                    │
-       │───────────────────>│                    │                    │
-       │                    │                    │                    │
-       │              Create Resume (status: pending)                │
-       │                    │                    │                    │
+       │                   │                   │                   │
+       │  POST /resume/upload                   │                   │
+       │───────────────────>│                   │                   │
+       │                    │                   │                   │
+       │              Create Resume (status: pending)              │
+       │                    │                   │                   │
        │                    │   addJob("process-resume")            │
        │                    │───────────────────>│                    │
        │                    │                    │                    │

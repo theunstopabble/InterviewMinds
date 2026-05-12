@@ -57,6 +57,8 @@ import schedulingRoutes from "./routes/scheduling";
 import llmInterviewerRoutes from "./routes/llmInterviewer";
 import multimodalAIRoutes from "./routes/multimodalAI";
 import smartAssessmentRoutes from "./routes/smartAssessment";
+import infrastructureRoutes from "./routes/infrastructure";
+import collaborationRoutes from "./routes/collaboration";
 import { startWorkers, closeQueues } from "./lib/queue";
 import { requireEnvVars } from "./lib/envValidation";
 
@@ -347,10 +349,6 @@ app.use(
 );
 
 app.use(
-  "/api/analytics",
-  analyticsRoutes,
-);
-app.use(
   "/api/scheduling",
   schedulingRoutes,
 );
@@ -381,6 +379,31 @@ app.use(
   auditLog("smart-assessment"),
   smartAssessmentRoutes,
 );
+
+// Phase 10: Cloud-Native & Infrastructure
+app.use(
+  "/api/infrastructure",
+  requireAuth,
+  attachRole,
+  infrastructureRoutes,
+);
+
+// Phase 11: Real-Time Collaboration
+app.use(
+  "/api/collaboration",
+  requireAuth,
+  attachRole,
+  collaborationRoutes,
+);
+
+// Phase 12: Advanced Analytics
+app.use(
+  "/api/analytics",
+  requireAuth,
+  attachRole,
+  analyticsRoutes,
+);
+
 app.use(
   "/api/chat",
   requireAuth,
