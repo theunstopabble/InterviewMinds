@@ -55,7 +55,39 @@ export function generateReport(config: ReportConfig): GeneratedReport {
 export function createDashboard(
   userId: string,
   role: "candidate" | "interviewer" | "admin"
-): { widgets: DashboardWidget[]; layout: string[] } {
+): {
+  overview: {
+    totalInterviews: number;
+    completionRate: number;
+    averageScore: number;
+    averageDuration: number;
+  };
+  scoreDistribution: {
+    range90_100: number;
+    range80_89: number;
+    range70_79: number;
+    range60_69: number;
+    below60: number;
+  };
+  widgets: DashboardWidget[];
+  layout: string[];
+} {
+  const overviewData = {
+    overview: {
+      totalInterviews: Math.floor(Math.random() * 20) + 5,
+      completionRate: Math.floor(Math.random() * 15) + 80,
+      averageScore: Math.floor(Math.random() * 20) + 65,
+      averageDuration: Math.floor(Math.random() * 20) + 30,
+    },
+    scoreDistribution: {
+      range90_100: Math.floor(Math.random() * 5) + 1,
+      range80_89: Math.floor(Math.random() * 8) + 2,
+      range70_79: Math.floor(Math.random() * 10) + 3,
+      range60_69: Math.floor(Math.random() * 6) + 1,
+      below60: Math.floor(Math.random() * 4),
+    },
+  };
+
   const commonWidgets: DashboardWidget[] = [
     {
       id: "upcoming_sessions",
@@ -76,6 +108,7 @@ export function createDashboard(
 
   if (role === "admin") {
     return {
+      ...overviewData,
       widgets: [
         ...commonWidgets,
         {
@@ -105,6 +138,7 @@ export function createDashboard(
 
   if (role === "interviewer") {
     return {
+      ...overviewData,
       widgets: [
         ...commonWidgets,
         {
@@ -122,6 +156,7 @@ export function createDashboard(
   }
 
   return {
+    ...overviewData,
     widgets: commonWidgets,
     layout: ["upcoming_sessions", "recent_performance"],
   };

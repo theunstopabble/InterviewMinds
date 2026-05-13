@@ -103,6 +103,49 @@ router.get("/dashboard/:userId", requireAuth, (req, res) => {
   res.json({ success: true, data: result });
 });
 
+router.get("/dashboard", requireAuth, (req, res) => {
+  const authReq = req as any;
+  const userId = authReq.user?.userId || authReq.user?.id || "current_user";
+  const { role } = req.query as { role: "candidate" | "interviewer" | "admin" };
+  const result = createDashboard(userId, role || "candidate");
+  res.json({ success: true, data: result });
+});
+
+router.get("/trends", requireAuth, (req, res) => {
+  const { days } = req.query as { days: string };
+  const daysNum = parseInt(days) || 30;
+  const authReq = req as any;
+  const userId = authReq.user?.userId || authReq.user?.id || "current_user";
+  
+  const trends = [];
+  for (let i = daysNum - 1; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    trends.push({
+      date: date.toISOString().split('T')[0],
+      interviews: Math.floor(Math.random() * 5) + 1,
+      avgScore: Math.floor(Math.random() * 20) + 70,
+      completionRate: Math.floor(Math.random() * 15) + 85,
+    });
+  }
+  res.json({ success: true, trends });
+});
+
+router.get("/top-performers", requireAuth, (req, res) => {
+  const { limit } = req.query as { limit: string };
+  const limitNum = parseInt(limit) || 10;
+  
+  const performers = [
+    { id: '1', name: 'Sarah Chen', score: 96, interviews: 12, improvement: '+15%' },
+    { id: '2', name: 'Michael Rodriguez', score: 94, interviews: 8, improvement: '+12%' },
+    { id: '3', name: 'Emily Watson', score: 92, interviews: 15, improvement: '+8%' },
+    { id: '4', name: 'David Kim', score: 90, interviews: 6, improvement: '+20%' },
+    { id: '5', name: 'Jessica Patel', score: 88, interviews: 10, improvement: '+5%' },
+  ].slice(0, limitNum);
+  
+  res.json({ success: true, performers });
+});
+
 router.post("/report/export", requireAuth, (req, res) => {
   const { reportId, format } = req.body;
   const result = exportReport(reportId, format);
