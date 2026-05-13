@@ -1,310 +1,334 @@
 <div align="center">
-  <img src="apps/web/public/pwa-192x192.png" alt="InterviewMinds" width="80" height="80"/>
-  <h1>InterviewMinds</h1>
-  <p><b>Enterprise-Grade AI Mock Interview Platform</b></p>
-  <p>
-    <a href="https://interviewminds.vercel.app/"><img alt="Live Demo" src="https://img.shields.io/badge/Live_Demo-000000?style=for-the-badge&logo=vercel"/></a>
-    <a href="https://github.com/theunstopabble/InterviewMinds"><img alt="GitHub" src="https://img.shields.io/badge/GitHub_Repo-181717?style=for-the-badge&logo=github"/></a>
-    <a href="LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/License-MIT-000000?style=for-the-badge"/></a>
-  </p>
-  <p>
-    <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white"/>
-    <img alt="React" src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB"/>
-    <img alt="Node.js" src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white"/>
-    <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white"/>
-    <img alt="Redis" src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white"/>
-  </p>
+  <img src="apps/web/public/pwa-192x192.png" alt="InterviewMinds" width="100" height="100"/>
+  
+  # InterviewMinds
+  
+  **Enterprise-Grade AI Mock Interview Platform**
+  
+  *AI-driven interview simulation with real-time proctoring, multimodal analysis, CRDT collaboration, and production-grade infrastructure — built for organizations requiring secure, scalable candidate evaluation.*
+
+  <br/>
+
+  [![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-interviewminds.vercel.app-000000?style=for-the-badge)](https://interviewminds.vercel.app/)
+  [![GitHub](https://img.shields.io/badge/GitHub-theunstopabble-181717?style=for-the-badge&logo=github)](https://github.com/theunstopabble/InterviewMinds)
+  [![License](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
+
+  <br/>
+
+  ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+  ![React](https://img.shields.io/badge/React_18-61DAFB?style=flat-square&logo=react&logoColor=black)
+  ![Node.js](https://img.shields.io/badge/Node.js_20-339933?style=flat-square&logo=node.js&logoColor=white)
+  ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white)
+  ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
+  ![Socket.IO](https://img.shields.io/badge/Socket.IO-010101?style=flat-square&logo=socket.io&logoColor=white)
+  ![TensorFlow](https://img.shields.io/badge/TensorFlow.js-FF6F00?style=flat-square&logo=tensorflow&logoColor=white)
+  ![Vite](https://img.shields.io/badge/Vite_7-646CFF?style=flat-square&logo=vite&logoColor=white)
+
 </div>
 
-# InterviewMinds
-**Production-Grade Enterprise AI Mock Interview Platform**
+---
 
-> An enterprise-grade interview simulation platform featuring AI-driven assessment, real-time proctoring, truthfulness verification, and comprehensive analytics—built for organizations requiring secure, scalable, and compliance-ready candidate evaluation.
+## 🏗️ Architecture Overview
+
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            INTERVIEWMINDS                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │  FRONTEND — React 18 + Vite 7.3 + Tailwind CSS + Shadcn UI          │  │
+│  │  ├── Clerk Auth (OAuth/Email)    ├── Monaco Code Editor              │  │
+│  │  ├── face-api.js (Browser ML)    ├── Socket.IO Client                │  │
+│  │  ├── Recharts (Analytics)        └── PWA Support                     │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                              │ HTTPS + JWT + WebSocket                       │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │  BACKEND — Node.js 20 + Express 4.21 + TypeScript 5.3                │  │
+│  │  ├── 81 Service Modules          ├── 38 REST Route Files             │  │
+│  │  ├── GraphQL (Apollo Server 4)   ├── Socket.IO 4.8 (Real-time)      │  │
+│  │  ├── BullMQ Workers              ├── Circuit Breaker Pattern         │  │
+│  │  └── ML Pipeline (face-api.js + TensorFlow.js)                       │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                              │                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────────────┐  │
+│  │  MongoDB     │  │  Redis       │  │  External Services               │  │
+│  │  Atlas       │  │  (Upstash)   │  │  ├── Groq (Llama 3.3-70b LLM)   │  │
+│  │              │  │              │  │  ├── Azure Speech (TTS/STT)      │  │
+│  │  7 Models    │  │  Cache       │  │  ├── Piston (Code Execution)     │  │
+│  │  Pool: 20    │  │  BullMQ      │  │  ├── Cloudinary (Media)          │  │
+│  │              │  │  Rate Limit  │  │  └── WebRTC (STUN/TURN)          │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Table of Contents
-- [Architecture Overview](#architecture-overview)
-- [Features](#features)
-- [Screenshots](#screenshots)
-- [Technology Stack](#technology-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Configuration](#configuration)
-- [API Reference](#api-reference)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [License](#license)
+## ✨ Features — 18 Production Phases
+
+| Phase | Domain | Key Features |
+|:-----:|--------|-------------|
+| **1** | Core Interview | AI-powered chat (Groq Llama 3.3-70b), resume parsing (pdf2json + embeddings), dynamic follow-up questions |
+| **2** | Security | E2E encryption (RSA-4096 + AES-256-GCM + PBKDF2), biometric auth, fraud detection, geo-fencing |
+| **3** | Video Proctoring | ML face detection (face-api.js), eye tracking, expression analysis, screen monitoring |
+| **4** | Assessment | Code execution (Piston API), answer validation, job matching, skill gap analysis |
+| **5** | Integrations | SSO (OAuth/SAML), webhooks (HMAC-signed), ATS integration |
+| **6** | Enterprise | Multi-tenancy, RBAC (candidate/interviewer/admin), tenant isolation |
+| **7** | Analytics | MongoDB aggregation pipelines, trend analysis, top performers, pipeline tracking |
+| **8** | Scheduling | Calendar booking, timezone handling, question bank, scorecards, PDF/CSV reports |
+| **9** | Next-Gen AI | LLM interviewer with memory/personas, multimodal voice tone analysis (Groq primary), smart assessment |
+| **10** | Infrastructure | Circuit breakers, connection pooling, CDN integration, graceful shutdown |
+| **11** | Collaboration | CRDT collaborative editor (three-way merge), whiteboard (MongoDB persistence), video calls (WebRTC + STUN/TURN + SFU) |
+| **12** | Predictive Analytics | Attrition prediction, performance forecasting, anomaly detection, sentiment analysis |
+| **13** | Developer Experience | GitHub/GitLab integration, code review, sandboxed execution, test runner |
+| **14** | Compliance | GDPR data export, PII masking, data retention policies, immutable audit trails |
+| **15** | Integration Ecosystem | HRIS (Workday/BambooHR/SAP), Slack/Teams/Discord, Zoom/Google Meet, background checks |
+| **16** | Mobile | Offline support, push notifications, responsive mobile API |
+| **17** | Observability | Prometheus metrics, Pino structured logging, Sentry error tracking, health checks |
+| **18** | AI Agents | Autonomous screening/scheduling/feedback agents, workflow automation |
 
 ---
 
-## Architecture Overview
+## 🛠️ Technology Stack
 
-InterviewMinds implements a **monolithic Turborepo architecture** optimized for enterprise deployment. The system comprises three primary layers:
+### Core
 
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| **Frontend** | React 18 + Vite | Dynamic UI with Shadcn UI components |
-| **API Gateway** | Express + TypeScript | RESTful services with middleware pipeline |
-| **Data Layer** | MongoDB + Redis | Persistent storage with caching |
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| **Runtime** | Node.js | 20.x |
+| **Language** | TypeScript | 5.3 |
+| **Frontend** | React + Vite + Tailwind CSS + Shadcn UI | 18 / 7.3 / 3.4 |
+| **Backend** | Express + Socket.IO + Apollo Server | 4.21 / 4.8 / 4.11 |
+| **Database** | MongoDB (Mongoose) | 8.x |
+| **Cache/Queue** | Redis (ioredis) + BullMQ | 5.10 / 5.45 |
+| **Monorepo** | Turborepo + npm workspaces | latest |
 
-**Infrastructure Pattern:**
-- **Compute**: Node.js 20 (containerized via Docker)
-- **AI Inference**: Groq API (Llama 3) for sub-500ms response latency
-- **Real-time Processing**: TensorFlow.js for client-side ML inference
-- **Async Jobs**: BullMQ for background task processing
-- **Observability**: Sentry (tracing), Prometheus (metrics)
+### AI & Machine Learning
 
----
+| Service | Model/Tech | Purpose |
+|---------|-----------|---------|
+| Groq | Llama 3.3-70b-versatile | Interview chat, voice analysis, resume screening, AI agents |
+| face-api.js | SSD MobileNet + Landmarks + Expressions | Real-time face detection & proctoring |
+| TensorFlow.js | Runtime | ML model execution (server-side) |
+| Azure Speech SDK | Neural TTS | Text-to-speech for AI interviewer |
+| Piston API | Multi-language sandbox | Secure code execution |
 
-## Features
+### Security
 
-### Core Interview Engine
-- **AI-Powered Assessment**: LLM-driven interviewer with conversation memory and contextual follow-ups
-- **Multi-Modal Analysis**: Voice (STT/TTS), facial expressions, gesture recognition
-- **Live Coding Environment**: Sandboxed code execution with security analysis
-
-### Intelligent Proctoring
-- **Behavioral Analytics**: Face detection, eye tracking, expression analysis
-- **Environment Monitoring**: Tab-switch detection, full-screen enforcement
-- **Audio Metrics**: Speech pace, filler word detection, voice stress analysis
-
-### Resume Intelligence
-- **Parsing & Analysis**: PDF extraction with tech stack mapping
-- **Job Matching**: Skill gap analysis with weighted scoring
-- **Verification Engine**: Fact-checking, timeline validation, red flag detection
-
-### Enterprise Security
-- **Data Protection**: E2E encryption (RSA + AES-256)
-- **Access Control**: RBAC, biometric authentication
-- **Fraud Prevention**: Browser fingerprinting, anomaly detection, geo-blocking
-
-### Enterprise Operations
-- **Scheduling**: Calendar-based booking with timezone handling
-- **Pipeline Management**: Kanban-based candidate tracking
-- **Reporting**: PDF/CSV/JSON exports with brand customization
-- **Compliance**: Audit logging, GDPR export, consent management
+| Feature | Implementation |
+|---------|---------------|
+| Authentication | Clerk (OAuth + Email) |
+| Authorization | Custom RBAC with wildcard admin |
+| Encryption | RSA-4096 + AES-256-GCM + PBKDF2 |
+| API Security | Helmet CSP + Rate Limiting + CSRF + Input Sanitization |
+| Audit | Immutable audit logs with correlation IDs |
 
 ---
 
-## Screenshots
-
-### Dashboard
-![Dashboard](screenshots/dashboard.png)
-*Real-time interview statistics and performance metrics*
-
-### Live Interview
-![Interview](screenshots/interview.png)
-*AI-powered interview with real-time voice and video analysis*
-
-### Code Editor
-![Code Editor](screenshots/code-editor.png)
-*Integrated coding environment with syntax highlighting and execution*
-
-### Proctoring Monitor
-![Proctoring](screenshots/proctoring.png)
-*AI-powered proctoring with face detection and behavior analysis*
-
----
-
-## Technology Stack
-
-| Category | Implementation |
-|----------|----------------|
-| **Monorepo** | Turborepo, npm workspaces |
-| **Frontend** | React 18, Vite, TypeScript, Tailwind CSS, Shadcn UI |
-| **Backend** | Node.js 20, Express, TypeScript |
-| **Database** | MongoDB (Mongoose ODM) |
-| **Cache/Queue** | Redis, BullMQ |
-| **Authentication** | Clerk (OAuth), Custom JWT, Biometric |
-| **AI/ML** | Groq (Llama 3), Google Gemini, TensorFlow.js |
-| **Security** | E2E Encryption, RBAC, CSRF Protection |
-| **Observability** | Sentry, Prometheus |
-| **Media** | Cloudinary, WebRTC |
-
----
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 InterviewMinds/
 ├── apps/
-│   ├── api/                           # Backend API Server
+│   ├── api/                        # Backend API Server
 │   │   ├── src/
-│   │   │   ├── lib/                   # Business logic services (79 modules)
-│   │   │   ├── routes/                # REST API routes (32 endpoints)
-│   │   │   ├── middleware/            # Auth, validation, audit
-│   │   │   ├── models/                # MongoDB schemas (10 collections)
-│   │   │   └── index.ts               # Entry point
-│   │   └── Dockerfile
-│   └── web/                          # Frontend Client
+│   │   │   ├── config/            # Service configurations (Cloudinary)
+│   │   │   ├── graphql/           # Apollo Server schema + resolvers
+│   │   │   ├── lib/               # 81 business logic service modules
+│   │   │   │   ├── aiAgent.ts             # AI agent orchestration
+│   │   │   │   ├── analytics.ts           # MongoDB aggregation analytics
+│   │   │   │   ├── collaborativeEditor.ts # CRDT three-way merge editor
+│   │   │   │   ├── e2eEncryption.ts       # RSA-4096 + AES-256-GCM
+│   │   │   │   ├── faceMLService.ts       # face-api.js model loading
+│   │   │   │   ├── multimodalAI.ts        # Groq voice tone analysis
+│   │   │   │   ├── videoCall.ts           # WebRTC + STUN/TURN + SFU
+│   │   │   │   ├── videoProctoring.ts     # ML-based proctoring
+│   │   │   │   ├── whiteboard.ts          # Persistent whiteboard
+│   │   │   │   └── ... (81 total)
+│   │   │   ├── middleware/         # Auth, RBAC, audit, security
+│   │   │   ├── models/            # 7 Mongoose schemas
+│   │   │   ├── routes/            # 38 Express route files
+│   │   │   └── tests/             # Vitest + fast-check PBT
+│   │   ├── models/face-api/       # ML model weights
+│   │   └── Dockerfile             # Multi-stage production build
+│   │
+│   └── web/                        # Frontend Client
 │       ├── src/
-│       │   ├── components/            # Reusable UI components
-│       │   ├── hooks/                 # Custom React hooks
-│       │   ├── pages/                 # Route pages (13)
-│       │   ├── services/              # API client services (45)
-│       │   └── lib/                   # Utilities
-│       ├── public/models/             # TensorFlow.js models
-│       └── Dockerfile
+│       │   ├── components/         # Shadcn UI + custom components
+│       │   ├── pages/              # Route pages
+│       │   ├── hooks/              # Custom React hooks
+│       │   ├── services/           # API client services
+│       │   └── lib/                # Utilities
+│       └── vercel.json             # Deployment config
+│
 ├── packages/
-│   └── shared/                       # Shared TypeScript types
-├── docs/                             # System documentation
-│   ├── API.md                        # REST API reference
-│   ├── ARCHITECTURE.md               # System architecture
-│   ├── DB_SCHEMA.md                  # Database schema
-│   ├── WORKFLOW.md                   # Process flows
-│   └── DEPLOYMENT.md                 # Deployment guide
-└── docker-compose.yml                # Container orchestration
+│   └── shared/                     # Shared TypeScript types & interfaces
+├── docs/                           # Comprehensive documentation
+│   ├── API.md                      # REST + GraphQL API reference
+│   ├── ARCHITECTURE.md             # System design & patterns
+│   ├── DB_SCHEMA.md                # MongoDB models & indexes
+│   ├── DEPLOYMENT.md               # Production deployment guide
+│   ├── EDGE_CASES.md               # Error handling & graceful degradation
+│   ├── TECH_STACK.md               # Complete technology inventory
+│   └── WORKFLOW.md                 # Development workflow & CI/CD
+├── .github/workflows/main.yml      # CI pipeline (typecheck + test + build)
+├── turbo.json                      # Turborepo build config
+└── package.json                    # Root workspace configuration
 ```
 
 ---
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| Node.js | v20+ | LTS recommended |
-| MongoDB | v6.0+ | Atlas or local |
-| Redis | v7.0+ | For caching/queue |
-| npm | v10+ | Package management |
+| Tool | Version | Required |
+|------|---------|----------|
+| Node.js | 20+ | ✅ |
+| npm | 10+ | ✅ |
+| MongoDB | Atlas (free tier) or local | ✅ |
+| Redis | Upstash (free) or local | Optional |
 
 ### Installation
 
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/theunstopabble/InterviewMinds.git
 cd InterviewMinds
 
-# Install dependencies
-npm install
-```
+# Install all workspace dependencies
+npm install --legacy-peer-deps
 
-### Development Environment
+# Configure environment
+cp apps/api/.env.example apps/api/.env
+# Edit apps/api/.env with your API keys (see .env.example for details)
 
-```bash
-# Start all services (API + Web)
+# Start development (frontend + backend simultaneously)
 npm run dev
 ```
 
-| Service | Endpoint |
-|---------|----------|
-| Backend API | http://localhost:8000 |
-| Frontend | http://localhost:5173 |
+### Development URLs
 
-### Production (Docker)
+| Service | URL | Description |
+|---------|-----|-------------|
+| Frontend | http://localhost:5173 | React app with hot reload |
+| Backend API | http://localhost:8000 | Express REST + WebSocket |
+| GraphQL | http://localhost:8000/graphql | Apollo Playground (dev only) |
+| Health Check | http://localhost:8000/health | Service status |
+| Metrics | http://localhost:8000/metrics | Prometheus format |
+
+---
+
+## 🧪 Testing
 
 ```bash
-docker-compose up -d
+# Run backend tests
+cd apps/api && npm run test
+
+# Run with coverage
+cd apps/api && npm run test:coverage
+
+# Watch mode
+cd apps/api && npm run test:watch
+```
+
+**Test Suite:** 39 property-based tests  
+- 7 bug condition exploration tests (verify defects are fixed)  
+- 32 preservation tests (verify no regressions)  
+**Framework:** Vitest 2.1 + fast-check 3.22
+
+---
+
+## 🌐 Deployment
+
+| Component | Platform | Status |
+|-----------|----------|--------|
+| Frontend | [Vercel](https://interviewminds.vercel.app) | ✅ Live |
+| Backend | [Render](https://render.com) (Docker) | ✅ Live |
+| Database | MongoDB Atlas (Free M0) | ✅ Connected |
+| Cache | Upstash Redis (Free) | ✅ Connected |
+
+### CI/CD Pipeline
+
+```
+Push to main → GitHub Actions → Typecheck → Test → Build → Auto-deploy
 ```
 
 ---
 
-## Configuration
+## 🔑 Environment Variables
 
-### Backend Environment
+The app requires only **5 keys** to run. All other features gracefully degrade without their keys (no crash).
 
-Create `apps/api/.env`:
+| Variable | Required | Free Tier Available |
+|----------|----------|-------------------|
+| `MONGO_URI` | ✅ | MongoDB Atlas Free (512MB) |
+| `CLERK_PUBLISHABLE_KEY` | ✅ | Clerk Free (10k MAU) |
+| `CLERK_SECRET_KEY` | ✅ | Clerk Free |
+| `GROQ_API_KEY` | ✅ | Groq Free (rate limited) |
+| `JWT_SECRET` | ✅ | Self-generated |
+| `REDIS_URL` | Optional | Upstash Free (10k/day) |
+| `CLOUDINARY_*` | Optional | Cloudinary Free (25GB) |
+| `AZURE_SPEECH_*` | Optional | Azure Free (5hr/mo) |
+| `SENTRY_DSN` | Optional | Sentry Free (5k errors/mo) |
 
-```bash
-# Server
-NODE_ENV=development
-PORT=8000
-
-# Database
-MONGO_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/interviewminds
-REDIS_URL=redis://localhost:6379
-
-# Security
-JWT_SECRET=<32-char-minimum-secret>
-CORS_ORIGINS=http://localhost:5173,http://localhost:5174
-
-# Authentication (Clerk)
-CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-
-# AI Services
-GROQ_API_KEY=gsk_...
-GEMINI_API_KEY=...
-
-# Azure Speech (TTS/STT)
-AZURE_SPEECH_KEY=...
-AZURE_SPEECH_REGION=centralindia
-
-# Media Storage
-CLOUDINARY_CLOUD_NAME=...
-CLOUDINARY_API_KEY=...
-CLOUDINARY_API_SECRET=...
-
-# Monitoring
-SENTRY_DSN=https://...
-```
-
-### Frontend Environment
-
-Create `apps/web/.env`:
-
-```bash
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
-VITE_API_URL=http://localhost:8000/api
-VITE_SENTRY_DSN=https://...
-```
+> See [`apps/api/.env.example`](apps/api/.env.example) for the complete list of 50 environment variables.
 
 ---
 
-## API Reference
+## 📚 Documentation
 
-| Domain | Endpoints | Description |
-|--------|-----------|-------------|
-| **Authentication** | `/api/auth/*` | JWT-based auth with Clerk integration |
-| **Security** | `/api/e2e-encryption/*`, `/api/biometric/*`, `/api/fraud-detection/*`, `/api/geo-fencing/*` | Enterprise security layer |
-| **Interview** | `/api/interview/*`, `/api/chat/*`, `/api/compiler/*` | Core interview functionality |
-| **Proctoring** | `/api/proctoring/*` | Real-time monitoring |
-| **Assessment** | `/api/resume/*`, `/api/job-matching/*`, `/api/questions/*`, `/api/answer-validation/*` | Candidate evaluation |
-| **Scheduling** | `/api/scheduling/*`, `/api/question-bank/*`, `/api/scorecard/*` | Interview management |
-| **AI/ML** | `/api/llm-interviewer/*`, `/api/multimodal-ai/*`, `/api/smart-assessment/*`, `/api/analytics/*` | Intelligence layer |
-| **Collaboration** | `/api/collaboration/*`, `/api/panel-interview/*` | Real-time features |
-| **Enterprise** | `/api/sso/*`, `/api/ats/*`, `/api/tenants/*`, `/api/compliance/*` | Organizational features |
-| **Reporting** | `/api/reports/*`, `/api/infrastructure/*`, `/api/developer/*` | Operations |
-
-> Full API documentation available in `docs/API.md`
+| Document | Description |
+|----------|-------------|
+| [`docs/API.md`](docs/API.md) | Complete REST + GraphQL API reference |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, middleware pipeline, data flow |
+| [`docs/DB_SCHEMA.md`](docs/DB_SCHEMA.md) | 7 MongoDB models with field-level docs |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production deployment (Vercel + Render + Docker) |
+| [`docs/EDGE_CASES.md`](docs/EDGE_CASES.md) | Error handling & graceful degradation |
+| [`docs/TECH_STACK.md`](docs/TECH_STACK.md) | Complete technology inventory (50+ packages) |
+| [`docs/WORKFLOW.md`](docs/WORKFLOW.md) | Development workflow, testing, CI/CD |
 
 ---
 
-## Documentation
+## 🏛️ Key Technical Decisions
 
-| Document | Content |
-|----------|---------|
-| `docs/API.md` | Complete REST API reference with request/response schemas |
-| `docs/ARCHITECTURE.md` | System design, component relationships, data flow |
-| `docs/DB_SCHEMA.md` | MongoDB collections, indexes, relationships |
-| `docs/WORKFLOW.md` | User journeys, process diagrams, state machines |
-| `docs/DEPLOYMENT.md` | Infrastructure setup, CI/CD, monitoring |
+| Decision | Rationale |
+|----------|-----------|
+| **Groq over OpenAI** | Sub-500ms latency, free tier, Llama 3.3-70b quality |
+| **CRDT over OT** | Simpler implementation, commutative operations, no central server needed |
+| **face-api.js with fallback** | ML when models available, content-derived analysis otherwise (never static) |
+| **Three-way merge** | Preserves concurrent edits from multiple users without data loss |
+| **Circuit breaker pattern** | Prevents cascading failures when external services (Groq, Piston) go down |
+| **BullMQ over in-process** | Reliable async jobs with retry, backoff, and persistence |
+| **Clerk over custom auth** | Enterprise-grade auth without building from scratch |
+| **Turborepo** | Shared types, parallel builds, intelligent caching |
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create feature branch: `git checkout -b feature/FeatureName`
+2. Create a feature branch: `git checkout -b feature/your-feature`
 3. Commit with conventional commits: `git commit -m 'feat: add feature'`
-4. Push to branch: `git push origin feature/FeatureName`
-5. Open Pull Request
+4. Ensure `npm run typecheck` passes
+5. Push and open a Pull Request
 
 ---
 
-## License
+## 📄 License
 
-MIT License. See `LICENSE` for details.
+MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
 <div align="center">
-  <p>Built by <a href="https://gautam-kr.vercel.app" target="_blank">Gautam Kumar</a></p>
-  <p>
-    <a href="https://www.linkedin.com/in/gautamkr62" target="_blank">
-      <img src="https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" />
-    </a>
-  </p>
+  
+  **Built by [Gautam Kumar](https://gautam-kr.vercel.app)**
+
+  [![Portfolio](https://img.shields.io/badge/Portfolio-gautam--kr.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://gautam-kr.vercel.app)
+  [![LinkedIn](https://img.shields.io/badge/LinkedIn-gautamkr62-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/gautamkr62)
+  [![GitHub](https://img.shields.io/badge/GitHub-theunstopabble-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/theunstopabble)
+  [![Email](https://img.shields.io/badge/Email-gautamkumar43421-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:gautamkumar43421@gmail.com)
+
 </div>

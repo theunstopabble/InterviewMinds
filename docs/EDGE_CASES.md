@@ -1,671 +1,357 @@
 # Edge Cases & Error Handling
 
+**Version:** 2.0.0  
+**Last Updated:** May 2026
+
+---
+
 ## Overview
 
-This document covers edge cases, error handling strategies, and failure scenarios for the InterviewMinds platform.
+This document catalogs edge cases, failure modes, and how InterviewMinds handles them. The system is designed for graceful degradation — features degrade to reduced functionality rather than failing completely.
 
 ---
 
-## API Error Responses
+## AI Service Failures
 
-### Standard Error Format
+### Groq LLM Unavailable
+
+**Scenario:** Groq API key missing, rate limited, or service down.
+
+**Handling:**
+- Voice tone analysis falls back to keyword heuristic (`src/lib/multimodalAI.ts`)
+- Result is flagged with `source: "heuristic_fallback"` so consumers know the analysis method
+- Circuit breaker opens after repeated failures, preventing cascading timeouts
+- Chat/interview endpoints return 503 with clear error message
 
 ```typescript
-interface ErrorResponse {
-  error: string;       // User-friendly message
-  details?: string;    // Technical details (dev only)
-  code?: string;       // Error code for programmatic handling
-  retryAfter?: number; // Seconds to wait before retry
+// Voice analysis graceful degradation
+if (!groq) {
+  logger.warn("Groq API key not configured — falling back to keyword heuristic");
+  return analyzeVoiceToneHeuristic(text); // source: "heuristic_fallback"
 }
 ```
 
-### HTTP Status Codes
+### Groq Returns Invalid JSON
 
-| Status | Meaning | Common Causes |
-|--------|---------|----------------|
-| 400 | Bad Request | Invalid input, validation failure |
-| 401 | Unauthorized | Missing/invalid JWT token |
-| 403 | Forbidden | Insufficient permissions (RBAC) |
-| 404 | Not Found | Resource doesn't exist |
-| 408 | Request Timeout | Slow processing |
-| 413 | Payload Too Large | File upload exceeds limit |
-| 422 | Unprocessable Entity | Business logic validation |
-| 429 | Too Many Requests | Rate limit exceeded |
-| 500 | Internal Server Error | Unhandled exception |
-| 502 | Bad Gateway | External service failure |
-| 503 | Service Unavailable | Circuit breaker open |
-| 504 | Gateway Timeout | External service timeout |
+**Scenario:** LLM response doesn't contain parseable JSON.
+
+**Handling:**
+- Regex extraction attempted (`content.match(/\{[\s\S]*\}/)`)
+- If no JSON found, falls back to keyword heuristic
+- All numeric scores are clamped to [0, 100] range
+- Sentiment validated against allowed enum values
 
 ---
 
-## Circuit Breaker Edge Cases
+## ML Model Failures
 
-### Scenario 1: AI Service Temporarily Unavailable
+### Face-API Models Not Loaded
 
-**Problem:** Groq API returns 503
+**Scenario:** Model files missing from `apps/api/models/face-api/` or TensorFlow.js fails to initialize.
 
 **Handling:**
-```typescript
-const circuitState = groqCircuitBreaker.getState();
-if (circuitState.state === "open") {
-  return res.status(503).json({
-    error: "AI service temporarily unavailable",
-    retryAfter: Math.ceil((circuitState.nextAttempt - Date.now()) / 1000)
-  });
-}
-```
+- `initializeFaceML()` attempts load once at startup
+- On failure, sets `modelsLoaded = false` and logs warning
+- All subsequent calls use content-derived analysis (hash-based, input-dependent)
+- Results are never static — they vary deterministically with input data
+- No crash, no unhandled rejection
 
-**Recovery:**
-- Wait for circuit breaker reset (60s default)
-- Circuit moves to "half-open" after timeout
-- Next successful call closes circuit
-- Failed call in half-open opens circuit again
+### ML Inference Failure
 
-### Scenario 2: Multiple Concurrent Failures
+**Scenario:** Model loaded but inference throws (corrupt frame, OOM).
 
-**Problem:** 5 consecutive failures within threshold
-
-**State Transition:**
-```
-CLOSED → (5 failures) → OPEN → (60s timeout) → HALF-OPEN → (3 successes) → CLOSED
-                         → (1 failure) → OPEN
-```
-
-### Scenario 3: Partial Service Degradation
-
-**Problem:** Groq works, but Piston (compiler) fails
-
-**Handling:** Each service has independent circuit breaker
-```typescript
-// Groq fine, use it
-if (groqCircuitBreaker.getState().state === "closed") {
-  // Use Groq
-}
-
-// Piston down, return error
-if (pistonCircuitBreaker.getState().state === "open") {
-  return res.status(503).json({ error: "Compiler unavailable" });
-}
-```
+**Handling:**
+- Try/catch around `runMLInference()` in `processVideoFrame()`
+- Falls through to content-derived analysis on any error
+- Error logged but not propagated to client
 
 ---
 
-## Rate Limiting Edge Cases
+## Collaborative Editor Edge Cases
 
-### Scenario 1: Redis Unavailable
+### Concurrent Edits (Same Region)
 
-**Problem:** Redis connection fails during rate limit check
-
-**Handling:**
-```typescript
-// Fall back to in-memory store
-catch (error) {
-  logger.warn("Redis rate limit failed, using memory");
-  return memoryStore.increment(key);
-}
-```
-
-**Limitation:** In-memory store resets on server restart
-
-### Scenario 2: Burst Traffic
-
-**Problem:** Sudden spike in requests exceeds limit
-
-**Headers Returned:**
-```
-X-RateLimit-Limit: 200
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1705329600
-```
+**Scenario:** Two users edit the same text region simultaneously.
 
 **Handling:**
-```typescript
-// Client should check headers and wait
-if (res.headers['x-ratelimit-remaining'] === '0') {
-  const retryAfter = res.headers['x-ratelimit-reset'];
-  setTimeout(() => makeRequest(), retryAfter * 1000);
-}
+- Three-way merge algorithm (`src/lib/collaborativeEditor.ts`)
+- Per-user base state tracking ensures each user's changes are relative to what they last saw
+- Overlapping changes: both insertions are concatenated (no data loss)
+- Non-overlapping changes: both applied with position adjustment
+
 ```
+User A: "hello" → "hello world"  (append "world")
+User B: "hello" → "HELLO"        (replace all)
+Result: Three-way merge preserves both changes contextually
+```
+
+### User Disconnects Mid-Edit
+
+**Scenario:** User loses connection while editing.
+
+**Handling:**
+- User's base state remains in `userBaseStates` map
+- On reconnect and rejoin, base state is reset to current document
+- No orphaned state — `leaveCollabSession()` cleans up user data
+- If all users leave, session is deleted from memory
+
+### Session Expiry
+
+**Scenario:** Collaboration session exceeds 1-hour TTL.
+
+**Handling:**
+- `cleanupExpiredSessions()` removes expired sessions
+- Elements are not persisted beyond session lifetime (by design for code collaboration)
+- Active sessions with users are not forcibly expired
 
 ---
 
-## Authentication Edge Cases
+## Whiteboard Edge Cases
 
-### Scenario 1: Token Expired During Request
+### Version Conflict
 
-**Problem:** JWT expires mid-request
-
-**Handling:**
-```typescript
-// Clerk middleware handles automatically
-// Returns 401 with "Token expired" message
-// Client should redirect to sign-in
-```
-
-### Scenario 2: Token Revoked
-
-**Problem:** User signs out, token becomes invalid
+**Scenario:** Two users update the same whiteboard element simultaneously.
 
 **Handling:**
+- Element-level versioning in `WhiteboardPersistence`
+- Update rejected if incoming version < stored version
+- Warning logged with version details
+- Client receives failure response and can retry with fresh state
+
 ```typescript
-// Token verification fails
-// Returns 401 "Invalid token"
-// Client clears local storage and redirects
-```
-
-### Scenario 3: Role Changed During Session
-
-**Problem:** Admin demoted to candidate, but has active session
-
-**Handling:**
-```typescript
-// RBAC middleware checks role on each request
-// If role insufficient, returns 403
-// User needs to re-authenticate to get new role
-```
-
----
-
-## File Upload Edge Cases
-
-### Scenario 1: Large File Upload
-
-**Problem:** File exceeds 5MB limit
-
-**Handling:**
-```typescript
-// Multer file size limit
-const MAX_RESUME_SIZE = 5 * 1024 * 1024; // 5MB
-const upload = multer({
-  limits: { fileSize: MAX_RESUME_SIZE }
-});
-
-// Returns 413 if exceeded
-```
-
-### Scenario 2: Corrupted PDF
-
-**Problem:** PDF parsing fails
-
-**Handling:**
-```typescript
-// Worker catches parse error
-try {
-  const rawText = await pdfParser.parseBuffer(buffer);
-} catch (err) {
-  throw new Error("Failed to extract text from PDF");
+if (updates.version !== undefined && updates.version < existing.version) {
+  logger.warn({ roomId, elementId, incomingVersion, storedVersion }, "Update rejected");
+  return false;
 }
-// Returns job failure, user notified
 ```
 
-### Scenario 3: Network Interruption
+### Session Recreation
 
-**Problem:** Upload fails mid-transfer
+**Scenario:** All users leave and rejoin later.
 
 **Handling:**
-```typescript
-// Client-side: track upload progress
-// Server-side: verify file integrity
-// Resume upload if failed
-```
+- Elements persist in `WhiteboardPersistence` (keyed by `roomId`)
+- New session creation loads existing elements from persistence
+- Drawing history survives session lifecycle
 
 ---
 
-## WebSocket Edge Cases
+## Video Call Edge Cases
 
-### Scenario 1: Connection Lost
+### NAT Traversal Failure
 
-**Problem:** Network disconnection
-
-**Handling:**
-```typescript
-// Socket.IO auto-reconnect (if enabled)
-socket.on('disconnect', (reason) => {
-  if (reason === 'io server disconnect') {
-    // Manual reconnect
-    socket.connect();
-  }
-});
-```
-
-### Scenario 2: Token Expired During Connection
-
-**Problem:** JWT expires while socket connected
+**Scenario:** STUN fails to discover public IP (symmetric NAT).
 
 **Handling:**
-```typescript
-// Server verifies token on connect
-// Returns error if invalid
-socket.on('connect_error', (err) => {
-  if (err.message === 'Invalid token') {
-    // Client fetches new token and reconnects
-  }
-});
-```
+- TURN server configured as relay fallback
+- Multiple STUN servers for redundancy (Google STUN 1, 2, 3)
+- If no TURN configured, peer connection may fail — logged as warning
 
-### Scenario 3: Concurrent Connections
+### Session Full
 
-**Problem:** User opens multiple tabs
+**Scenario:** User tries to join a session at max capacity.
 
 **Handling:**
-```typescript
-// Track online users per room
-// Each connection adds to onlineUsers Set
-// Disconnect removes from Set
-// Broadcasts user-joined/user-left events
-```
+- `joinVideoSession()` throws `"Session is full"` error
+- Client receives clear error message
+- No partial state created
+
+### Topology Switch (Mesh → SFU)
+
+**Scenario:** Participant count exceeds mesh threshold.
+
+**Handling:**
+- Automatic switch when `participants.size > sfuConfig.meshToSfuThreshold`
+- `video:topology-changed` event broadcast to all participants
+- Clients expected to renegotiate connections through SFU
+- Only triggers if SFU is enabled (`SFU_ENABLED=true`)
+
+### Recording Service Failure
+
+**Scenario:** Recording service unavailable when recording starts.
+
+**Handling:**
+- `startRecording()` is async — failure logged but doesn't block session
+- Session continues without recording
+- Error captured in logs for debugging
 
 ---
 
 ## Database Edge Cases
 
-### Scenario 1: Connection Lost
+### MongoDB Connection Loss
 
-**Problem:** MongoDB connection drops
-
-**Handling:**
-```typescript
-mongoose.connection.on('disconnected', () => {
-  logger.warn('MongoDB disconnected');
-});
-
-mongoose.connection.on('reconnected', () => {
-  logger.info('MongoDB reconnected');
-});
-
-// Requests fail, client retries
-```
-
-### Scenario 2: Write Conflict
-
-**Problem:** Concurrent updates to same document
+**Scenario:** Database becomes unreachable during operation.
 
 **Handling:**
-```typescript
-// Optimistic locking with version field
-// Or use findOneAndUpdate with conditions
-await InterviewModel.findOneAndUpdate(
-  { _id: interviewId, status: 'ongoing' },
-  { status: 'completed', score },
-  { new: true }
-);
-```
+- `bufferCommands: false` — operations fail immediately (no silent queuing)
+- Health endpoint reports `"disconnected"` status
+- Mongoose auto-reconnect fires `reconnected` event
+- Graceful shutdown closes connection pool cleanly
 
-### Scenario 3: Large Query Result
+### Redis Connection Loss
 
-**Problem:** Query returns too many documents
+**Scenario:** Redis becomes unreachable.
 
 **Handling:**
-```typescript
-// Pagination enforced
-const limit = Math.min(parseInt(req.query.limit) || 50, MAX_EXPORT_LIMIT);
-const interviews = await InterviewModel.find({ userId })
-  .skip(offset)
-  .limit(limit);
-```
+- Rate limiting degrades (requests pass through)
+- BullMQ jobs queue locally until reconnection
+- Health endpoint reports degraded status
+- ioredis has built-in reconnection with exponential backoff
 
 ---
 
-## AI Processing Edge Cases
+## Authentication Edge Cases
 
-### Scenario 1: AI Returns Invalid JSON
+### Expired JWT Token
 
-**Problem:** Groq response not valid JSON
-
-**Handling:**
-```typescript
-try {
-  aiResponse = JSON.parse(content);
-} catch (parseError) {
-  // Use fallback default scores
-  aiResponse = {
-    score: 0,
-    feedback: "Analysis incomplete.",
-    skills: [...]
-  };
-}
-```
-
-### Scenario 2: AI Timeout
-
-**Problem:** Groq request takes too long
+**Scenario:** Clerk token expires mid-session.
 
 **Handling:**
-```typescript
-// Circuit breaker timeout (30s)
-const result = await groqCircuitBreaker.execute(async () => {
-  return groq.chat.completions.create({...});
-});
-// If timeout, circuit opens
-```
+- `requireAuth` middleware returns 401
+- Client-side Clerk SDK handles token refresh
+- WebSocket connections may need re-authentication
 
-### Scenario 3: Empty Conversation
+### Missing Role Assignment
 
-**Problem:** No messages to analyze
+**Scenario:** Authenticated user has no role in `UserRole` collection.
 
 **Handling:**
-```typescript
-// Check user message count
-const userMessageCount = history.filter(m => m.role === 'user').length;
-if (userMessageCount === 0) {
-  return res.json({
-    score: 0,
-    feedback: "Interview terminated early. No answers provided.",
-    metrics: [...]
-  });
-}
-```
+- `attachRole` middleware defaults to `"candidate"` role
+- User can still access candidate-level endpoints
+- Admin can assign proper role via `/api/admin/roles`
+
+### CORS Violation
+
+**Scenario:** Request from unauthorized origin.
+
+**Handling:**
+- Custom CORS error handler returns 403 with clear message
+- Error includes the rejected origin for debugging
+- Requests with no origin (curl, mobile apps) are allowed
 
 ---
 
-## Frontend Edge Cases
+## Rate Limiting Edge Cases
 
-### Scenario 1: Browser Refresh During Interview
+### Burst Traffic
 
-**Problem:** User loses interview state
-
-**Handling:**
-```typescript
-// Save state to sessionStorage periodically
-useEffect(() => {
-  sessionStorage.setItem('interviewState', JSON.stringify(state));
-}, [state]);
-
-// Restore on mount
-const savedState = sessionStorage.getItem('interviewState');
-if (savedState) {
-  setState(JSON.parse(savedState));
-}
-```
-
-### Scenario 2: Camera Permission Denied
-
-**Problem:** User denies webcam access
+**Scenario:** Legitimate user hits rate limit during normal usage.
 
 **Handling:**
-```typescript
-const startVideo = async () => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-  } catch (err) {
-    // Show fallback UI without webcam
-    toast.error("Camera permission required for proctoring");
-    // Continue without camera
-  }
-};
-```
+- 429 response with `Retry-After` header
+- Different limits for different route tiers (general vs AI vs upload)
+- Rate limits are per-IP (behind proxy: trust proxy configured)
 
-### Scenario 3: Network Offline
+### Distributed Rate Limiting
 
-**Problem:** Client goes offline during interview
+**Scenario:** Multiple backend instances need shared rate state.
 
 **Handling:**
-```typescript
-// Detect offline state
-window.addEventListener('offline', () => {
-  toast.error("Network disconnected. Reconnecting...");
-  // Pause AI interaction
-});
-
-// Reconnect when online
-window.addEventListener('online', () => {
-  toast.success("Reconnected!");
-  // Resume interview
-});
-```
+- Rate limit counters stored in Redis (shared across instances)
+- Atomic increment operations prevent race conditions
 
 ---
 
-## Payment/Resource Edge Cases
+## Code Execution Edge Cases
 
-### Scenario 1: Redis Memory Exhausted
+### Piston API Timeout
 
-**Problem:** Rate limit storage exceeds memory
+**Scenario:** Code execution takes too long or Piston is down.
 
 **Handling:**
-```bash
-# Redis configuration
-maxmemory 256mb
-maxmemory-policy allkeys-lru
+- Circuit breaker pattern wraps Piston calls
+- After threshold failures: circuit opens, fast-fail for 30s
+- Half-open state tests one request before resuming
+- Client receives 503 with "service temporarily unavailable"
 
-# Evicts least recently used keys
-```
+### Infinite Loop in User Code
 
-### Scenario 2: Disk Full (MongoDB)
-
-**Problem:** Database storage exhausted
+**Scenario:** Candidate submits code with infinite loop.
 
 **Handling:**
-```typescript
-// Monitor with Prometheus
-db.stats()
-
-// TTL indexes auto-delete old data
-// Or implement archival process
-```
+- Piston API has built-in execution timeout (configurable)
+- Backend request timeout (30s) prevents hanging connections
+- Circuit breaker prevents cascading failures
 
 ---
 
-## Error Recovery Strategies
+## File Upload Edge Cases
 
-### 1. Automatic Retry
+### Oversized Upload
 
-```typescript
-const retry = async (fn, maxRetries = 3) => {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      if (i === maxRetries - 1) throw err;
-      await sleep(1000 * (i + 1)); // Exponential backoff
-    }
-  }
-};
-```
+**Scenario:** File exceeds 10MB limit.
 
-### 2. Circuit Breaker Pattern
+**Handling:**
+- Express JSON body parser rejects with 413
+- Multer file size limit enforced
+- Upload rate limiter prevents abuse
 
-```typescript
-class CircuitBreaker {
-  async execute(fn) {
-    if (this.state === 'open') {
-      throw new Error('Circuit open');
-    }
-    try {
-      return await fn();
-    } catch (err) {
-      this.onFailure();
-      throw err;
-    }
-  }
-}
-```
+### Corrupt PDF
 
-### 3. Graceful Degradation
+**Scenario:** Uploaded PDF cannot be parsed.
 
-```typescript
-async function getAIResponse(prompt) {
-  try {
-    // Try Groq first
-    return await groq.chat.completions.create({...});
-  } catch (err) {
-    // Fall back to cached response
-    const cached = await cacheGet(prompt);
-    if (cached) return cached;
-    // Or return simple response
-    return "Service temporarily unavailable";
-  }
-}
-```
+**Handling:**
+- pdf-parse throws, caught in resume processing
+- Error logged, user receives clear error message
+- Resume record created with empty content (can retry)
 
 ---
 
-## Logging & Monitoring
+## WebSocket Edge Cases
 
-### Error Log Structure
+### Socket Disconnection
 
-```typescript
-logger.error({
-  err: error.message,
-  stack: error.stack,
-  userId: req.userId,
-  path: req.path,
-  method: req.method,
-  correlationId: req.correlationId
-}, 'Error description');
-```
+**Scenario:** Client loses WebSocket connection.
 
-### Alert Conditions
+**Handling:**
+- Socket.IO automatic reconnection (client-side)
+- Server-side cleanup on disconnect event
+- Collaboration sessions track user presence
+- Whiteboard elements persist regardless of connection state
 
-| Condition | Action |
-|-----------|--------|
-| Error rate > 10% | PagerDuty alert |
-| Circuit breaker open | Slack notification |
-| High latency (>5s) | Datadog alert |
-| Disk usage > 80% | Email alert |
-| Unusual traffic spike | Cloudflare challenge |
+### Message Ordering
+
+**Scenario:** Messages arrive out of order due to network jitter.
+
+**Handling:**
+- Version counters on collaborative documents
+- Timestamps on all events
+- CRDT merge is commutative (order-independent)
 
 ---
 
-## Enterprise Edge Cases
+## Environment Validation
 
-### E2E Encryption Edge Cases
+### Missing Required Variables
 
-| Scenario | Handling |
-|----------|-----------|
-| Key generation fails | Retry 3 times, fallback to session key |
-| Decryption fails | Log error, request re-key |
-| Password reset loses keys | Force re-enrollment |
-| Private key compromised | Immediate key rotation |
+**Scenario:** Server starts without required env vars.
 
-### Biometric Edge Cases
+**Handling:**
+- `requireEnvVars()` runs at startup
+- Validates all required variables exist and pass format checks
+- Logs fatal error with list of missing variables
+- Calls `process.exit(1)` — prevents running in broken state
 
-| Scenario | Handling |
-|----------|-----------|
-| Multiple biometric types fail | Fall back to password |
-| Liveness detection fails | Allow retry, max 3 attempts |
-| Template storage corrupted | Re-enrollment required |
-| Device not supported | Skip biometric, use alternatives |
+### Invalid Variable Format
 
-### Fraud Detection Edge Cases
+**Scenario:** `MONGO_URI` doesn't start with `mongodb`, `PORT` is not a number.
 
-| Scenario | Handling |
-|----------|-----------|
-| Browser fingerprint blocked | Allow with warning |
-| VPN detected | Block or flag for review |
-| Concurrent sessions | Terminate duplicate sessions |
-| Behavior anomaly detected | Increase monitoring, flag |
-
-### Geo-Fencing Edge Cases
-
-| Scenario | Handling |
-|----------|-----------|
-| IP detection fails | Use last known IP |
-| Country not recognized | Block by default |
-| VPN绕过检测 | Enhanced fingerprinting |
-| Datacenter IP | Configurable block/allow |
-
-### Proctoring Edge Cases
-
-| Scenario | Handling |
-|----------|-----------|
-| Camera not available | Allow audio-only mode |
-| Face not detected | Warning + pause interview |
-| Multiple faces detected | Terminate + flag for review |
-| Tab switch detected | Log + warning count |
-
-### Compliance Edge Cases
-
-| Scenario | Handling |
-|----------|-----------|
-| GDPR request incomplete | Request clarification |
-| Consent withdrawn mid-interview | Stop processing, archive data |
-| Data export timeout | Chunk export, background job |
-| Audit log retention exceeded | Archive to cold storage |
-
-### Multi-Tenancy Edge Cases
-
-| Scenario | Handling |
-|----------|-----------|
-| Tenant limit exceeded | Queue request, notify admin |
-| Tenant isolation failure | Immediate isolation, alert |
-| Plan upgrade mid-interview | Complete current, apply new |
-| Tenant deletion requested | Grace period 30 days |
-
-### ATS Integration Edge Cases
-
-| Scenario | Handling |
-|----------|-----------|
-| ATS API timeout | Retry with exponential backoff |
-| Invalid ATS credentials | Alert admin, disable integration |
-| Candidate sync fails | Queue for retry, log error |
-| Webhook delivery fails | Retry policy applies |
+**Handling:**
+- Custom validators per variable in `envValidation.ts`
+- Clear error messages (e.g., "PORT must be a number between 1 and 65535")
+- Defaults applied for optional variables
 
 ---
 
-## Enterprise Error Codes
+## Graceful Degradation Summary
 
-| Code | Description | HTTP Status |
-|------|-------------|-------------|
-| E2E001 | Key generation failed | 500 |
-| E2E002 | Encryption failed | 500 |
-| E2E003 | Decryption failed | 401 |
-| BIO001 | Enrollment failed | 500 |
-| BIO002 | Verification failed | 401 |
-| BIO003 | Liveness check failed | 400 |
-| FRD001 | Fraud detected | 403 |
-| FRD002 | Browser fingerprint blocked | 403 |
-| GEO001 | Country blocked | 403 |
-| GEO002 | VPN detected | 403 |
-| PRC001 | Proctoring violation | 400 |
-| CMP001 | Audit log failed | 500 |
-| CMP002 | Consent invalid | 400 |
-| TEN001 | Tenant limit exceeded | 403 |
-| TEN002 | Tenant not found | 404 |
-| SSO001 | SSO authentication failed | 401 |
-| ATS001 | ATS sync failed | 500 |
-| ANL001 | Analytics computation failed | 500 |
-| SCH001 | Scheduling conflict | 409 |
-| QBK001 | Question not found | 404 |
-| SCD001 | Scorecard not submitted | 400 |
-| RPT001 | Report generation failed | 500 |
-| ASY001 | Async interview expired | 410 |
-| THK001 | Challenge submission failed | 500 |
-| PRT001 | System check failed | 400 |
-| MKI001 | Mock interview timeout | 408 |
-| PNL001 | Panelist not joined | 400 |
-| AI001 | AI analysis timeout | 504 |
-| NTF001 | Notification delivery failed | 500 |
-| RSS001 | Resume screening failed | 500 |
-| SQL001 | SQL query syntax error | 400 |
-| GIT001 | GitHub authentication failed | 401 |
-
----
-
-## Phase 8 Advanced Edge Cases
-
-### Scheduling Edge Cases
-- Double booking prevention
-- Timezone conversion errors
-- Past date booking attempts
-
-### Pipeline Edge Cases
-- Drag-drop to same stage
-- Stage transition validation
-- Bulk operations failure
-
-### Report Edge Cases
-- Large dataset export timeout
-- PDF generation failure
-- CSV encoding issues
-
-### AI Analysis Edge Cases
-- Confidence score below threshold
-- Sentiment analysis timeout
-- Comparative data insufficient
-
----
-
-**All Enterprise Edge Cases Documented** ✅
-
-**68 Enterprise Features | 8 Phases | Complete Implementation**
+| Feature | Full Mode | Degraded Mode | Trigger |
+|---------|-----------|---------------|---------|
+| Voice Analysis | Groq LLM scoring | Keyword heuristic | Groq unavailable |
+| Face Detection | face-api.js ML | Content-derived hash | Models not loaded |
+| Code Execution | Piston sandbox | 503 error | Circuit breaker open |
+| Whiteboard | Real-time + persist | Persist only | Socket disconnect |
+| Video Call | STUN + TURN | STUN only | No TURN configured |
+| Rate Limiting | Redis-backed | Pass-through | Redis down |
+| Health Check | Full status | Degraded status | Any service down |

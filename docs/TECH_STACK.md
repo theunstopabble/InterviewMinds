@@ -1,422 +1,234 @@
-# InterviewMinds Tech Stack
+# Tech Stack
 
-## Overview
-
-InterviewMinds uses a modern, enterprise-grade technology stack optimized for performance, scalability, and developer experience.
+**Version:** 2.0.0  
+**Last Updated:** May 2026
 
 ---
 
-## Frontend Stack
-
-### Core Technologies
+## Runtime & Language
 
 | Technology | Version | Purpose |
-|------------|---------|---------|
-| React | 18.2 | UI Framework |
-| TypeScript | 5.3 | Type safety |
-| Vite | 7.3 | Build tool |
-| Tailwind CSS | 3.4 | Styling |
-
-### UI Components
-
-| Library | Version | Purpose |
-|---------|---------|---------|
-| Shadcn UI | Latest | Component library |
-| Radix UI | Latest | Headless primitives |
-| Lucide React | 0.300 | Icons |
-| Recharts | 2.15 | Charts |
-
-### State Management
-
-```typescript
-// React hooks for state
-useState      // Local state
-useEffect     // Side effects
-useContext    // Global state (Clerk auth)
-useReducer    // Complex state
-```
-
-### Code Editor
-
-| Library | Version | Purpose |
-|---------|---------|---------|
-| @monaco-editor/react | 4.7 | VS Code editor |
-
-### AI/ML (Browser)
-
-| Library | Version | Purpose |
-|---------|---------|---------|
-| face-api.js | 0.22 | Face detection |
-| TensorFlow.js | Latest | ML inference |
-
-### Real-time Communication
-
-| Library | Version | Purpose |
-|---------|---------|---------|
-| socket.io-client | 4.8 | WebSocket client |
+|-----------|---------|---------|
+| Node.js | 20.x | Server runtime |
+| TypeScript | 5.3 | Type safety across frontend and backend |
+| CommonJS | — | Backend module system (`"type": "commonjs"`) |
+| ES Modules | — | Frontend module system (`"type": "module"`) |
 
 ---
 
-## Backend Stack
-
-### Core Technologies
+## Frontend
 
 | Technology | Version | Purpose |
-|------------|---------|---------|
-| Node.js | 20 | Runtime |
-| Express | 4.21 | HTTP server |
-| TypeScript | 5.3 | Type safety |
+|-----------|---------|---------|
+| React | 18.2 | UI framework |
+| Vite | 7.3 | Build tool and dev server |
+| Tailwind CSS | 3.4 | Utility-first styling |
+| Shadcn UI (Radix) | — | Accessible component primitives |
+| React Router | 6.20 | Client-side routing |
+| Axios | 1.15 | HTTP client |
+| Socket.IO Client | 4.8 | Real-time WebSocket communication |
+| Monaco Editor | 4.7 | Code editor (collaborative) |
+| Recharts | 2.15 | Data visualization |
+| Lucide React | 0.300 | Icon library |
+| Sonner | 1.3 | Toast notifications |
+| face-api.js | 0.22 | Client-side face detection |
+| Clerk React | 5.61 | Authentication UI |
+| Sentry React | 8.9 | Error tracking |
+| Vercel Analytics | 1.6 | Usage analytics |
+| vite-plugin-pwa | 1.2 | Progressive Web App support |
 
-### API Layer
+---
 
-| Technology | Purpose |
-|------------|---------|
-| Express | REST API |
-| Apollo Server | GraphQL |
-| Socket.IO | WebSocket |
-
-### Authentication
-
-| Library | Purpose |
-|---------|---------|
-| @clerk/express | JWT auth |
-| Custom RBAC | Role-based access |
-
-### Database
+## Backend
 
 | Technology | Version | Purpose |
-|------------|---------|---------|
-| MongoDB | 7 | Primary database |
-| Mongoose | 8 | ODM |
-
-### Caching & Queue
-
-| Technology | Purpose |
-|------------|---------|
-| Redis | Cache, rate limiting |
-| BullMQ | Job queue |
-
-### AI Services
-
-| Service | Purpose |
-|---------|---------|
-| Groq (Llama 3) | AI chat |
-| Google Gemini | Alternative AI |
-| Azure Speech | TTS |
-| Piston | Code execution |
-
-### Observability
-
-| Library | Purpose |
-|---------|---------|
-| Sentry | Error tracking |
-| Prometheus | Metrics |
-| Pino | Logging |
+|-----------|---------|---------|
+| Express | 4.21 | HTTP framework |
+| Socket.IO | 4.8 | WebSocket server |
+| Mongoose | 8.x | MongoDB ODM |
+| ioredis | 5.10 | Redis client |
+| BullMQ | 5.45 | Job queue (resume parsing, scoring) |
+| Apollo Server | 4.11 | GraphQL API |
+| Helmet | 8.0 | Security headers |
+| express-rate-limit | 7.5 | Rate limiting |
+| Multer | 1.4 | File upload handling |
+| Zod | 3.23 | Runtime schema validation |
+| Pino | 9.5 | Structured JSON logging |
+| prom-client | 15.1 | Prometheus metrics |
+| uuid | 10.0 | Unique ID generation |
+| json2csv | 6.0 | Data export |
+| Svix | 1.15 | Webhook delivery |
 
 ---
 
-## DevOps & Infrastructure
+## AI & Machine Learning
 
-### Container
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Groq SDK | 0.37 | LLM inference (Llama 3.3-70b-versatile) |
+| Google Generative AI | 0.1 | Gemini integration |
+| @vladmandic/face-api | 1.7.14 | Server-side face detection, landmarks, expressions |
+| @tensorflow/tfjs | 4.22.0 | ML runtime for face-api.js |
+| @xenova/transformers | 2.17 | Transformer models (embeddings) |
+| LangChain | 1.2 | LLM orchestration and text splitting |
+| Azure Speech SDK | 1.47 | Text-to-speech and speech recognition |
 
-| Technology | Purpose |
-|------------|---------|
-| Docker | Containerization |
-| Docker Compose | Local dev |
-
-### CI/CD
-
-| Technology | Purpose |
-|------------|---------|
-| GitHub Actions | CI/CD pipeline |
-| Vercel | Frontend hosting |
-| Render | Backend hosting |
-
-### Monitoring
-
-| Service | Purpose |
-|---------|---------|
-| Vercel Analytics | Frontend metrics |
-| Prometheus | Custom metrics |
-| Datadog | Full monitoring |
-
----
-
-## Architecture Diagram
+### ML Model Pipeline
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           FRONTEND                                       │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  React 18 + TypeScript + Vite + Tailwind CSS                   │   │
-│  ├─────────────────────────────────────────────────────────────────┤   │
-│  │  Components: CodeEditor, WebcamAnalysis, ProctoringUI          │   │
-│  │  Hooks: useSpeech, useSocket, useProctoring, useAudioAnalysis  │   │
-│  │  State: React hooks + Context                                   │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    │ HTTPS + JWT
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           BACKEND                                        │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  Node.js 20 + Express + TypeScript                             │   │
-│  ├─────────────────────────────────────────────────────────────────┤   │
-│  │  Routes: Chat, Interview, Resume, Compiler, TTS, Admin          │   │
-│  │  Middleware: Auth, RBAC, Audit, Rate Limit, Security            │   │
-│  │  GraphQL: Apollo Server with resolvers                           │   │
-│  │  Socket.IO: Real-time chat                                      │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-          ┌─────────────────────────┼─────────────────────────┐
-          │                         │                         │
-          ▼                         ▼                         ▼
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│   MongoDB        │    │   Redis          │    │   External APIs  │
-│                  │    │                  │    │                  │
-│ - Users          │    │ - Rate Limiting  │    │ - Groq (LLM)    │
-│ - Resumes        │    │ - Session Cache  │    │ - Azure (TTS)   │
-│ - Interviews     │    │ - BullMQ Queue  │    │ - Piston (Code)  │
-│ - Messages       │    │ - CSRF Tokens   │    │ - Cloudinary    │
-│ - Audit Logs     │    │                  │    │ - Clerk (Auth)  │
-└──────────────────┘    └──────────────────┘    └──────────────────┘
+┌─────────────────────────────────────────────────────┐
+│  Video Proctoring ML Pipeline                       │
+├─────────────────────────────────────────────────────┤
+│  @tensorflow/tfjs (runtime)                         │
+│       ↓                                             │
+│  @vladmandic/face-api (SSD MobileNet v1)           │
+│       ├── Face Detection (bounding box + score)     │
+│       ├── Face Landmarks (68-point)                 │
+│       └── Face Expressions (7 emotions)             │
+│       ↓                                             │
+│  Content-Derived Fallback (when models unavailable) │
+│       ├── Hash-based feature extraction             │
+│       ├── Entropy analysis                          │
+│       └── Input-dependent scoring                   │
+└─────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Package Dependencies
+## Authentication & Security
 
-### Root (package.json)
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Clerk (Express) | 1.3 | Backend auth middleware |
+| Clerk (React) | 5.61 | Frontend auth components |
+| Custom RBAC | — | Role-based access (candidate/interviewer/admin + wildcard) |
+| RSA-4096 | — | Asymmetric key exchange (E2E encryption) |
+| AES-256-GCM | — | Symmetric message encryption |
+| PBKDF2 | — | Key derivation |
 
-```json
-{
-  "dependencies": {
-    "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
-  },
-  "devDependencies": {
-    "turbo": "latest",
-    "prettier": "^3.0.0"
-  }
-}
+---
+
+## Real-Time & Communication
+
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Socket.IO | 4.8 | Bidirectional real-time events |
+| WebRTC | — | Peer-to-peer video/audio |
+| STUN/TURN | — | ICE server NAT traversal |
+| SFU (optional) | — | Selective Forwarding Unit (mediasoup/livekit) |
+
+### WebRTC Architecture
+
 ```
-
-### API (apps/api/package.json)
-
-```json
-{
-  "dependencies": {
-    "@apollo/server": "^4.11.0",
-    "@clerk/express": "^1.3.0",
-    "@google/generative-ai": "^0.1.0",
-    "@langchain/core": "^1.1.15",
-    "@sentry/node": "^8.9.0",
-    "@xenova/transformers": "^2.17.2",
-    "axios": "^1.15.2",
-    "bullmq": "^5.45.2",
-    "cloudinary": "^2.9.0",
-    "cors": "^2.8.5",
-    "express": "^4.21.2",
-    "express-rate-limit": "^7.5.0",
-    "graphql": "^16.14.0",
-    "groq-sdk": "^0.37.0",
-    "helmet": "^8.0.0",
-    "ioredis": "^5.10.1",
-    "microsoft-cognitiveservices-speech-sdk": "^1.47.0",
-    "mongoose": "^8.0.0",
-    "pino": "^9.5.0",
-    "socket.io": "^4.8.1",
-    "zod": "^3.23.8"
-  }
-}
-```
-
-### Web (apps/web/package.json)
-
-```json
-{
-  "dependencies": {
-    "@clerk/clerk-react": "^5.61.6",
-    "@monaco-editor/react": "^4.7.0",
-    "@radix-ui/react-dialog": "^1.1.15",
-    "@sentry/react": "^8.9.0",
-    "@vercel/analytics": "^1.6.1",
-    "axios": "^1.15.2",
-    "face-api.js": "^0.22.2",
-    "lucide-react": "^0.300.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0",
-    "recharts": "^2.15.4",
-    "socket.io-client": "^4.8.1",
-    "sonner": "^1.3.0",
-    "tailwindcss-animate": "^1.0.7"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^7.3.3",
-    "vite-plugin-pwa": "^1.2.0"
-  }
-}
+┌──────────┐    STUN/TURN    ┌──────────┐
+│  Client  │◄──────────────►│  Client  │
+│  (Peer)  │   ICE Servers   │  (Peer)  │
+└────┬─────┘                 └────┬─────┘
+     │                             │
+     │  Signaling (Socket.IO)      │
+     └──────────┬──────────────────┘
+                │
+         ┌──────┴──────┐
+         │   Server    │
+         │  (Express)  │
+         └─────────────┘
 ```
 
 ---
 
-## Technology Rationale
+## Database & Caching
 
-### Why Turborepo?
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| MongoDB | — | Primary data store (7 collections) |
+| Mongoose | 8.x | ODM with schema validation |
+| Redis | — | Caching, sessions, rate limiting, pub/sub |
+| ioredis | 5.10 | Redis client with cluster support |
+| BullMQ | 5.45 | Distributed job queues backed by Redis |
 
-- **Shared Code**: Common types between API and Web
-- **Build Caching**: Faster builds with intelligent caching
-- **Parallel Execution**: Independent package builds
+### Connection Configuration
 
-### Why MongoDB?
-
-- **Flexible Schema**: Interview data structure varies
-- **JSON Native**: Matches JavaScript/TypeScript
-- **Scaling**: Sharding support for growth
-
-### Why Redis?
-
-- **Rate Limiting**: Fast in-memory operations
-- **BullMQ**: Reliable job processing
-- **Session Cache**: Sub-millisecond access
-
-### Why Groq?
-
-- **Low Latency**: <500ms response times
-- **Llama 3**: High-quality responses
-- **Cost-effective**: Pay per token
-
-### Why Clerk?
-
-- **Easy Integration**: Simple React hooks
-- **Social Login**: Google, GitHub, etc.
-- **Security**: Handled by experts
+- MongoDB: `maxPoolSize: 20`, `minPoolSize: 5`, `serverSelectionTimeoutMS: 5000`
+- Redis: Configurable via `REDIS_URL` environment variable
 
 ---
 
-## Version Compatibility Matrix
+## Code Execution
 
-| Component | Minimum | Recommended |
-|-----------|---------|--------------|
-| Node.js | 18 | 20 |
-| npm | 9 | 10 |
-| MongoDB | 6 | 7 |
-| Redis | 6 | 7 |
-| Docker | 20 | 24 |
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Piston API | — | Sandboxed multi-language code execution |
+| Circuit Breaker | — | Fault tolerance for external service calls |
 
 ---
 
-## Performance Benchmarks
+## Media & Storage
 
-| Operation | Target | Actual |
-|-----------|--------|--------|
-| API Response | <200ms | ~150ms |
-| AI Chat Latency | <500ms | ~400ms |
-| Code Execution | <3s | ~2s |
-| Page Load | <2s | ~1s |
-| Build Time | <60s | ~45s |
-
----
-
-## Security Certifications
-
-| Feature | Implementation |
-|---------|----------------|
-| HTTPS Only | TLS 1.3 |
-| Data Encryption | At rest + in transit |
-| Authentication | JWT (Clerk) |
-| Authorization | RBAC |
-| Input Validation | Zod schemas |
-| XSS Prevention | Helmet CSP |
-| Rate Limiting | Redis-backed |
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Cloudinary | 2.9 | Image/file storage and CDN |
+| multer-storage-cloudinary | 4.0 | Direct upload to Cloudinary |
+| pdf-parse | 1.1 | PDF text extraction |
+| pdf2json | 4.0 | PDF structure parsing |
 
 ---
 
-## Enterprise Tech Stack Extensions
+## Observability
 
-### Phase 1-7 Technologies
-
-| Phase | Technology | Purpose | Implementation |
-|-------|------------|---------|----------------|
-| **Phase 1** | Skill Taxonomy | Resume-job matching | `lib/jobMatching.ts` |
-| **Phase 1** | Question Bank | Competency questions | `lib/questionGeneration.ts` |
-| **Phase 1** | ESLint/SonarQube | Code analysis | `lib/codeAnalysis.ts` |
-| **Phase 2** | Node crypto | E2E encryption | `lib/e2eEncryption.ts` |
-| **Phase 2** | TensorFlow.js | Biometric auth | `lib/biometricAuth.ts` |
-| **Phase 2** | Browser APIs | Fraud detection | `lib/fraudDetection.ts` |
-| **Phase 2** | GeoIP API | Geo-fencing | `lib/geoFencing.ts` |
-| **Phase 3** | TensorFlow.js | Video proctoring | `lib/videoProctoring.ts` |
-| **Phase 4** | NLP | Resume verification | `lib/resumeVerification.ts` |
-| **Phase 4** | Pattern matching | Answer validation | `lib/answerValidation.ts` |
-| **Phase 5** | Passport.js | SSO (SAML/OAuth) | `lib/ssoIntegration.ts` |
-| **Phase 5** | Axios | Webhooks | `lib/webhooks.ts` |
-| **Phase 5** | ATS APIs | ATS integration | `lib/atsIntegration.ts` |
-| **Phase 6** | Zod | Multi-tenancy | `lib/multiTenancy.ts` |
-| **Phase 6** | Audit logging | Compliance | `lib/compliance.ts` |
-| **Phase 7** | Chart.js | Analytics dashboard | `lib/analytics.ts` |
-
-### Enterprise Libraries
-
-```json
-{
-  "dependencies": {
-    "@tensorflow/tfjs": "^4.17.0",
-    "zod": "^3.23.8",
-    "passport": "^0.7.0",
-    "passport-saml": "^3.2.4",
-    "passport-oauth2": "^1.8.0",
-    "axios": "^1.6.0",
-    "crypto": "native",
-    "uuid": "^10.0.0"
-  }
-}
-```
-
-### Compliance Tools
-
-| Framework | Tool | Status |
-|-----------|------|--------|
-| SOC 2 | Self-hosted | ✅ |
-| GDPR | Custom | ✅ |
-| HIPAA | Custom | ✅ |
-| ISO 27001 | Custom | ✅ |
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Sentry | 8.9 | Error tracking and performance monitoring |
+| Prometheus (prom-client) | 15.1 | Metrics collection and exposition |
+| Pino | 9.5 | Structured JSON logging |
+| pino-pretty | 11.3 | Development log formatting |
 
 ---
 
-## Phase 8 New Technologies
+## Testing
 
-### Scheduling & Calendar
-- `date-fns` - Date manipulation
-- `date-fns-tz` - Timezone handling
-
-### AI Analysis
-- `sentiment` - Sentiment analysis
-- Custom algorithms for confidence scoring
-
-### Notifications
-- `nodemailer` - Email sending
-- Custom SMS/Slack adapters
-
-### File Processing
-- `pdf-parse` - PDF parsing
-- `mammoth` - DOCX parsing
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Vitest | 2.1 | Test runner (backend + frontend) |
+| fast-check | 3.22 | Property-based testing |
+| Supertest | 7.0 | HTTP integration testing |
+| @testing-library/react | 16.1 | React component testing |
+| @vitest/coverage-v8 | 2.1 | Code coverage |
+| jsdom | 25.0 | DOM simulation for frontend tests |
 
 ---
 
-## Summary
+## Build & DevOps
 
-| Category | Count |
-|----------|-------|
-| Total Enterprise Services | 40+ |
-| Total Enterprise Routes | 24+ |
-| API Endpoints | 100+ |
-| Frontend Pages | 13 |
-| Frontend Services | 31 |
-| Phases Implemented | 8/8 |
-| Features | 68/68 |
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Turborepo | latest | Monorepo build orchestration |
+| npm workspaces | — | Package management |
+| GitHub Actions | — | CI/CD pipeline |
+| Docker | — | Container builds (multi-stage) |
+| Vercel | — | Frontend hosting |
+| Render | — | Backend hosting |
+| ESLint | 8.57 | Code linting |
+| Prettier | 3.0 | Code formatting |
+| ts-node-dev | 2.0 | Development server with hot reload |
 
-**Production-ready with zero TypeScript errors** |
+---
+
+## GraphQL
+
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| Apollo Server | 4.11 | GraphQL server |
+| graphql | 16.14 | GraphQL language support |
+
+---
+
+## Dependency Security
+
+The root `package.json` includes `overrides` for known vulnerable transitive dependencies:
+
+- `lodash` → ^4.17.24
+- `node-fetch` → ^2.7.0
+- `qs` → ^6.13.0
+- `protobufjs` → ^7.5.5
+- `postcss` → ^8.5.10
+- `follow-redirects` → ^1.15.12

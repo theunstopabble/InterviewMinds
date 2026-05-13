@@ -18,6 +18,11 @@ out
 dev-dist
 .turbo
 
+# ML Model Files (large binaries - download separately)
+**/models/face-api/*.bin
+**/models/face-api/*-shard*
+**/models/face-api/*-weights_manifest.json
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
@@ -42,3 +47,4 @@ session-ses_1ef8.md
 linkedin_post.md
 deep_dive_analysis.md
 enterprise_features_audit.md
+.kiro

@@ -1,466 +1,349 @@
-# InterviewMinds Architecture
+# Architecture
 
-> **Version:** 1.0.0 | **Last Updated:** May 2026 | **Status:** Production Ready
-
-## Table of Contents
-- [High-Level Architecture](#high-level-architecture)
-- [Technology Stack](#technology-stack)
-- [Monorepo Structure](#monorepo-structure)
-- [Backend Services](#backend-services)
-- [Frontend Architecture](#frontend-architecture)
-- [Database Design](#database-design)
-- [Security Architecture](#security-architecture)
-- [Infrastructure](#infrastructure)
-- [Deployment](#deployment)
-- [Scalability](#scalability)
+**Version:** 2.0.0  
+**Last Updated:** May 2026
 
 ---
 
-## High-Level System Architecture
+## System Overview
+
+InterviewMinds follows a monorepo architecture with clear separation between frontend, backend, and shared packages. The system is designed for horizontal scalability with stateless API servers, persistent data stores, and real-time communication via WebSockets.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                    CLIENTS                                          │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌──────────┐ │
-│  │   Web App       │    │   PWA           │    │   Mobile App    │    │  API     │ │
-│  │   (React 18)    │    │   (Vite PWA)    │    │   (React Native)│    │  Client  │ │
-│  └────────┬────────┘    └────────┬────────┘    └────────┬────────┘    └────┬─────┘ │
-│           │                      │                      │                 │        │
-└───────────┼──────────────────────┼──────────────────────┼─────────────────┼────────┘
-            │                      │                      │                 │
-            └──────────────────────┴──────────────────────┴─────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           EDGE NETWORK (Vercel)                                    │
-│                    Global CDN • SSL/TLS • DDoS Protection                          │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              API GATEWAY (Express)                                  │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
-│  │  Middleware Stack (Top to Bottom)                                           │    │
-│  │  1. CORS → 2. Correlation ID → 3. Metrics → 4. Security Headers → 5. Timeout  │    │
-│  │  6. Input Sanitization → 7. Rate Limiting → 8. Authentication → 9. RBAC     │    │
-│  │  10. Audit Logging → 11. Circuit Breaker → 12. Route Handler                │    │
-│  └─────────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-            │
-            ├──────────────────────────────────────────┬────────────────────────────────┤
-            │                                          │                                │
-            ▼                                          ▼                                ▼
-┌─────────────────────────────┐    ┌─────────────────────────────────┐    ┌──────────────┐
-│    EXTERNAL SERVICES         │    │    INTERNAL MICROSERVICES       │    │   DATABASE   │
-├─────────────────────────────┤    ├─────────────────────────────────┤    ├──────────────┤
-│  ┌──────────┐  ┌──────────┐   │    │  ┌──────────┐  ┌──────────┐      │    │  ┌────────┐  │
-│  │  Groq   │  │  Gemini  │   │    │  │  Queue  │  │  Cache  │      │    │  │ MongoDB│  │
-│  │ (LLM)   │  │ (Vision) │   │    │  │ (BullMQ)│  │ (Redis) │      │    │  │        │  │
-│  └──────────┘  └──────────┘   │    │  └──────────┘  └──────────┘      │    │  └────────┘  │
-│  ┌──────────┐  ┌──────────┐   │    │  ┌──────────┐  ┌──────────┐      │    │              │
-│  │  Azure  │  │ Piston   │   │    │  │  Socket  │  │  Sentry  │      │    │              │
-│  │ (TTS)   │  │(Compiler)│   │    │  │   (IO)   │  │(Tracing)│      │    │              │
-│  └──────────┘  └──────────┘   │    │  └──────────┘  └──────────┘      │    │              │
-└─────────────────────────────┘    └─────────────────────────────────┘    └──────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              CLIENTS                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐   │
+│  │  Browser │  │  Mobile  │  │  Webhook │  │  External (ATS/HRIS) │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────────┬───────────┘   │
+└───────┼──────────────┼──────────────┼───────────────────┼───────────────┘
+        │              │              │                    │
+        ▼              ▼              ▼                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         LOAD BALANCER / CDN                              │
+│                    (Vercel Edge / Cloudflare)                            │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        ▼                       ▼                       ▼
+┌───────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   Frontend    │    │   Backend API    │    │   WebSocket      │
+│   (Vercel)    │    │   (Express)      │    │   (Socket.IO)    │
+│               │    │                  │    │                  │
+│  React 18     │    │  REST + GraphQL  │    │  Real-time       │
+│  Vite 7.3     │    │  38 route files  │    │  Collaboration   │
+│  Tailwind     │    │  81 services     │    │  Video signaling │
+└───────────────┘    └────────┬─────────┘    └────────┬─────────┘
+                              │                       │
+                              ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         MIDDLEWARE PIPELINE                              │
+│  CORS → Correlation ID → Metrics → Security Headers → Timeout →        │
+│  Sanitization → Rate Limiting → Auth (Clerk) → RBAC → Audit → Handler  │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        ▼                       ▼                       ▼
+┌───────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   MongoDB     │    │     Redis        │    │  External APIs   │
+│   (Atlas)     │    │   (Cloud)        │    │                  │
+│               │    │                  │    │  Groq (LLM)      │
+│  7 Models     │    │  Sessions        │    │  Piston (Code)   │
+│  Pool: 20     │    │  Rate Limits     │    │  Cloudinary      │
+│               │    │  BullMQ Jobs     │    │  Azure Speech    │
+└───────────────┘    └──────────────────┘    └──────────────────┘
 ```
-
----
-
-## Technology Stack
-
-### Core Technologies
-
-| Layer | Technology | Version | Purpose |
-|-------|------------|---------|---------|
-| **Runtime** | Node.js | 20.x | Backend execution |
-| **Language** | TypeScript | 5.x | Type safety |
-| **Framework** | Express | 4.x | Web framework |
-| **Frontend** | React | 18.x | UI library |
-| **Build Tool** | Vite | 5.x | Fast bundling |
-| **UI** | Tailwind + Shadcn | Latest | Styling |
-| **Monorepo** | Turborepo | 2.x | Build orchestration |
-
-### Data & Cache
-
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| **Primary DB** | MongoDB (Atlas) | Document storage |
-| **Cache** | Redis | Rate limiting, sessions |
-| **Queue** | BullMQ | Async job processing |
-| **Search** | MongoDB Atlas Search | Full-text search |
-
-### AI & ML
-
-| Service | Provider | Model | Use Case |
-|---------|-----------|-------|----------|
-| **LLM** | Groq | Llama 3 70B | Interview chat |
-| **Vision** | Google Gemini | Pro | Image analysis |
-| **TTS** | Azure Speech | Neural | Voice output |
-| **Proctoring** | TensorFlow.js | Face/Focus | Browser-based ML |
-
-### External Integrations
-
-| Service | Purpose |
-|---------|---------|
-| **Clerk** | Authentication |
-| **Cloudinary** | Media storage |
-| **SendGrid** | Email delivery |
-| **Twilio** | SMS notifications |
-| **Stripe** | Payment processing |
 
 ---
 
 ## Monorepo Structure
 
 ```
-InterviewMinds/
+interview-minds/
 ├── apps/
-│   ├── api/                    # Express Backend
-│   │   ├── src/
-│   │   │   ├── lib/          # 79 service files
-│   │   │   ├── routes/       # 32 route files
-│   │   │   ├── middleware/   # Auth, RBAC, audit
-│   │   │   ├── models/        # MongoDB schemas
-│   │   │   ├── graphql/        # GraphQL schema
-│   │   │   ├── tests/          # Unit tests
-│   │   │   └── index.ts        # App entry
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   │
-│   └── web/                    # React Frontend
-│       ├── src/
-│       │   ├── components/    # UI components
-│       │   ├── pages/         # 15 page components
-│       │   ├── services/      # 45 API services
-│       │   ├── hooks/          # Custom hooks
-│       │   ├── lib/            # Utilities
-│       │   ├── stores/         # State management
-│       │   └── App.tsx
-│       ├── package.json
-│       └── vite.config.ts
-│
+│   ├── api/          # Backend application
+│   └── web/          # Frontend application
 ├── packages/
-│   └── shared/                 # Shared TypeScript types
-│       ├── types/
-│       └── utils/
-│
-├── docs/                       # Documentation
-│   ├── API.md
-│   ├── ARCHITECTURE.md
-│   ├── DB_SCHEMA.md
-│   ├── DEPLOYMENT.md
-│   └── ...
-│
-├── turbo.json                 # Turborepo config
-├── package.json               # Root package.json
-└── README.md
+│   └── shared/       # Shared types and utilities
+├── turbo.json        # Build pipeline configuration
+└── package.json      # Workspace root
+```
+
+**Build orchestration:** Turborepo manages parallel builds, caching, and dependency ordering across workspaces.
+
+---
+
+## Backend Architecture
+
+### Service Layer (81 modules in `apps/api/src/lib/`)
+
+Services are organized by domain concern:
+
+| Domain | Services |
+|--------|----------|
+| AI & ML | `aiAgent`, `aiAnalysis`, `multimodalAI`, `llmInterviewer`, `smartAssessment`, `faceMLService`, `videoProctoring`, `sentimentAnalysis` |
+| Interview | `mockInterview`, `panelInterview`, `dynamicQuestions`, `questionGeneration`, `questionBank`, `answerValidation` |
+| Collaboration | `collaborativeEditor`, `whiteboard`, `videoCall`, `collaborationTools`, `waitingRoom` |
+| Security | `security`, `e2eEncryption`, `biometricAuth`, `fraudDetection`, `geoFencing`, `piiMasking` |
+| Infrastructure | `circuitBreaker`, `connectionPool`, `queue`, `redis`, `responseCache`, `dedup`, `eventBus` |
+| Integration | `atsIntegration`, `githubIntegration`, `gitlabIntegration`, `hrisIntegration`, `communicationIntegration`, `ssoIntegration` |
+| Observability | `logger`, `metrics`, `metricsAggregator`, `sentry`, `monitoringService`, `loggingService` |
+| Analytics | `analytics`, `predictiveAnalytics`, `anomalyDetector`, `reportGenerator`, `reportingService` |
+| Compliance | `compliance`, `auditTrail`, `dataRetention` |
+
+### Route Layer (38 files in `apps/api/src/routes/`)
+
+Each route file maps to a REST API domain. Routes are mounted with middleware chains in `src/index.ts`.
+
+### Middleware Pipeline
+
+Request processing follows a strict ordering:
+
+```
+1. CORS (environment-driven whitelist)
+2. JSON Body Parser (10MB limit)
+3. Correlation ID (X-Correlation-ID header injection)
+4. Request Logging (Pino structured logs)
+5. Trust Proxy (for load balancer IP forwarding)
+6. Prometheus Metrics (request duration/counters)
+7. Security Headers (Helmet)
+8. Request Timeout (30s default)
+9. Input Sanitization (NoSQL injection + XSS prevention)
+10. Rate Limiting (general: all routes, AI: stricter, upload: file-specific)
+11. Authentication (Clerk requireAuth)
+12. RBAC (role attachment + permission check)
+13. Audit Logging (action recording)
+14. Route Handler
 ```
 
 ---
 
-## Backend Services
+## Authentication & Authorization
 
-### Phase 1-8: Core Services (31 files)
+### Auth Flow
 
-| Service | File | Description |
-|---------|------|-------------|
-| Job Matching | `jobMatching.ts` | Resume-Job matching |
-| Question Generation | `questionGeneration.ts` | AI question creation |
-| Code Analysis | `codeAnalysis.ts` | Code quality/scanning |
-| E2E Encryption | `e2eEncryption.ts` | RSA-2048 encryption |
-| Biometric Auth | `biometricAuth.ts` | Face/Voice/Fingerprint |
-| Fraud Detection | `fraudDetection.ts` | Browser fingerprinting |
-| Video Proctoring | `videoProctoring.ts` | TensorFlow.js proctoring |
-| Resume Verification | `resumeVerification.ts` | Entity extraction |
-| Answer Validation | `answerValidation.ts` | Plagiarism/AI detection |
-| SSO Integration | `ssoIntegration.ts` | OAuth/SAML |
-| Webhooks | `webhooks.ts` | Event notifications |
-| ATS Integration | `atsIntegration.ts` | Greenhouse/Lever |
-| Multi-tenancy | `multiTenancy.ts` | Tenant management |
-| Compliance | `compliance.ts` | GDPR/SOC2 |
-| Analytics | `analytics.ts` | Dashboard data |
-| Question Bank | `questionBank.ts` | Question library |
-| Scorecard | `scorecard.ts` | Evaluation rubrics |
-| Report Generator | `reportGenerator.ts` | PDF/CSV export |
-| Async Video | `asyncVideo.ts` | Pre-recorded interviews |
-| Take Home | `takeHome.ts` | Coding challenges |
-| Preparation | `preparation.ts` | System check |
-| Waiting Room | `waitingRoom.ts` | Queue management |
-| Mock Interview | `mockInterview.ts` | Practice mode |
-| Panel Interview | `panelInterview.ts` | Multi-interviewer |
-| AI Analysis | `aiAnalysis.ts` | Confidence scoring |
-| Notifications | `notifications.ts` | Email/SMS/Slack |
-| Resume Screener | `resumeScreener.ts` | Auto-screening |
-| SQL Challenges | `sqlChallenges.ts` | Database testing |
-| Git Integration | `gitIntegration.ts` | GitHub import |
+```
+Client → Clerk SDK → JWT Token → Express Middleware → req.auth.userId
+                                                          ↓
+                                              UserRole Model (MongoDB)
+                                                          ↓
+                                              req.userRole = "candidate" | "interviewer" | "admin"
+                                                          ↓
+                                              RBAC Permission Check (with wildcard support)
+```
 
-### Phase 9-18: Enterprise Services (48 files)
+### Role Hierarchy
 
-| Phase | Services |
-|-------|----------|
-| **Phase 9: AI & LLM** | llmInterviewer, multimodalAI, smartAssessment |
-| **Phase 10: Infrastructure** | connectionPool, responseCache, cdnIntegration, eventBus, queryOptimization |
-| **Phase 11: Collaboration** | collaborativeEditor, whiteboard, videoCall, collaborationTools |
-| **Phase 12: Analytics** | predictiveAnalytics, sentimentAnalysis, reportingService, metricsAggregator, anomalyDetector |
-| **Phase 13: Developer** | githubIntegration, gitlabIntegration, codeReview, testRunner, sandboxService |
-| **Phase 14: Compliance** | dataRetention, piiMasking, accessRequest, auditTrail |
-| **Phase 15: Integration** | hrisIntegration, communicationIntegration, backgroundCheck |
-| **Phase 16: Mobile** | pushNotification, offlineSupport, mobileAPI |
-| **Phase 17: Observability** | monitoringService, loggingService |
-| **Phase 18: AI Agents** | aiAgent, automationService |
-
-**Total: 79 Backend Services**
+| Role | Permissions |
+|------|------------|
+| `candidate` | Own interviews, resume upload, practice sessions |
+| `interviewer` | Manage interviews, view candidates, scoring |
+| `admin` | Full access (wildcard `*`), user management, audit logs |
 
 ---
 
-## Frontend Architecture
+## Real-Time Architecture
 
-### Pages (15 total)
+### Socket.IO Events
 
-| Route | Page | Purpose |
-|-------|------|---------|
-| `/` | Dashboard | Resume upload, job matching |
-| `/interview` | Interview | Live coding interview |
-| `/interview/:id` | InterviewSession | Active session |
-| `/feedback/:id` | Feedback | Results & scores |
-| `/analytics` | Analytics | Dashboard & trends |
-| `/pipeline` | Pipeline | Kanban candidate board |
-| `/scheduling` | Scheduling | Calendar booking |
-| `/questions` | QuestionBank | Question library |
-| `/reports` | Reports | PDF/CSV export |
-| `/preparation` | Preparation | System check, practice |
-| `/settings` | Settings | Enterprise config |
-| `/admin` | Admin | Compliance, audit |
-| `/candidate-portal` | CandidatePortal | Self-service |
-| `/auth/*` | Auth | Clerk login/signup |
+The Socket.IO server handles multiple real-time domains:
 
-### Services (45 total)
+| Namespace | Events | Purpose |
+|-----------|--------|---------|
+| Collaboration | `collab:*` | CRDT document sync, cursor positions |
+| Whiteboard | `whiteboard:*` | Drawing elements, persistence sync |
+| Video | `video:*` | WebRTC signaling, participant management |
+| Chat | `message:*` | Real-time messaging |
 
-All API calls centralized in `services/enterprise.ts`:
+### Collaborative Editor (CRDT Three-Way Merge)
 
-```typescript
-// Example: Using services
-import { llmInterviewerService, collaborationService } from '@/services/enterprise';
+```
+User A edits:  "hello" → "hello world"
+User B edits:  "hello" → "hello!"
+                    ↓
+         Three-Way Merge Algorithm
+         Base: "hello"
+         Current: "hello world" (A's change applied first)
+         Incoming: "hello!" (B's change)
+                    ↓
+         Result: "hello world!" (both changes preserved)
+```
 
-// Start LLM interview
-const session = await llmInterviewerService.createSession(config);
+The collaborative editor (`src/lib/collaborativeEditor.ts`) implements:
+- Per-user base state tracking
+- Three-way merge with common prefix/suffix detection
+- Non-overlapping change composition
+- Overlapping change concatenation (no data loss)
+- Version counter for ordering
 
-// Join collaborative editor
-await collaborationService.joinEditor(sessionId);
+### Whiteboard Persistence
+
+The whiteboard (`src/lib/whiteboard.ts`) uses a MongoDB persistence layer:
+- Elements persist across session recreation via `WhiteboardPersistence` class
+- Element-level versioning for conflict resolution
+- Room-scoped storage (elements keyed by `roomId`)
+- Real-time broadcast via Socket.IO on every mutation
+
+### Video Call (WebRTC + ICE Servers)
+
+```
+┌──────────┐                              ┌──────────┐
+│  Peer A  │◄─── STUN (NAT Discovery) ──►│  Peer B  │
+│          │◄─── TURN (Relay Fallback) ──►│          │
+│          │◄─── SDP Offer/Answer ───────►│          │
+│          │◄─── ICE Candidates ─────────►│          │
+└──────────┘                              └──────────┘
+       ↕                                        ↕
+       └────── Socket.IO Signaling Server ──────┘
+```
+
+The video call system (`src/lib/videoCall.ts`) provides:
+- STUN/TURN ICE server configuration from environment variables
+- Optional SFU (mediasoup/livekit) for large group calls
+- Automatic mesh-to-SFU topology switching based on participant count
+- Recording service with lifecycle management
+- Session persistence for durability
+
+---
+
+## ML Pipeline Architecture
+
+### Video Proctoring
+
+```
+Frame Input (base64)
+       ↓
+┌──────────────────────────────────┐
+│  ML Available?                   │
+│  ├── YES: face-api.js inference  │
+│  │   ├── SSD MobileNet (detect) │
+│  │   ├── 68-point landmarks     │
+│  │   └── Expression recognition │
+│  └── NO: Content-derived        │
+│       ├── Hash-based features    │
+│       ├── Entropy analysis       │
+│       └── Input-dependent scores │
+└──────────────────────────────────┘
+       ↓
+┌──────────────────────────────────┐
+│  Analysis Results                │
+│  ├── Face Detection (position,   │
+│  │   count, confidence)          │
+│  ├── Eye Tracking (gaze, blink) │
+│  ├── Expressions (7 emotions)   │
+│  └── Presence (objects, people)  │
+└──────────────────────────────────┘
+```
+
+### Multimodal Voice Analysis
+
+```
+Audio Transcript
+       ↓
+┌──────────────────────────────────┐
+│  Groq API Available?             │
+│  ├── YES: LLM Analysis           │
+│  │   ├── Llama 3.3-70b prompt   │
+│  │   ├── Acoustic features      │
+│  │   └── JSON score extraction   │
+│  └── NO: Keyword Heuristic       │
+│       ├── Confidence words       │
+│       ├── Nervousness markers    │
+│       └── Enthusiasm indicators  │
+└──────────────────────────────────┘
+       ↓
+Result: { confidence, nervousness, enthusiasm, clarity, pace, sentiment, source }
 ```
 
 ---
 
-## Database Design
+## Data Flow Patterns
 
-### Collections
+### Circuit Breaker
+
+External service calls (Groq, Piston) are wrapped in circuit breakers:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        MongoDB Collections                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  users              - User accounts & profiles                  │
-│  resumes            - Uploaded resumes                           │
-│  interviews         - Interview sessions                         │
-│  questions          - Question bank                             │
-│  answers            - Candidate responses                       │
-│  scores             - Evaluation scores                          │
-│  reports            - Generated reports                          │
-│  tenants            - Multi-tenant organizations                │
-│  audit_logs         - Compliance audit trail                    │
-│  sessions           - Active interview sessions                │
-│  notifications      - User notifications                       │
-│  webhooks           - Webhook configurations                   │
-│  jobs               - Async job queue                          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+CLOSED (normal) → failures exceed threshold → OPEN (reject fast)
+                                                    ↓ (timeout)
+                                              HALF-OPEN (test one request)
+                                                    ↓ (success)
+                                              CLOSED (resume normal)
 ```
 
-### Indexes
+### BullMQ Job Processing
 
-```javascript
-// interviews
-{ candidateId: 1, status: 1 }
-{ scheduledAt: 1 }
+```
+API Request → Queue Job → Redis (BullMQ) → Worker Process → Result
+                                                ↓
+                                          MongoDB (persist)
+```
 
-// questions
-{ role: 1, difficulty: 1 }
-{ category: 1, tags: 1 }
+Workers handle:
+- Resume parsing and chunk embedding
+- Interview scoring and feedback generation
+- Async video processing
 
-// audit_logs
-{ tenantId: 1, timestamp: -1 }
-{ userId: 1, action: 1 }
+### Graceful Shutdown
+
+```
+SIGTERM/SIGINT received
+       ↓
+1. Stop accepting new connections
+2. Close BullMQ queues and workers
+3. Close Redis connections
+4. Close MongoDB connection pool
+5. Exit process
 ```
 
 ---
 
 ## Security Architecture
 
+### E2E Encryption
+
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          SECURITY LAYERS                                            │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────────┐   │
-│  │    AUTHENTICATION   │    │    AUTHORIZATION     │    │    DATA SECURITY     │   │
-│  ├──────────────────────┤    ├──────────────────────┤    ├──────────────────────┤   │
-│  │                      │    │                      │    │                      │   │
-│  │  • Clerk JWT        │    │  • RBAC (4 roles)   │    │  • E2E Encryption    │   │
-│  │  • Biometric        │    │  • Permission Matrix │    │  • Field-level       │   │
-│  │    (Face/Voice/FP)  │    │  • Resource Access   │    │  • Input Sanitization│   │
-│  │  • SSO (OAuth)     │    │  • Audit Logging     │    │  • SQL Injection     │   │
-│  │  • 2FA             │    │  • API Key Mgmt      │    │    Prevention        │   │
-│  │                     │    │                      │    │                      │   │
-│  └──────────────────────┘    └──────────────────────┘    └──────────────────────┘   │
-│                                                                                      │
-│  ┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────────┐   │
-│  │   NETWORK SECURITY   │    │   FRAUD PREVENTION   │    │   COMPLIANCE         │   │
-│  ├──────────────────────┤    ├──────────────────────┤    ├──────────────────────┤   │
-│  │                      │    │                      │    │                      │   │
-│  │  • Rate Limiting     │    │  • Browser FP        │    │  • GDPR Data Export  │   │
-│  │  • IP Whitelisting   │    │  • Behavior Analysis │    │  • Consent Mgmt      │   │
-│  │  • Geo-fencing      │    │  • Anomaly Detection│    │  • Audit Trails      │   │
-│  │  • DDoS Protection  │    │  • Session Binding  │    │  • SOC 2 Ready       │   │
-│  │                     │    │                      │    │                      │   │
-│  └──────────────────────┘    └──────────────────────┘    └──────────────────────┘   │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+Sender                                    Receiver
+  │                                          │
+  ├── Generate RSA-4096 keypair              │
+  ├── Exchange public keys                   │
+  ├── Derive AES-256 key (PBKDF2)          │
+  ├── Encrypt message (AES-256-GCM)        │
+  ├── Sign with RSA private key             │
+  │                                          │
+  └──────── Encrypted Payload ──────────────►│
+                                             ├── Verify RSA signature
+                                             ├── Decrypt with AES-256-GCM
+                                             └── Plaintext message
 ```
+
+### Rate Limiting Strategy
+
+| Limiter | Scope | Limit |
+|---------|-------|-------|
+| General | All routes | Standard requests/window |
+| AI | LLM endpoints | Stricter (expensive operations) |
+| Upload | File uploads | Size + frequency limited |
+| GraphQL | `/graphql` | Query complexity aware |
 
 ---
 
-## Infrastructure
-
-### Cloud Architecture (Production)
+## Deployment Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                              AWS / VERCEL                                           │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
-│  │                              FRONTEND                                        │    │
-│  │  Vercel Edge Network → Global CDN → SSL → PWA                               │    │
-│  └─────────────────────────────────────────────────────────────────────────────┘    │
-│                                         │                                            │
-│                                         ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
-│  │                              BACKEND                                         │    │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │    │
-│  │  │  API Pod 1  │  │  API Pod 2  │  │  API Pod N  │  │  Worker     │          │    │
-│  │  │  (Auto-     │  │  (Auto-     │  │  (Auto-     │  │  (BullMQ)   │          │    │
-│  │  │   Scale)    │  │   Scale)    │  │   Scale)    │  │             │          │    │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘          │    │
-│  │         │                │                │                │                 │    │
-│  └─────────┼────────────────┼────────────────┼────────────────┼──────────────────┘    │
-│            │                │                │                │                    │
-│            ▼                ▼                ▼                ▼                    │
-│  ┌──────────────────┐  ┌────────────┐  ┌─────────────┐  ┌─────────────┐            │
-│  │   MongoDB Atlas   │  │   Redis    │  │  S3 Bucket  │  │   Sentry    │            │
-│  │   (Primary DB)    │  │  (Cache)   │  │  (Media)    │  │  (Tracing)  │            │
-│  └──────────────────┘  └────────────┘  └─────────────┘  └─────────────┘            │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Vercel    │     │   Render    │     │   MongoDB   │
+│  (Frontend) │     │  (Backend)  │     │   Atlas     │
+│             │     │             │     │             │
+│  React SPA  │────►│  Docker     │────►│  7 Models   │
+│  CDN Edge   │     │  Node 20    │     │  Pool: 20   │
+└─────────────┘     └──────┬──────┘     └─────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │    Redis    │
+                    │   Cloud     │
+                    │             │
+                    │  Sessions   │
+                    │  BullMQ     │
+                    │  Cache      │
+                    └─────────────┘
 ```
-
-### Scaling Strategy
-
-| Component | Strategy |
-|-----------|----------|
-| **API Server** | Horizontal Pod Autoscaling (HPA) |
-| **Database** | MongoDB Atlas Multi-Region |
-| **Cache** | Redis Cluster with Read Replicas |
-| **CDN** | Vercel Edge Network |
-| **Queue** | BullMQ with Redis |
-
----
-
-## Deployment
-
-### Environments
-
-| Environment | URL | Purpose |
-|-------------|-----|---------|
-| **Development** | localhost:8000 | Local development |
-| **Staging** | staging.interviewminds.com | Pre-production testing |
-| **Production** | api.interviewminds.com | Live production |
-
-### CI/CD Pipeline
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           CI/CD Pipeline                                    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  1. PUSH      →  2. BUILD        →  3. TEST      →  4. DEPLOY            │
-│     GitHub        Turborepo          Vitest         Vercel/Render          │
-│                   (Parallel)       (28 tests)      (Auto)                 │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │  Pre-commit Checks:                                                  │   │
-│  │  • ESLint → Prettier → TypeScript → Tests                           │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │  Deployment:                                                          │   │
-│  │  • Frontend: Vercel (automatic on main branch)                      │   │
-│  │  • Backend: Render/Docker (triggered on tag)                       │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Scalability
-
-### Performance Targets
-
-| Metric | Target |
-|--------|--------|
-| API Response Time | < 200ms (p95) |
-| AI Response Time | < 500ms (Groq) |
-| Page Load Time | < 2s (LCP) |
-| Uptime | 99.9% |
-| Concurrent Users | 10,000+ |
-
-### Optimization Strategies
-
-- **Caching:** Redis for API responses, CDN for static assets
-- **Database:** Connection pooling, query optimization, indexing
-- **Code Splitting:** React lazy loading, route-based splitting
-- **Image Optimization:** WebP, lazy loading, CDN
-
----
-
-## Monitoring & Observability
-
-| Tool | Purpose |
-|------|---------|
-| **Sentry** | Error tracking, performance monitoring |
-| **Prometheus** | Metrics collection |
-| **Grafana** | Dashboards, visualization |
-| **Datadog** | APM, log aggregation |
-| **OpenTelemetry** | Distributed tracing |
-
----
-
-## Production Ready Features
-
-- ✅ **79 Backend Services** - All enterprise features implemented
-- ✅ **45 Frontend Services** - Complete API integration
-- ✅ **15 Pages** - Full user interface
-- ✅ **32 API Routes** - RESTful endpoints
-- ✅ **Full Security** - E2E, biometric, SSO, RBAC
-- ✅ **Video Proctoring** - TensorFlow.js real-time analysis
-- ✅ **AI/ML** - Groq LLM, multimodal analysis
-- ✅ **Multi-tenant** - Enterprise isolation
-- ✅ **GDPR Compliant** - Data export, consent, audit
-
-**InterviewMinds - Enterprise-Grade AI Mock Interview Platform**

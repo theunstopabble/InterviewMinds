@@ -103,18 +103,17 @@ router.post('/audio/analyze', async (req, res) => {
 
 router.post('/screen/check', async (req, res) => {
   try {
-    const mockMetrics = {
-      timestamp: Date.now(),
-      screen: {
-        tabSwitches: 0,
-        focusLoss: 0,
-        recordingDetected: false,
-        externalDisplay: false,
-        devToolsOpen: false
-      }
+    // Use real client-reported tab switch events
+    const clientReport = {
+      tabSwitchCount: req.body.tabSwitchCount || 0,
+      focusLossCount: req.body.focusLossCount || 0,
+      recordingDetected: req.body.recordingDetected || false,
+      externalDisplay: req.body.externalDisplay || false,
+      devToolsOpen: req.body.devToolsOpen || false,
     };
 
-    res.json(mockMetrics);
+    const metrics = await checkScreenState(clientReport);
+    res.json(metrics);
   } catch (error) {
     console.error('Error checking screen state:', error);
     res.status(500).json({ error: 'Failed to check screen state' });

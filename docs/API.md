@@ -1,32 +1,7 @@
-# InterviewMinds API Documentation
+# API Reference
 
-> **Version:** 1.0.0 | **Last Updated:** May 2026 | **Status:** Production Ready
-
-## Table of Contents
-- [Overview](#overview)
-- [Base URL](#base-url)
-- [Authentication](#authentication)
-- [Rate Limiting](#rate-limiting)
-- [API Endpoints](#api-endpoints)
-- [Error Codes](#error-codes)
-- [Versioning](#versioning)
-- [Support](#support)
-
----
-
-## Overview
-
-The InterviewMinds API is a comprehensive RESTful API built on Node.js/Express with TypeScript. It provides **150+ endpoints** across 18 phases of enterprise features including:
-
-- **Core Interview:** Resume parsing, AI chat, code execution
-- **AI & LLM:** Groq-powered interviewer, multimodal analysis, smart assessment
-- **Security:** E2E encryption, biometric auth, fraud detection, geo-fencing
-- **Proctoring:** Video analysis, eye tracking, screen monitoring
-- **Enterprise:** Multi-tenancy, SSO, RBAC, compliance
-- **Analytics:** Predictive analytics, sentiment analysis, anomaly detection
-- **Integration:** HRIS, Slack/Teams, background checks, Zoom/Meet
-- **Collaboration:** Real-time code editor, whiteboard, video calls
-- **Automation:** AI agents, workflow automation
+**Version:** 2.0.0  
+**Last Updated:** May 2026
 
 ---
 
@@ -34,293 +9,400 @@ The InterviewMinds API is a comprehensive RESTful API built on Node.js/Express w
 
 | Environment | URL |
 |-------------|-----|
-| Production | `https://api.interviewminds.com` |
 | Development | `http://localhost:8000` |
-| Staging | `https://staging.interviewminds.com` |
+| Production | `https://api.interviewminds.com` |
 
 ---
 
 ## Authentication
 
-All protected endpoints require JWT authentication via **Clerk**:
+All protected endpoints require a valid Clerk JWT token in the `Authorization` header:
 
-```http
-Authorization: Bearer <clerk_jwt_token>
+```
+Authorization: Bearer <clerk-jwt-token>
 ```
 
-### Public Endpoints (No Auth Required)
-- `/api/auth/*` - Login, register
-- `/api/health` - Health check
-- `/api/health/ready` - Readiness check
-- `/api/health/live` - Liveness check
+Roles: `candidate`, `interviewer`, `admin` (with wildcard permissions).
 
 ---
 
-## Rate Limiting
+## Common Headers
 
-| Tier | Endpoint Type | Limit | Window |
-|------|---------------|-------|--------|
-| **Free** | General API | 100 requests | 15 min |
-| **Pro** | General API | 500 requests | 15 min |
-| **Enterprise** | General API | 2000 requests | 15 min |
-| All | AI Services (Chat, TTS) | 30 requests | 1 min |
-| All | File Uploads | 10 requests | 15 min |
-| All | Biometric Verification | 5 requests | 1 min |
+| Header | Description |
+|--------|-------------|
+| `Authorization` | Bearer token (Clerk JWT) |
+| `Content-Type` | `application/json` |
+| `X-Correlation-ID` | Auto-generated request trace ID (returned in response) |
 
 ---
 
-## API Endpoints
+## Health & System Endpoints
 
-### Phase 1: Core Interview
+### GET /health
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/resume/upload` | Upload resume PDF |
-| GET | `/api/resume` | List user resumes |
-| GET | `/api/resume/:id` | Get resume details |
-| DELETE | `/api/resume/:id` | Delete resume |
-| POST | `/api/chat/send` | Send chat message |
-| POST | `/api/chat/feedback` | Submit feedback |
-| POST | `/api/code/execute` | Execute code |
-| POST | `/api/interview/start` | Start interview |
-| POST | `/api/interview/end` | End interview |
-| GET | `/api/interview/history` | Get history |
+Health check with service status and circuit breaker state.
 
-### Phase 2: Security
+**Response:**
+```json
+{
+  "status": "ok | degraded | unhealthy",
+  "timestamp": "2026-05-01T00:00:00.000Z",
+  "services": {
+    "mongo": "connected | disconnected",
+    "redis": "connected | disconnected",
+    "groq": "connected | unreachable",
+    "piston": "connected | unreachable"
+  },
+  "circuitBreakers": { ... }
+}
+```
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/e2e-encryption/keys/create` | Generate E2E key pair |
-| POST | `/api/e2e-encryption/keys/rotate` | Rotate keys |
-| POST | `/api/biometric/enroll` | Enroll biometric |
-| POST | `/api/biometric/verify` | Verify biometric |
-| POST | `/api/fraud-detection/analyze` | Analyze fraud risk |
-| POST | `/api/geo-fencing/validate` | Validate IP location |
+### GET /metrics
 
-### Phase 3: Video Proctoring
+Prometheus exposition format metrics.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/proctoring/video/analyze` | Analyze video frame |
-| POST | `/api/proctoring/audio/analyze` | Analyze audio |
-| POST | `/api/proctoring/screen/check` | Check screen state |
-| POST | `/api/proctoring/session/evaluate` | Evaluate session |
-| GET | `/api/proctoring/interview/:id/results` | Get results |
+### GET /ping
 
-### Phase 4: Assessment
+Simple liveness probe.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/job-matching/match` | Match resume to job |
-| POST | `/api/questions/generate` | Generate questions |
-| POST | `/api/answer-validation/evaluate` | Evaluate answer |
-| POST | `/api/dynamic-questions/followup` | Get follow-up questions |
-| POST | `/api/code-analysis/analyze` | Analyze code quality |
+### GET /api/csrf
 
-### Phase 5: Integrations
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET/POST | `/api/sso/config` | SSO configuration |
-| POST | `/api/webhooks/register` | Register webhook |
-| POST | `/api/ats/configure` | Configure ATS |
-| GET | `/api/ats/candidates` | Get ATS candidates |
-
-### Phase 6: Enterprise
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/tenants` | Create tenant |
-| GET | `/api/tenants/:tenantId` | Get tenant |
-| PUT | `/api/tenants/:tenantId/settings` | Update settings |
-| GET | `/api/compliance/audit` | Query audit logs |
-| POST | `/api/compliance/audit` | Log audit event |
-
-### Phase 7: Analytics
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/analytics/dashboard` | Get dashboard |
-| GET | `/api/analytics/trends` | Get trends |
-| GET | `/api/analytics/top-performers` | Top performers |
-| POST | `/api/analytics/predict` | Predict success |
-
-### Phase 8: Advanced Features
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/scheduling/slots` | Available slots |
-| POST | `/api/scheduling/book` | Book interview |
-| POST | `/api/scheduling/reschedule` | Reschedule |
-| POST | `/api/scheduling/cancel` | Cancel |
-| GET | `/api/question-bank` | Get questions |
-| POST | `/api/question-bank` | Create question |
-| GET | `/api/scorecard/templates` | Get templates |
-| POST | `/api/scorecard` | Create scorecard |
-| POST | `/api/reports/generate` | Generate report |
-| GET | `/api/reports/:id/pdf` | Download PDF |
-| POST | `/api/mock-interview/create` | Create mock |
-| POST | `/api/panel-interview/create` | Create panel |
-
-### Phase 9: AI & LLM
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/llm-interviewer/create` | Create session |
-| POST | `/api/llm-interviewer/chat` | Chat with AI |
-| POST | `/api/llm-interviewer/followup` | Get follow-up |
-| GET | `/api/llm-interviewer/summary/:id` | Get summary |
-| POST | `/api/multimodal-ai/analyze` | Analyze frame |
-| POST | `/api/multimodal-ai/voice/analyze` | Voice analysis |
-| POST | `/api/smart-assessment/generate-questions` | Generate questions |
-| POST | `/api/smart-assessment/competency-gap` | Gap analysis |
-| POST | `/api/smart-assessment/predict-success` | Predict success |
-
-### Phase 10: Infrastructure
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/infrastructure/health/pool` | DB pool stats |
-| POST | `/api/infrastructure/cache/clear` | Clear cache |
-| POST | `/api/infrastructure/cdn/invalidate` | Invalidate CDN |
-| GET | `/api/infrastructure/system/metrics` | System metrics |
-| POST | `/api/infrastructure/events/publish` | Publish event |
-
-### Phase 11: Collaboration
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/collaboration/editor/create` | Create editor |
-| POST | `/api/collaboration/editor/join` | Join session |
-| POST | `/api/collaboration/whiteboard/create` | Create whiteboard |
-| POST | `/api/collaboration/video/create` | Create video call |
-| POST | `/api/collaboration/note/create` | Create note |
-| POST | `/api/collaboration/vote/create` | Create vote |
-
-### Phase 12: Analytics
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/analytics/predict/attrition` | Predict attrition |
-| POST | `/api/analytics/predict/performance` | Predict performance |
-| POST | `/api/analytics/sentiment/analyze` | Analyze sentiment |
-| POST | `/api/analytics/report/generate` | Generate report |
-| POST | `/api/analytics/anomaly/detect` | Detect anomalies |
-
-### Phase 13: Developer
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/developer/github/repos` | Get GitHub repos |
-| POST | `/api/developer/code-review` | Review code |
-| POST | `/api/developer/test/run` | Run tests |
-| POST | `/api/developer/sandbox/create` | Create sandbox |
-| POST | `/api/developer/sandbox/execute` | Execute code |
-
-### Phase 14: Compliance
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/compliance/retention/policies` | Get policies |
-| POST | `/api/compliance/pii/detect` | Detect PII |
-| POST | `/api/compliance/pii/mask` | Mask PII |
-| POST | `/api/compliance/access/request` | Request access |
-| GET | `/api/compliance/audit/logs` | Get audit logs |
-| POST | `/api/compliance/audit/export` | Export logs |
-
-### Phase 15: Integration
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/integration/hris/sync` | Sync HRIS |
-| POST | `/api/integration/slack/send` | Send Slack message |
-| POST | `/api/integration/teams/send` | Send Teams message |
-| POST | `/api/integration/video/zoom/create` | Create Zoom meeting |
-| POST | `/api/integration/background/check` | Background check |
-
-### Phase 16: Mobile
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/mobile/device/register` | Register device |
-| POST | `/api/mobile/notification/send` | Send push notification |
-| POST | `/api/mobile/offline/action` | Queue offline action |
-| POST | `/api/mobile/offline/sync` | Sync offline data |
-| GET | `/api/mobile/features` | Get feature flags |
-
-### Phase 17: Observability
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/observability/metrics/system` | System metrics |
-| POST | `/api/observability/alerts/rules` | Create alert rule |
-| GET | `/api/observability/alerts/active` | Active alerts |
-| GET | `/api/observability/logs` | Query logs |
-| GET | `/api/observability/health` | Health check |
-| GET | `/api/observability/tracing/:traceId` | Get trace |
-
-### Phase 18: AI Agents
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/agent/agents` | List agents |
-| POST | `/api/agent/agents/run` | Run agent |
-| GET | `/api/agent/tasks` | Get tasks |
-| GET | `/api/agent/automations` | List automations |
-| POST | `/api/agent/trigger` | Trigger automation |
+Returns a CSRF token for form submissions.
 
 ---
 
-## Error Codes
+## Interview Routes
 
-| Code | Description | Solution |
-|------|-------------|----------|
-| **400** | Bad Request - Invalid parameters | Check request body |
-| **401** | Unauthorized - Invalid/missing token | Re-authenticate |
-| **403** | Forbidden - Insufficient permissions | Check role permissions |
-| **404** | Not Found - Resource doesn't exist | Verify resource ID |
-| **409** | Conflict - Duplicate resource | Use different identifier |
-| **422** | Validation Failed | Check field constraints |
-| **429** | Too Many Requests - Rate limit | Wait and retry |
-| **500** | Internal Server Error | Contact support |
-| **502** | Bad Gateway | Check service health |
-| **503** | Service Unavailable | Retry later |
+### POST /api/interview
 
----
+Create a new interview session.
 
-## Versioning
+**Auth:** Required (candidate, interviewer, admin)  
+**Rate Limit:** General
 
-- **Current Version:** `v1`
-- **Breaking Changes:** Will bump to v2
-- **Deprecation:** 3 months notice before removing endpoints
+### GET /api/interview/:id
 
-All endpoints are prefixed with `/api/`
+Get interview details and history.
+
+### PUT /api/interview/:id
+
+Update interview status or metadata.
 
 ---
 
-## WebSocket Events
+## Chat Routes
 
-For real-time features (interviews, collaboration):
+### POST /api/chat
 
-```javascript
-// Connect
-const socket = io('https://api.interviewminds.com', {
-  auth: { token: 'jwt_token' }
-});
+Send a message in an interview chat session. Uses Groq LLM (Llama 3.3-70b) for AI responses.
 
-// Events
-socket.on('interview:message', (data) => {});
-socket.on('collaboration:update', (data) => {});
-socket.on('proctoring:alert', (data) => {});
+**Auth:** Required  
+**Rate Limit:** AI (stricter)
+
+---
+
+## Resume Routes
+
+### POST /api/resume/upload
+
+Upload and parse a resume (PDF/DOCX).
+
+**Auth:** Required  
+**Rate Limit:** Upload  
+**Max Size:** 10MB
+
+### GET /api/resume/:id
+
+Retrieve parsed resume with chunks and embeddings.
+
+### POST /api/resume/verify
+
+Verify resume claims against external data.
+
+---
+
+## Code Execution
+
+### POST /api/compiler/execute
+
+Execute code in a sandboxed environment via Piston API.
+
+**Auth:** Required  
+**Rate Limit:** AI  
+**Circuit Breaker:** Yes (Piston service)
+
+**Request:**
+```json
+{
+  "language": "javascript",
+  "code": "console.log('hello')",
+  "stdin": ""
+}
 ```
 
 ---
 
-## Support
+## AI & Assessment Routes
 
-- **Email:** support@interviewminds.com
-- **Discord:** https://discord.gg/interviewminds
-- **Documentation:** https://docs.interviewminds.com
+### POST /api/dynamic-questions
+
+Generate dynamic follow-up questions based on interview context.
+
+### POST /api/answer-validation
+
+Validate candidate answers using AI scoring.
+
+### POST /api/llm-interviewer/session
+
+Start an LLM-powered interview session.
+
+### POST /api/multimodal-ai/analyze
+
+Run multimodal analysis (voice tone, facial expressions, gestures, eye gaze, posture).
+
+**Request:**
+```json
+{
+  "audioText": "transcript of candidate speech",
+  "facialData": { "happy": 20, "neutral": 60, ... },
+  "gestureData": [100, 200, 150],
+  "eyePositions": [{ "x": 0.1, "y": -0.05 }],
+  "postureKeypoints": { "nose": { "x": 0.5, "y": 0.3 }, "shoulders": { "x": 0.5, "y": 0.6 } }
+}
+```
+
+**Response:**
+```json
+{
+  "voice": { "confidence": 75, "nervousness": 20, "enthusiasm": 80, "clarity": 85, "pace": 60, "sentiment": "positive", "source": "groq" },
+  "facial": { "expressions": { ... }, "dominantEmotion": "neutral", "engagementScore": 70 },
+  "gestures": { "fidgeting": 20, "overallBodyLanguage": "positive" },
+  "eyeGaze": { "gazeDirection": "center", "lookingAtScreen": 85 },
+  "posture": { "posture": "upright", "engagementLevel": 90 },
+  "overallScore": 78,
+  "warnings": []
+}
+```
+
+### POST /api/smart-assessment
+
+AI-powered adaptive assessment with difficulty scaling.
 
 ---
-*InterviewMinds - Enterprise-Grade AI Mock Interview Platform*
+
+## Video Proctoring
+
+### POST /api/proctoring/frame
+
+Process a video frame for proctoring analysis.
+
+**Auth:** Required  
+**Request:**
+```json
+{
+  "frameData": "<base64-encoded-frame>",
+  "previousPositions": [{ "x": 0.5, "y": 0.3 }]
+}
+```
+
+### POST /api/proctoring/audio
+
+Process audio frame for voice analysis.
+
+### POST /api/proctoring/screen
+
+Report screen monitoring state.
+
+### POST /api/proctoring/evaluate
+
+Evaluate complete proctoring session and generate risk score.
+
+---
+
+## Collaboration Routes
+
+### POST /api/collaboration/session
+
+Create a collaborative editing session.
+
+### POST /api/collaboration/join
+
+Join an existing collaboration session.
+
+### PUT /api/collaboration/document
+
+Update document with CRDT three-way merge.
+
+### POST /api/collaboration/whiteboard
+
+Create a whiteboard session with MongoDB persistence.
+
+### POST /api/collaboration/video
+
+Create a video call session with ICE server configuration.
+
+---
+
+## Security Routes
+
+### POST /api/e2e-encryption/keypair
+
+Generate RSA-4096 keypair for E2E encryption.
+
+### POST /api/e2e-encryption/encrypt
+
+Encrypt a message with AES-256-GCM.
+
+### POST /api/biometric/enroll
+
+Enroll biometric authentication data.
+
+### POST /api/fraud-detection/analyze
+
+Analyze session for fraud indicators.
+
+### POST /api/geo-fencing/check
+
+Verify candidate location against allowed regions.
+
+---
+
+## Admin Routes
+
+### GET /api/admin/users
+
+List all users with roles. **Auth:** admin only.
+
+### GET /api/admin/audit-logs
+
+Query audit log entries with filtering.
+
+### POST /api/admin/roles
+
+Assign or update user roles.
+
+---
+
+## Export & Reports
+
+### GET /api/export/interviews
+
+Export interview data as CSV/JSON.
+
+### GET /api/reports/dashboard
+
+Get dashboard analytics data.
+
+### GET /api/reports/candidate/:id
+
+Get detailed candidate report.
+
+---
+
+## Webhooks
+
+### POST /api/webhooks/register
+
+Register a webhook endpoint.
+
+**Request:**
+```json
+{
+  "url": "https://your-app.com/webhook",
+  "events": ["interview.completed", "score.generated"],
+  "secret": "your-webhook-secret"
+}
+```
+
+### GET /api/webhooks
+
+List registered webhooks with delivery tracking.
+
+---
+
+## GraphQL API
+
+### Endpoint: POST /graphql
+
+**Rate Limit:** GraphQL-specific  
+**Auth:** Via context (Clerk token)
+
+```graphql
+type Query {
+  interviews(userId: String!): [Interview!]!
+  interview(id: ID!): Interview
+  analytics(timeRange: TimeRange!): AnalyticsData!
+}
+
+type Mutation {
+  createInterview(input: CreateInterviewInput!): Interview!
+  updateScore(interviewId: ID!, score: ScoreInput!): Interview!
+}
+```
+
+---
+
+## Integration Routes
+
+### POST /api/ats/sync
+
+Sync with Applicant Tracking System.
+
+### POST /api/sso/saml
+
+SAML SSO authentication endpoint.
+
+### GET /api/integration/status
+
+Check integration health for all connected services.
+
+---
+
+## Scheduling
+
+### POST /api/scheduling/create
+
+Create an interview schedule.
+
+### GET /api/scheduling/available
+
+Get available time slots.
+
+---
+
+## Error Responses
+
+All errors follow a consistent format:
+
+```json
+{
+  "error": "Human-readable error message",
+  "details": "Additional context (development only)",
+  "correlationId": "uuid-for-tracing"
+}
+```
+
+### HTTP Status Codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request (validation error) |
+| 401 | Unauthorized (missing/invalid token) |
+| 403 | Forbidden (insufficient permissions) |
+| 404 | Not Found |
+| 429 | Too Many Requests (rate limited) |
+| 500 | Internal Server Error |
+| 503 | Service Unavailable (circuit breaker open) |
+
+---
+
+## Rate Limits
+
+| Tier | Applies To | Notes |
+|------|-----------|-------|
+| General | All routes | Standard request throttling |
+| AI | `/api/chat`, `/api/compiler`, `/api/tts`, `/api/llm-interviewer`, `/api/smart-assessment` | Stricter limits for expensive LLM calls |
+| Upload | `/api/resume` | File size + frequency |
+| GraphQL | `/graphql` | Query complexity aware |

@@ -9,6 +9,7 @@ export interface VoiceAnalysisResult {
   pace: number;
   sentiment: "positive" | "negative" | "neutral";
   warnings: string[];
+  source: "groq" | "heuristic_fallback";
 }
 
 export interface FacialAnalysisResult {
@@ -60,7 +61,7 @@ export interface MultimodalAnalysis {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Voice Analysis — heuristic + optional Groq LLM sentiment          */
+/*  Voice Analysis — Groq LLM primary with keyword heuristic fallback */
 /* ------------------------------------------------------------------ */
 
 function getGroqClient(): Groq | null {
@@ -68,7 +69,82 @@ function getGroqClient(): Groq | null {
   return key ? new Groq({ apiKey: key }) : null;
 }
 
-async function analyzeVoiceTone(text: string): Promise<VoiceAnalysisResult> {
+/**
+ * Compute acoustic features from raw audio buffer if available.
+ * Returns contextual information for the Groq prompt.
+ */
+function computeAcousticFeatures(audioBuffer?: Buffer): {
+  pitchVariance: number | null;
+  speakingRate: number | null;
+  pauseFrequency: number | null;
+} | null {
+  if (!audioBuffer || audioBuffer.length === 0) return null;
+
+  // Analyze raw audio buffer for acoustic features
+  const samples = new Float32Array(audioBuffer.buffer, audioBuffer.byteOffset, Math.floor(audioBuffer.length / 4));
+  if (samples.length < 100) return null;
+
+  // Estimate pitch variance from zero-crossing rate variation
+  let zeroCrossings = 0;
+  const windowSize = Math.min(1024, Math.floor(samples.length / 4));
+  const windowCrossings: number[] = [];
+
+  for (let i = 1; i < samples.length; i++) {
+    if ((samples[i] >= 0 && samples[i - 1] < 0) || (samples[i] < 0 && samples[i - 1] >= 0)) {
+      zeroCrossings++;
+    }
+    if (i % windowSize === 0 && zeroCrossings > 0) {
+      windowCrossings.push(zeroCrossings);
+      zeroCrossings = 0;
+    }
+  }
+
+  const avgCrossings = windowCrossings.length > 0
+    ? windowCrossings.reduce((a, b) => a + b, 0) / windowCrossings.length
+    : 0;
+  const pitchVariance = windowCrossings.length > 1
+    ? windowCrossings.reduce((sum, v) => sum + Math.pow(v - avgCrossings, 2), 0) / windowCrossings.length
+    : 0;
+
+  // Estimate speaking rate from energy bursts (syllable-like segments)
+  const energyThreshold = 0.01;
+  let inSpeech = false;
+  let speechBursts = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const energy = samples[i] * samples[i];
+    if (energy > energyThreshold && !inSpeech) {
+      speechBursts++;
+      inSpeech = true;
+    } else if (energy <= energyThreshold) {
+      inSpeech = false;
+    }
+  }
+
+  // Estimate pause frequency from silence gaps
+  let pauseCount = 0;
+  let silenceFrames = 0;
+  const silenceThreshold = 20; // frames of silence to count as a pause
+  for (let i = 0; i < samples.length; i++) {
+    if (Math.abs(samples[i]) < 0.005) {
+      silenceFrames++;
+    } else {
+      if (silenceFrames > silenceThreshold) pauseCount++;
+      silenceFrames = 0;
+    }
+  }
+
+  return {
+    pitchVariance: Math.round(pitchVariance * 100) / 100,
+    speakingRate: speechBursts,
+    pauseFrequency: pauseCount,
+  };
+}
+
+/**
+ * Keyword-based heuristic analysis — used as fallback when Groq is unavailable.
+ * Results are flagged with source: "heuristic_fallback".
+ */
+function analyzeVoiceToneHeuristic(text: string): VoiceAnalysisResult {
   const words = text.toLowerCase().split(/\s+/);
   const sentences = text.split(/[.!?]+/).filter(Boolean);
 
@@ -90,30 +166,8 @@ async function analyzeVoiceTone(text: string): Promise<VoiceAnalysisResult> {
   if (confidence < 30) warnings.push("Low confidence detected");
   if (paceLabel === "fast") warnings.push("Speaking too fast");
 
-  /* Try Groq for real sentiment if available */
-  let sentiment: "positive" | "negative" | "neutral" = enthusiasm > 70 ? "positive" : confidence > 60 ? "neutral" : "negative";
-  try {
-    const groq = getGroqClient();
-    if (groq && text.length > 20) {
-      const prompt = `Analyze this interview response in ONE sentence. Then rate confidence (0-100), nervousness (0-100), enthusiasm (0-100), clarity (0-100), pace (wpm), sentiment (positive/negative/neutral). Return ONLY JSON: {"confidence":N,"nervousness":N,"enthusiasm":N,"clarity":N,"pace":N,"sentiment":"...","warning":"..."}\n\nText: ${text.slice(0, 2000)}`;
-      const completion = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.2,
-        max_tokens: 200,
-      });
-      const content = completion.choices[0]?.message?.content || "{}";
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
-      confidence = Math.min(100, Math.max(0, parsed.confidence ?? confidence));
-      nervousness = Math.min(100, Math.max(0, parsed.nervousness ?? nervousness));
-      enthusiasm = Math.min(100, Math.max(0, parsed.enthusiasm ?? enthusiasm));
-      sentiment = ["positive", "negative", "neutral"].includes(parsed.sentiment) ? parsed.sentiment : sentiment;
-      if (parsed.warning) warnings.push(parsed.warning);
-    }
-  } catch {
-    /* fallback to heuristic values */
-  }
+  const sentiment: "positive" | "negative" | "neutral" =
+    enthusiasm > 70 ? "positive" : confidence > 60 ? "neutral" : "negative";
 
   return {
     confidence: Math.min(100, confidence),
@@ -123,7 +177,91 @@ async function analyzeVoiceTone(text: string): Promise<VoiceAnalysisResult> {
     pace: paceLabel === "slow" ? 40 : paceLabel === "fast" ? 60 : 80,
     sentiment,
     warnings,
+    source: "heuristic_fallback",
   };
+}
+
+/**
+ * Primary voice tone analysis using Groq LLM.
+ * Falls back to keyword heuristic if Groq is unavailable, marking result with source: "heuristic_fallback".
+ */
+async function analyzeVoiceTone(text: string, audioBuffer?: Buffer): Promise<VoiceAnalysisResult> {
+  // Attempt Groq as the primary analysis path
+  const groq = getGroqClient();
+
+  if (!groq) {
+    logger.warn("Groq API key not configured — falling back to keyword heuristic for voice tone analysis");
+    return analyzeVoiceToneHeuristic(text);
+  }
+
+  try {
+    // Compute acoustic features if raw audio buffer is available
+    const acousticFeatures = computeAcousticFeatures(audioBuffer);
+    const acousticContext = acousticFeatures
+      ? `\n\nAcoustic features detected from audio: pitch variance=${acousticFeatures.pitchVariance}, speaking rate (syllable bursts)=${acousticFeatures.speakingRate}, pause frequency=${acousticFeatures.pauseFrequency}.`
+      : "";
+
+    const prompt = `You are an expert interview coach analyzing a candidate's voice tone from their spoken response transcript.${acousticContext}
+
+Analyze the following interview response and return scores for each dimension.
+
+Scoring guide:
+- confidence (0-100): How confident does the speaker sound? Look for assertive language, decisive statements, and lack of hedging.
+- nervousness (0-100): How nervous does the speaker sound? Look for filler words, hedging, repetition, and uncertainty markers.
+- enthusiasm (0-100): How enthusiastic/engaged does the speaker sound? Look for positive language, energy, and interest markers.
+- clarity (0-100): How clear and articulate is the response? Look for coherent structure, precise language, and logical flow.
+- pace (0-100): Speaking pace score where 0=very slow, 50=normal, 100=very fast. Estimate from sentence length and word density.
+- sentiment: Overall emotional tone — must be exactly one of: "positive", "negative", or "neutral".
+
+Return ONLY valid JSON with no additional text:
+{"confidence":N,"nervousness":N,"enthusiasm":N,"clarity":N,"pace":N,"sentiment":"..."}
+
+Transcript: "${text.slice(0, 2000)}"`;
+
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      max_tokens: 200,
+    });
+
+    const content = completion.choices[0]?.message?.content || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      logger.warn("Groq returned non-JSON response for voice tone — falling back to heuristic");
+      return analyzeVoiceToneHeuristic(text);
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Validate and clamp all scores
+    const confidence = Math.min(100, Math.max(0, Number(parsed.confidence) || 50));
+    const nervousness = Math.min(100, Math.max(0, Number(parsed.nervousness) || 20));
+    const enthusiasm = Math.min(100, Math.max(0, Number(parsed.enthusiasm) || 50));
+    const clarity = Math.min(100, Math.max(0, Number(parsed.clarity) || 70));
+    const pace = Math.min(100, Math.max(0, Number(parsed.pace) || 50));
+    const sentiment: "positive" | "negative" | "neutral" =
+      ["positive", "negative", "neutral"].includes(parsed.sentiment) ? parsed.sentiment : "neutral";
+
+    const warnings: string[] = [];
+    if (nervousness > 60) warnings.push("High nervousness detected");
+    if (confidence < 30) warnings.push("Low confidence detected");
+    if (pace > 80) warnings.push("Speaking too fast");
+
+    return {
+      confidence,
+      nervousness,
+      enthusiasm,
+      clarity,
+      pace,
+      sentiment,
+      warnings,
+      source: "groq",
+    };
+  } catch (error) {
+    logger.warn({ error }, "Groq voice tone analysis failed — falling back to keyword heuristic");
+    return analyzeVoiceToneHeuristic(text);
+  }
 }
 
 function analyzeFacialExpressions(expressions: Record<string, number>): FacialAnalysisResult {
@@ -261,7 +399,8 @@ export async function analyzeMultimodal(
 
   const voice = audioText ? await analyzeVoiceTone(audioText) : {
     confidence: 0, nervousness: 0, enthusiasm: 0, clarity: 0, pace: 0 as any,
-    sentiment: "neutral" as const, warnings: ["No audio data"]
+    sentiment: "neutral" as const, warnings: ["No audio data"],
+    source: "heuristic_fallback" as const,
   };
 
   const facial = facialData ? analyzeFacialExpressions(facialData) : {
