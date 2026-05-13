@@ -11,21 +11,37 @@ interface Report {
   generatedAt: string;
 }
 
+function getCurrentUserId(): string {
+  // @ts-ignore - Clerk global
+  return window.Clerk?.user?.id || 'default-user';
+}
+
 export default function ReportsPage() {
   const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [exportFormat, setExportFormat] = useState<'pdf' | 'csv' | 'json'>('pdf');
+  const [userId, setUserId] = useState<string>('');
 
   useEffect(() => {
-    loadReports();
+    // Get user ID from Clerk
+    // @ts-ignore
+    window.Clerk?.user?.get('id').then((id: string) => {
+      const uid = id || getCurrentUserId();
+      setUserId(uid);
+      loadReports(uid);
+    }).catch(() => {
+      const uid = getCurrentUserId();
+      setUserId(uid);
+      loadReports(uid);
+    });
   }, []);
 
-  const loadReports = async () => {
+  const loadReports = async (uid: string) => {
     setLoading(true);
     try {
-      const data = await reportService.getCandidateReports('current-user').catch(() => ({ reports: [] }));
+      const data = await reportService.getCandidateReports(uid).catch(() => ({ reports: [] }));
       setReports(data.reports || []);
     } catch (e) {
       console.error('Error loading reports:', e);
@@ -36,8 +52,8 @@ export default function ReportsPage() {
   const generateReport = async () => {
     setLoading(true);
     try {
-      await reportService.generate('current-user', []).catch(() => {});
-      loadReports();
+      await reportService.generate(userId, []).catch(() => {});
+      loadReports(userId);
     } catch (e) {
       console.error('Error generating report:', e);
     }

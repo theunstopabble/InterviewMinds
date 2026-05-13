@@ -13,6 +13,11 @@ interface Interview {
   interviewer?: string;
 }
 
+function getCurrentTenantId(): string {
+  // @ts-ignore - Clerk organization hook
+  return window.Clerk?.organization?.id || 'default';
+}
+
 export default function SchedulingPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'schedule' | 'upcoming' | 'calendar'>('upcoming');
@@ -22,8 +27,16 @@ export default function SchedulingPage() {
   const [timezones, setTimezones] = useState<any[]>([]);
   const [selectedTimezone, setSelectedTimezone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tenantId, setTenantId] = useState<string>('default');
 
   useEffect(() => {
+    // Get tenant ID from Clerk organization
+    // @ts-ignore
+    window.Clerk?.organization?.get('id').then((id: string) => {
+      setTenantId(id || getCurrentTenantId());
+    }).catch(() => {
+      setTenantId(getCurrentTenantId());
+    });
     loadInitialData();
   }, []);
 
@@ -50,7 +63,7 @@ export default function SchedulingPage() {
     try {
       setLoading(true);
       const dateStr = date.toISOString().split('T')[0];
-      const slotsData = await schedulingService.getAvailableSlots('default', dateStr, selectedTimezone);
+      const slotsData = await schedulingService.getAvailableSlots(tenantId, dateStr, selectedTimezone);
       setAvailableSlots(slotsData?.slots || []);
     } catch (e) {
       console.error('Error loading slots:', e);
@@ -62,7 +75,7 @@ export default function SchedulingPage() {
 
   const bookSlot = async (slotId: string, type: 'live' | 'async' | 'take-home') => {
     try {
-      const result = await schedulingService.bookSlot('default', slotId, type);
+      const result = await schedulingService.bookSlot(tenantId, slotId, type);
       if (result?.success || result?.interview) {
         toast.success('Interview booked successfully!');
         loadSlots(selectedDate);

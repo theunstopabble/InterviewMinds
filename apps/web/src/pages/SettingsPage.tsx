@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { biometricService, ssoService, encryptionService, geoFencingService } from '../services/enterprise';
 
+function getCurrentUserId(): string {
+  // @ts-ignore - Clerk global
+  return window.Clerk?.user?.id || 'default-user';
+}
+
 export default function SettingsPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('security');
@@ -14,16 +19,22 @@ export default function SettingsPage() {
   const [geoConfig, setGeoConfig] = useState<any>(null);
 
   useEffect(() => {
-    loadSettings();
+    // Get user ID from Clerk
+    // @ts-ignore
+    window.Clerk?.user?.get('id').then((id: string) => {
+      loadSettings(id || 'default-user');
+    }).catch(() => {
+      loadSettings(getCurrentUserId());
+    });
   }, []);
 
-  const loadSettings = async () => {
+  const loadSettings = async (uid: string) => {
     setLoading(true);
     try {
       const [bio, sso, enc, geo] = await Promise.all([
         biometricService.getSettings().catch(() => null),
         ssoService.getConfig().catch(() => null),
-        encryptionService.getKeys('current').catch(() => null),
+        encryptionService.getKeys(uid).catch(() => null),
         geoFencingService.getConfig().catch(() => null),
       ]);
       setBiometricStatus(bio);
