@@ -26,6 +26,7 @@
 ## Table of Contents
 - [Architecture Overview](#architecture-overview)
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
