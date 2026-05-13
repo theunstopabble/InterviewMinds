@@ -26,16 +26,9 @@ export default function ReportsPage() {
 
   useEffect(() => {
     // Get user ID from Clerk
-    // @ts-ignore
-    window.Clerk?.user?.get('id').then((id: string) => {
-      const uid = id || getCurrentUserId();
-      setUserId(uid);
-      loadReports(uid);
-    }).catch(() => {
-      const uid = getCurrentUserId();
-      setUserId(uid);
-      loadReports(uid);
-    });
+    const uid = (window as any).Clerk?.user?.id || getCurrentUserId();
+    setUserId(uid);
+    loadReports(uid);
   }, []);
 
   const loadReports = async (uid: string) => {

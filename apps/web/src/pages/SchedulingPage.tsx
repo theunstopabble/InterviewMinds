@@ -31,12 +31,8 @@ export default function SchedulingPage() {
 
   useEffect(() => {
     // Get tenant ID from Clerk organization
-    // @ts-ignore
-    window.Clerk?.organization?.get('id').then((id: string) => {
-      setTenantId(id || getCurrentTenantId());
-    }).catch(() => {
-      setTenantId(getCurrentTenantId());
-    });
+    const orgId = (window as any).Clerk?.organization?.id || getCurrentTenantId();
+    setTenantId(orgId);
     loadInitialData();
   }, []);
 

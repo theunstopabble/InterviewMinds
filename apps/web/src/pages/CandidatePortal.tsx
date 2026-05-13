@@ -11,11 +11,9 @@ export default function CandidatePortal() {
 
   useEffect(() => {
     // Get user ID from Clerk
-    // @ts-ignore
-    window.Clerk?.user?.get('id').then((id: string) => {
-      setUserId(id);
-      loadUserData(id);
-    });
+    const id = (window as any).Clerk?.user?.id || 'default-user';
+    setUserId(id);
+    loadUserData(id);
   }, []);
 
   const loadUserData = async (id: string) => {

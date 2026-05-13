@@ -20,12 +20,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     // Get user ID from Clerk
-    // @ts-ignore
-    window.Clerk?.user?.get('id').then((id: string) => {
-      loadSettings(id || 'default-user');
-    }).catch(() => {
-      loadSettings(getCurrentUserId());
-    });
+    const uid = (window as any).Clerk?.user?.id || getCurrentUserId();
+    loadSettings(uid);
   }, []);
 
   const loadSettings = async (uid: string) => {
