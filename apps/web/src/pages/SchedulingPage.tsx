@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { schedulingService } from '../services/enterprise';
+import { toast } from 'sonner';
 
 interface Interview {
   id: string;
@@ -47,20 +48,30 @@ export default function SchedulingPage() {
 
   const loadSlots = async (date: Date) => {
     try {
+      setLoading(true);
       const dateStr = date.toISOString().split('T')[0];
       const slotsData = await schedulingService.getAvailableSlots('default', dateStr, selectedTimezone);
-      setAvailableSlots(slotsData.slots || []);
+      setAvailableSlots(slotsData?.slots || []);
     } catch (e) {
       console.error('Error loading slots:', e);
+      setAvailableSlots([]);
+    } finally {
+      setLoading(false);
     }
   };
 
   const bookSlot = async (slotId: string, type: 'live' | 'async' | 'take-home') => {
     try {
-      await schedulingService.bookSlot('default', slotId, type);
-      loadSlots(selectedDate);
-    } catch (e) {
+      const result = await schedulingService.bookSlot('default', slotId, type);
+      if (result?.success || result?.interview) {
+        toast.success('Interview booked successfully!');
+        loadSlots(selectedDate);
+      } else {
+        toast.error('Failed to book slot. Please try again.');
+      }
+    } catch (e: any) {
       console.error('Error booking slot:', e);
+      toast.error(e?.message || 'Failed to book slot');
     }
   };
 

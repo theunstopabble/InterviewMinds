@@ -286,12 +286,19 @@ export function getUpcomingInterviews(_candidateId?: string): any {
 }
 
 export function getAvailableSlots(tenantId: string, date: string, timezone: string): any {
-  return schedulingService.getAvailableSlots(tenantId, new Date(date), timezone);
+  // Parse date as local timezone, not UTC
+  const [year, month, day] = date.split('-').map(Number);
+  const localDate = new Date(year, month - 1, day);
+  return schedulingService.getAvailableSlots(tenantId, localDate, timezone);
 }
 
 export function bookSlot(tenantId: string, slotId: string, type: any, candidateId?: string): any {
   // Service expects: interviewerId, slotId, candidateId, interviewType
-  return schedulingService.bookSlot(tenantId, slotId, candidateId || "default", type || "live");
+  const result = schedulingService.bookSlot(tenantId, slotId, candidateId || "default", type || "live");
+  if (!result) {
+    throw new Error('Slot not found or already booked');
+  }
+  return result;
 }
 
 export function rescheduleInterview(interviewId: string, newSlotId: string): any {
