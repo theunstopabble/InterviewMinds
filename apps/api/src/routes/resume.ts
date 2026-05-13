@@ -57,12 +57,37 @@ router.post(
 
       // Offload heavy processing to BullMQ (if Redis available)
       if (resumeQueue) {
-        await resumeQueue.add("process-resume", {
-          resumeId: newResume._id.toString(),
-          userId: userId,
-          fileName: req.file.originalname,
-          fileBuffer: req.file.buffer.toString("base64"),
-        });
+        try {
+          await resumeQueue.add("process-resume", {
+            resumeId: newResume._id.toString(),
+            userId: userId,
+            fileName: req.file.originalname,
+            fileBuffer: req.file.buffer.toString("base64"),
+          });
+        } catch (queueErr) {
+          logger.warn({ err: (queueErr as Error).message }, "BullMQ queue unavailable, processing inline");
+          // Fallback: extract text inline if queue fails
+          try {
+            const pdfParse = require("pdf-parse");
+            const pdfData = await pdfParse(req.file.buffer);
+            await ResumeModel.findByIdAndUpdate(newResume._id, {
+              content: pdfData.text || "",
+            });
+          } catch (parseErr) {
+            logger.warn({ err: (parseErr as Error).message }, "Inline PDF parse failed");
+          }
+        }
+      } else {
+        // No queue available, process inline
+        try {
+          const pdfParse = require("pdf-parse");
+          const pdfData = await pdfParse(req.file.buffer);
+          await ResumeModel.findByIdAndUpdate(newResume._id, {
+            content: pdfData.text || "",
+          });
+        } catch (parseErr) {
+          logger.warn({ err: (parseErr as Error).message }, "Inline PDF parse failed");
+        }
       }
 
       resumesUploaded.inc();
