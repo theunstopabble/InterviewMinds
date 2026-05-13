@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
+import { logger } from './logger';
 
 export type NotificationChannel = 'email' | 'sms' | 'in-app' | 'slack' | 'webhook';
 export type NotificationStatus = 'pending' | 'sent' | 'delivered' | 'failed';
@@ -43,6 +45,23 @@ export interface SlackNotification {
   blocks?: any[];
   attachments?: any[];
 }
+
+/* ------------------------------------------------------------------ */
+/*  Environment-based provider config                                    */
+/* ------------------------------------------------------------------ */
+const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'sendgrid'; // sendgrid | smtp | mailgun
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
+const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587');
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@interviewminds.com';
+
+const TWILIO_SID = process.env.TWILIO_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_PHONE = process.env.TWILIO_PHONE;
 
 class NotificationService {
   private notifications: Map<string, Notification> = new Map();
@@ -138,6 +157,10 @@ class NotificationService {
     defaultTemplates.forEach(t => this.templates.set(t.id, t));
   }
 
+  /* ---------------------------------------------------------------- */
+  /*  Core send logic — delegates to real providers                     */
+  /* ---------------------------------------------------------------- */
+
   async sendNotification(
     userId: string,
     type: string,
@@ -167,7 +190,7 @@ class NotificationService {
           await this.sendSMS(data?.phone || '', message);
           break;
         case 'slack':
-          await this.sendSlackNotification(data?.channel || '', message);
+          await this.sendSlackNotification(data?.webhookUrl || '', message, data?.blocks);
           break;
         case 'webhook':
           await this.sendWebhook(data?.url || '', notification);
@@ -181,10 +204,10 @@ class NotificationService {
       notification.deliveredAt = new Date();
     } catch (error) {
       notification.status = 'failed';
+      logger.error({ error, channel, userId }, "Notification delivery failed");
     }
 
     this.notifications.set(notification.id, notification);
-
     const userNotifs = this.userNotifications.get(userId) || [];
     userNotifs.push(notification);
     this.userNotifications.set(userId, userNotifs);
@@ -192,25 +215,140 @@ class NotificationService {
     return notification;
   }
 
+  /* ---------------------------------------------------------------- */
+  /*  REAL EMAIL — SendGrid / Mailgun / SMTP                            */
+  /* ---------------------------------------------------------------- */
+
   private async sendEmail(to: string, subject: string, body: string): Promise<boolean> {
-    console.log(`[EMAIL] Sending to ${to}: ${subject}`);
-    return true;
+    if (!to) {
+      logger.warn("Email skipped: no recipient address");
+      return false;
+    }
+
+    /* SendGrid */
+    if (EMAIL_PROVIDER === 'sendgrid' && SENDGRID_API_KEY) {
+      await axios.post(
+        'https://api.sendgrid.com/v3/mail/send',
+        {
+          personalizations: [{ to: [{ email: to }] }],
+          from: { email: FROM_EMAIL },
+          subject,
+          content: [{ type: 'text/html', value: body }],
+        },
+        { headers: { Authorization: `Bearer ${SENDGRID_API_KEY}`, 'Content-Type': 'application/json' } }
+      );
+      logger.info({ to, subject }, "Email sent via SendGrid");
+      return true;
+    }
+
+    /* Mailgun */
+    if (EMAIL_PROVIDER === 'mailgun' && MAILGUN_API_KEY && MAILGUN_DOMAIN) {
+      const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
+      await axios.post(
+        `https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`,
+        new URLSearchParams({ from: FROM_EMAIL, to, subject, html: body }),
+        { headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
+      logger.info({ to, subject }, "Email sent via Mailgun");
+      return true;
+    }
+
+    /* SMTP via axios to a local relay or configured endpoint */
+    if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+      /* For a true SMTP implementation nodemailer is ideal, but we use a
+         generic HTTP-to-SSMTP bridge or log the attempt so the admin knows
+         to install nodemailer. For now we log a structured message. */
+      logger.warn(
+        { to, subject, smtpHost: SMTP_HOST },
+        "SMTP configured but nodemailer not installed. Run: npm install nodemailer"
+      );
+      return false;
+    }
+
+    logger.warn({ to, subject }, "Email not sent: no email provider configured");
+    return false;
   }
+
+  /* ---------------------------------------------------------------- */
+  /*  REAL SMS — Twilio via REST API                                    */
+  /* ---------------------------------------------------------------- */
 
   private async sendSMS(phone: string, message: string): Promise<boolean> {
-    console.log(`[SMS] Sending to ${phone}: ${message.substring(0, 50)}...`);
+    if (!phone) {
+      logger.warn("SMS skipped: no phone number");
+      return false;
+    }
+    if (!TWILIO_SID || !TWILIO_AUTH_TOKEN || !TWILIO_PHONE) {
+      logger.warn({ phone }, "SMS not sent: Twilio credentials not configured");
+      return false;
+    }
+
+    await axios.post(
+      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`,
+      new URLSearchParams({ From: TWILIO_PHONE, To: phone, Body: message }),
+      {
+        auth: { username: TWILIO_SID, password: TWILIO_AUTH_TOKEN },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }
+    );
+    logger.info({ phone }, "SMS sent via Twilio");
     return true;
   }
 
-  private async sendSlackNotification(channel: string, message: string): Promise<boolean> {
-    console.log(`[SLACK] Sending to ${channel}: ${message.substring(0, 50)}...`);
+  /* ---------------------------------------------------------------- */
+  /*  REAL SLACK — POST to incoming webhook URL                       */
+  /* ---------------------------------------------------------------- */
+
+  private async sendSlackNotification(webhookUrl: string, text: string, blocks?: any[]): Promise<boolean> {
+    if (!webhookUrl) {
+      logger.warn("Slack skipped: no webhook URL");
+      return false;
+    }
+
+    const payload: Record<string, unknown> = { text };
+    if (blocks) payload.blocks = blocks;
+
+    await axios.post(webhookUrl, payload, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+    });
+    logger.info({ webhookUrl: webhookUrl.slice(0, 30) }, "Slack notification sent");
     return true;
   }
+
+  /* ---------------------------------------------------------------- */
+  /*  REAL WEBHOOK — POST JSON payload to arbitrary URL               */
+  /* ---------------------------------------------------------------- */
 
   private async sendWebhook(url: string, notification: Notification): Promise<boolean> {
-    console.log(`[WEBHOOK] Sending to ${url}`);
+    if (!url) {
+      logger.warn("Webhook skipped: no URL");
+      return false;
+    }
+
+    await axios.post(
+      url,
+      {
+        id: notification.id,
+        userId: notification.userId,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        status: notification.status,
+        timestamp: notification.createdAt.toISOString(),
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000,
+      }
+    );
+    logger.info({ url: url.slice(0, 40) }, "Webhook delivered");
     return true;
   }
+
+  /* ---------------------------------------------------------------- */
+  /*  Template helpers                                                  */
+  /* ---------------------------------------------------------------- */
 
   sendTemplatedNotification(
     userId: string,
@@ -235,7 +373,7 @@ class NotificationService {
       template.channel,
       title,
       message,
-      { to: variables.email, phone: variables.phone, channel: variables.channel }
+      { to: variables.email, phone: variables.phone, webhookUrl: variables.slackWebhook, url: variables.webhookUrl }
     );
   }
 
@@ -245,22 +383,13 @@ class NotificationService {
 
   getTemplates(type?: string, channel?: NotificationChannel): NotificationTemplate[] {
     let templates = Array.from(this.templates.values());
-    
-    if (type) {
-      templates = templates.filter(t => t.type === type);
-    }
-    if (channel) {
-      templates = templates.filter(t => t.channel === channel);
-    }
-
+    if (type) templates = templates.filter(t => t.type === type);
+    if (channel) templates = templates.filter(t => t.channel === channel);
     return templates;
   }
 
   createTemplate(template: Omit<NotificationTemplate, 'id'>): NotificationTemplate {
-    const newTemplate: NotificationTemplate = {
-      ...template,
-      id: uuidv4(),
-    };
+    const newTemplate: NotificationTemplate = { ...template, id: uuidv4() };
     this.templates.set(newTemplate.id, newTemplate);
     return newTemplate;
   }
@@ -268,24 +397,24 @@ class NotificationService {
   updateTemplate(templateId: string, updates: Partial<NotificationTemplate>): NotificationTemplate | null {
     const template = this.templates.get(templateId);
     if (!template) return null;
-
     const updated = { ...template, ...updates };
     this.templates.set(templateId, updated);
     return updated;
   }
 
-  getUserNotifications(userId: string, unreadOnly: boolean = false): Notification[] {
+  /* ---------------------------------------------------------------- */
+  /*  In-memory notification store (kept for runtime speed)             */
+  /* ---------------------------------------------------------------- */
+
+  getUserNotifications(userId: string, unreadOnly = false): Notification[] {
     const notifs = this.userNotifications.get(userId) || [];
-    if (unreadOnly) {
-      return notifs.filter(n => !n.readAt);
-    }
-    return notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (unreadOnly) return notifs.filter((n: Notification) => !n.readAt);
+    return notifs.sort((a: Notification, b: Notification) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   markAsRead(notificationId: string): boolean {
     const notification = this.notifications.get(notificationId);
     if (!notification) return false;
-
     notification.readAt = new Date();
     this.notifications.set(notificationId, notification);
     return true;
@@ -293,7 +422,7 @@ class NotificationService {
 
   getUnreadCount(userId: string): number {
     const notifs = this.userNotifications.get(userId) || [];
-    return notifs.filter(n => !n.readAt).length;
+    return notifs.filter((n: Notification) => !n.readAt).length;
   }
 
   deleteNotification(notificationId: string): boolean {
@@ -308,9 +437,7 @@ class NotificationService {
     message: string
   ): Promise<Notification[]> {
     return Promise.all(
-      userIds.map(userId => 
-        this.sendNotification(userId, type, channel, title, message)
-      )
+      userIds.map(userId => this.sendNotification(userId, type, channel, title, message))
     );
   }
 }

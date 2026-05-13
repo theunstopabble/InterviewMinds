@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import Groq from "groq-sdk";
 
 export interface VoiceAnalysisResult {
   confidence: number;
@@ -58,36 +59,69 @@ export interface MultimodalAnalysis {
   warnings: string[];
 }
 
-function analyzeVoiceTone(text: string): VoiceAnalysisResult {
-  const words = text.toLowerCase().split(" ");
-  const sentences = text.split(/[.!?]+/);
+/* ------------------------------------------------------------------ */
+/*  Voice Analysis — heuristic + optional Groq LLM sentiment          */
+/* ------------------------------------------------------------------ */
+
+function getGroqClient(): Groq | null {
+  const key = process.env.GROQ_API_KEY;
+  return key ? new Groq({ apiKey: key }) : null;
+}
+
+async function analyzeVoiceTone(text: string): Promise<VoiceAnalysisResult> {
+  const words = text.toLowerCase().split(/\s+/);
+  const sentences = text.split(/[.!?]+/).filter(Boolean);
 
   const confidenceWords = ["definitely", "certainly", "sure", "absolutely", "confident", "know", "understand"];
   const nervousnessWords = ["um", "uh", "like", "maybe", "sort of", "i think", "probably", "perhaps"];
   const enthusiasmWords = ["great", "excited", "love", "awesome", "amazing", "fantastic", "interesting"];
 
   let confidence = 50, nervousness = 20, enthusiasm = 50;
-  let sentenceCount = 0;
 
   confidenceWords.forEach(w => { if (text.toLowerCase().includes(w)) confidence += 10; });
   nervousnessWords.forEach(w => { if (text.toLowerCase().includes(w)) nervousness += 15; });
   enthusiasmWords.forEach(w => { if (text.toLowerCase().includes(w)) enthusiasm += 10; });
 
   const avgWordsPerSentence = words.length / Math.max(sentences.length, 1);
-  const pace = avgWordsPerSentence < 10 ? "slow" : avgWordsPerSentence > 20 ? "fast" : "normal";
+  const paceLabel = avgWordsPerSentence < 10 ? "slow" : avgWordsPerSentence > 20 ? "fast" : "normal";
 
   const warnings: string[] = [];
   if (nervousness > 60) warnings.push("High nervousness detected");
   if (confidence < 30) warnings.push("Low confidence detected");
-  if (pace === "fast") warnings.push("Speaking too fast");
+  if (paceLabel === "fast") warnings.push("Speaking too fast");
+
+  /* Try Groq for real sentiment if available */
+  let sentiment: "positive" | "negative" | "neutral" = enthusiasm > 70 ? "positive" : confidence > 60 ? "neutral" : "negative";
+  try {
+    const groq = getGroqClient();
+    if (groq && text.length > 20) {
+      const prompt = `Analyze this interview response in ONE sentence. Then rate confidence (0-100), nervousness (0-100), enthusiasm (0-100), clarity (0-100), pace (wpm), sentiment (positive/negative/neutral). Return ONLY JSON: {"confidence":N,"nervousness":N,"enthusiasm":N,"clarity":N,"pace":N,"sentiment":"...","warning":"..."}\n\nText: ${text.slice(0, 2000)}`;
+      const completion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        max_tokens: 200,
+      });
+      const content = completion.choices[0]?.message?.content || "{}";
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+      confidence = Math.min(100, Math.max(0, parsed.confidence ?? confidence));
+      nervousness = Math.min(100, Math.max(0, parsed.nervousness ?? nervousness));
+      enthusiasm = Math.min(100, Math.max(0, parsed.enthusiasm ?? enthusiasm));
+      sentiment = ["positive", "negative", "neutral"].includes(parsed.sentiment) ? parsed.sentiment : sentiment;
+      if (parsed.warning) warnings.push(parsed.warning);
+    }
+  } catch {
+    /* fallback to heuristic values */
+  }
 
   return {
     confidence: Math.min(100, confidence),
     nervousness: Math.min(100, nervousness),
     enthusiasm: Math.min(100, enthusiasm),
     clarity: 85,
-    pace: pace === "slow" ? 40 : pace === "fast" ? 60 : 80,
-    sentiment: enthusiasm > 70 ? "positive" : confidence > 60 ? "neutral" : "negative",
+    pace: paceLabel === "slow" ? 40 : paceLabel === "fast" ? 60 : 80,
+    sentiment,
     warnings,
   };
 }
@@ -216,18 +250,18 @@ function analyzePosture(keypoints: Record<string, { x: number; y: number }>): Po
   };
 }
 
-export function analyzeMultimodal(
+export async function analyzeMultimodal(
   audioText?: string,
   facialData?: Record<string, number>,
   gestureData?: number[],
   eyePositions?: Array<{ x: number; y: number }>,
   postureKeypoints?: Record<string, { x: number; y: number }>
-): MultimodalAnalysis {
+): Promise<MultimodalAnalysis> {
   logger.info({ audioText: audioText?.slice(0, 50) }, "Running multimodal analysis");
 
-  const voice = audioText ? analyzeVoiceTone(audioText) : {
+  const voice = audioText ? await analyzeVoiceTone(audioText) : {
     confidence: 0, nervousness: 0, enthusiasm: 0, clarity: 0, pace: 0 as any,
-    sentiment: "neutral" as const, warnings: ["No audio data"] 
+    sentiment: "neutral" as const, warnings: ["No audio data"]
   };
 
   const facial = facialData ? analyzeFacialExpressions(facialData) : {

@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import Groq from 'groq-sdk';
 
 export interface ResumeScore {
   overallScore: number;
@@ -50,10 +51,17 @@ export interface ChatbotMessage {
   evaluation?: string;
 }
 
+function getGroqClient(): Groq {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) throw new Error("GROQ_API_KEY not configured");
+  return new Groq({ apiKey: key });
+}
+
 class ResumeScreenerService {
   private screenerResults: Map<string, ScreenerResult> = new Map();
   private conversations: Map<string, ChatbotConversation> = new Map();
 
+  /* fallback keyword map when Groq is unavailable */
   private roleKeywords: Record<string, string[]> = {
     'Software Engineer': ['javascript', 'python', 'java', 'react', 'node', 'sql', 'api', 'agile', 'git', 'debugging'],
     'Frontend Developer': ['react', 'vue', 'angular', 'css', 'html', 'javascript', 'typescript', 'responsive', 'ui', 'ux'],
@@ -63,6 +71,10 @@ class ResumeScreenerService {
     'Product Manager': ['roadmap', 'stakeholder', 'agile', 'market research', 'analytics', 'user research', ' prioritization', 'strategy'],
   };
 
+  /* --------------------------------------------------------------- */
+  /*  AI-POWERED RESUME SCREENING (Groq)                               */
+  /* --------------------------------------------------------------- */
+
   async screenResume(
     resumeId: string,
     candidateId: string,
@@ -70,8 +82,83 @@ class ResumeScreenerService {
     resumeText: string
   ): Promise<ScreenerResult> {
     const text = resumeText.toLowerCase();
-    const keywords = this.roleKeywords[targetRole] || this.roleKeywords['Software Engineer'];
 
+    /* Try Groq first for real AI analysis */
+    try {
+      const groq = getGroqClient();
+      const prompt = `You are an expert technical recruiter. Evaluate this resume for the role of ${targetRole}.
+
+Resume:
+${resumeText.slice(0, 5000)}
+
+Return ONLY a JSON object with this exact structure:
+{
+  "overallScore": <number 0-100>,
+  "breakdown": { "education": <number>, "experience": <number>, "skills": <number>, "certifications": <number>, "achievements": <number> },
+  "matchedKeywords": ["..."],
+  "missingKeywords": ["..."],
+  "recommendation": "strong_fit" | "good_fit" | "partial_fit" | "poor_fit",
+  "fitScore": <number>,
+  "aiSummary": "...",
+  "strengths": ["..."],
+  "concerns": ["..."],
+  "screeningStatus": "approved" | "screened" | "pending" | "rejected"
+}`;
+
+      const completion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.3,
+        max_tokens: 1200,
+      });
+
+      const content = completion.choices[0]?.message?.content || "{}";
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
+      const score: ResumeScore = {
+        overallScore: Math.min(100, Math.max(0, parsed.overallScore || 50)),
+        breakdown: {
+          education: Math.min(100, Math.max(0, parsed.breakdown?.education || 50)),
+          experience: Math.min(100, Math.max(0, parsed.breakdown?.experience || 50)),
+          skills: Math.min(100, Math.max(0, parsed.breakdown?.skills || 50)),
+          certifications: Math.min(100, Math.max(0, parsed.breakdown?.certifications || 50)),
+          achievements: Math.min(100, Math.max(0, parsed.breakdown?.achievements || 50)),
+        },
+        matchedKeywords: parsed.matchedKeywords || [],
+        missingKeywords: parsed.missingKeywords || [],
+        recommendation: parsed.recommendation || 'neutral',
+        fitScore: Math.min(100, Math.max(0, parsed.fitScore || 50)),
+      };
+
+      const result: ScreenerResult = {
+        id: uuidv4(),
+        resumeId,
+        candidateId,
+        targetRole,
+        score,
+        screeningStatus: parsed.screeningStatus || this.determineScreeningStatus(score),
+        aiSummary: parsed.aiSummary || `AI screening: ${score.overallScore}% match`,
+        strengths: parsed.strengths || ["Resume screened via AI"],
+        concerns: parsed.concerns || [],
+        recommendation: this.generateRecommendation(score.recommendation),
+        screenedAt: new Date(),
+      };
+
+      this.screenerResults.set(result.id, result);
+      return result;
+    } catch (err: any) {
+      /* Fallback to keyword-based scoring if Groq fails */
+      return this.fallbackScreenResume(resumeId, candidateId, targetRole, text);
+    }
+  }
+
+  /* --------------------------------------------------------------- */
+  /*  Fallback keyword-based screening                                  */
+  /* --------------------------------------------------------------- */
+
+  private fallbackScreenResume(resumeId: string, candidateId: string, targetRole: string, text: string): ScreenerResult {
+    const keywords = this.roleKeywords[targetRole] || this.roleKeywords['Software Engineer'];
     const matchedKeywords = keywords.filter(kw => text.includes(kw.toLowerCase()));
     const missingKeywords = keywords.filter(kw => !text.includes(kw.toLowerCase()));
 
@@ -84,10 +171,9 @@ class ResumeScreenerService {
     const overallScore = Math.round(
       education * 0.15 + experience * 0.35 + skills * 0.25 + certifications * 0.1 + achievements * 0.15
     );
-
     const fitScore = matchedKeywords.length / keywords.length * 100;
 
-    let recommendation: ScreenerResult['recommendation'];
+    let recommendation: ScreenerResult['score']['recommendation'];
     if (fitScore >= 80) recommendation = 'strong_fit';
     else if (fitScore >= 60) recommendation = 'good_fit';
     else if (fitScore >= 40) recommendation = 'partial_fit';
@@ -95,16 +181,10 @@ class ResumeScreenerService {
 
     const score: ResumeScore = {
       overallScore,
-      breakdown: {
-        education,
-        experience,
-        skills,
-        certifications,
-        achievements,
-      },
+      breakdown: { education, experience, skills, certifications, achievements },
       matchedKeywords,
       missingKeywords,
-      recommendation: recommendation as 'strong_fit' | 'good_fit' | 'partial_fit' | 'poor_fit',
+      recommendation,
       fitScore,
     };
 
@@ -115,7 +195,7 @@ class ResumeScreenerService {
       targetRole,
       score,
       screeningStatus: this.determineScreeningStatus(score),
-      aiSummary: this.generateAISummary(score, targetRole),
+      aiSummary: `${score.overallScore}% match for ${targetRole}. (Fallback keyword scoring)`,
       strengths: this.extractStrengths(score, matchedKeywords),
       concerns: this.extractConcerns(score, missingKeywords),
       recommendation: this.generateRecommendation(recommendation),
@@ -167,10 +247,6 @@ class ResumeScreenerService {
     return 'rejected';
   }
 
-  private generateAISummary(score: ResumeScore, role: string): string {
-    return `${score.overallScore}% match for ${role}. Strong in ${score.breakdown.experience > 70 ? 'experience' : 'skills'}. ${score.fitScore >= 60 ? 'Good candidate for interview.' : 'May need further evaluation.'}`;
-  }
-
   private extractStrengths(score: ResumeScore, matched: string[]): string[] {
     const strengths: string[] = [];
     if (score.breakdown.education >= 70) strengths.push('Strong educational background');
@@ -190,16 +266,11 @@ class ResumeScreenerService {
 
   private generateRecommendation(recommendation: string): string {
     switch (recommendation) {
-      case 'strong_fit':
-        return 'Highly recommended for interview. Strong match for the role.';
-      case 'good_fit':
-        return 'Recommended for interview. Good potential fit.';
-      case 'partial_fit':
-        return 'Consider for interview with caveat. Some skill gaps.';
-      case 'poor_fit':
-        return 'Not recommended at this time. Significant skill gaps.';
-      default:
-        return 'Further evaluation needed.';
+      case 'strong_fit': return 'Highly recommended for interview. Strong match for the role.';
+      case 'good_fit': return 'Recommended for interview. Good potential fit.';
+      case 'partial_fit': return 'Consider for interview with caveat. Some skill gaps.';
+      case 'poor_fit': return 'Not recommended at this time. Significant skill gaps.';
+      default: return 'Further evaluation needed.';
     }
   }
 
@@ -213,6 +284,10 @@ class ResumeScreenerService {
       .sort((a, b) => b.score.overallScore - a.score.overallScore);
   }
 
+  /* --------------------------------------------------------------- */
+  /*  AI-POWERED CHATBOT (Groq-driven conversation)                     */
+  /* --------------------------------------------------------------- */
+
   startChatbotConversation(candidateId: string): ChatbotConversation {
     const conversation: ChatbotConversation = {
       id: uuidv4(),
@@ -221,9 +296,8 @@ class ResumeScreenerService {
         {
           id: uuidv4(),
           sender: 'bot',
-          content: "Hi! I'm your pre-screening assistant. I'll ask you a few questions to understand your background better. Let's start with your name and current role.",
+          content: "Hi! I'm your AI pre-screening assistant. I'll ask you a few questions to understand your background better. Let's start — what's your current role and how many years of experience do you have?",
           timestamp: new Date(),
-          options: ['Ready to begin', 'I have questions first'],
         },
       ],
       status: 'active',
@@ -235,7 +309,7 @@ class ResumeScreenerService {
     return conversation;
   }
 
-  respondToChatbot(conversationId: string, response: string): ChatbotMessage | null {
+  async respondToChatbot(conversationId: string, response: string): Promise<ChatbotMessage | null> {
     const conversation = this.conversations.get(conversationId);
     if (!conversation || conversation.status !== 'active') return null;
 
@@ -245,18 +319,57 @@ class ResumeScreenerService {
       content: response,
       timestamp: new Date(),
     };
-
     conversation.messages.push(userMessage);
 
-    const botResponse = this.generateBotResponse(conversation, response);
-    conversation.messages.push(botResponse);
+    try {
+      const groq = getGroqClient();
+      const history = conversation.messages.map(m => `${m.sender}: ${m.content}`).join('\n');
+      const prompt = `You are a friendly AI pre-screening recruiter for a tech company. Continue the conversation naturally. Ask ONE concise follow-up question based on the candidate's last answer. If you have enough info (role, experience, key skills), say "Thank you! We'll be in touch." and end the conversation.
 
-    this.conversations.set(conversationId, conversation);
+Conversation so far:
+${history}
 
-    return botResponse;
+Return ONLY JSON: {"content": "...", "options": ["..."] || null, "endConversation": true/false}`;
+
+      const completion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.6,
+        max_tokens: 300,
+      });
+
+      const content = completion.choices[0]?.message?.content || "{}";
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
+      const botResponse: ChatbotMessage = {
+        id: uuidv4(),
+        sender: 'bot',
+        content: parsed.content || "Thank you for your time! We'll review your responses and get back to you.",
+        timestamp: new Date(),
+        options: parsed.options || undefined,
+      };
+
+      conversation.messages.push(botResponse);
+
+      if (parsed.endConversation) {
+        conversation.status = 'completed';
+        conversation.completedAt = new Date();
+        conversation.score = 75; /* placeholder until real scoring is implemented */
+      }
+
+      this.conversations.set(conversationId, conversation);
+      return botResponse;
+    } catch {
+      /* Fallback to scripted response on Groq failure */
+      const botResponse = this.generateFallbackBotResponse(conversation, response);
+      conversation.messages.push(botResponse);
+      this.conversations.set(conversationId, conversation);
+      return botResponse;
+    }
   }
 
-  private generateBotResponse(conversation: ChatbotConversation, lastResponse: string): ChatbotMessage {
+  private generateFallbackBotResponse(conversation: ChatbotConversation, lastResponse: string): ChatbotMessage {
     const stage = conversation.stage || 'initial';
     let content = '';
     let options: string[] | undefined;
@@ -288,19 +401,13 @@ class ResumeScreenerService {
         conversation.stage = 'closing';
         conversation.status = 'completed';
         conversation.completedAt = new Date();
-        conversation.score = Math.floor(60 + Math.random() * 30);
+        conversation.score = 75;
         break;
       default:
         content = 'Thank you for your responses. Our team will review and get back to you.';
     }
 
-    return {
-      id: uuidv4(),
-      sender: 'bot',
-      content,
-      timestamp: new Date(),
-      options,
-    };
+    return { id: uuidv4(), sender: 'bot', content, timestamp: new Date(), options };
   }
 
   getConversation(conversationId: string): ChatbotConversation | null {

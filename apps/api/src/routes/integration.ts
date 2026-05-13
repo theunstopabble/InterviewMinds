@@ -58,13 +58,14 @@ router.post("/hris/workday/employees", requireAuth, async (req, res) => {
 
 router.post("/hris/workday/candidate", requireAuth, async (req, res) => {
   const { candidate, config } = req.body;
-  const result = await pushCandidateToWorkday(candidate);
+  const result = await pushCandidateToWorkday(candidate, config);
   res.json({ success: true, data: result });
 });
 
 router.get("/hris/workday/candidate/:id/status", requireAuth, async (req, res) => {
   const { id } = req.params;
-  const result = await getWorkdayCandidateStatus(id);
+  const { config } = req.query;
+  const result = await getWorkdayCandidateStatus(id, config as any);
   res.json({ success: true, data: result });
 });
 

@@ -16,7 +16,7 @@ router.post('/analyze', requireAuth, async (req, res) => {
   try {
     const data = req.body as AnalyzeRequest;
 
-    const result = analyzeMultimodal(
+    const result = await analyzeMultimodal(
       data.audioText,
       data.facialData,
       data.gestureData,
@@ -40,7 +40,7 @@ router.post('/voice/analyze', requireAuth, async (req, res) => {
   try {
     const { text } = req.body;
 
-    const result = analyzeMultimodal(text);
+    const result = await analyzeMultimodal(text);
 
     res.json(result.voice);
   } catch (error) {
@@ -53,7 +53,7 @@ router.post('/facial/analyze', requireAuth, async (req, res) => {
   try {
     const expressions = req.body as Record<string, number>;
 
-    const result = analyzeMultimodal(undefined, expressions);
+    const result = await analyzeMultimodal(undefined, expressions);
 
     res.json(result.facial);
   } catch (error) {
@@ -66,7 +66,7 @@ router.post('/eye-gaze/analyze', requireAuth, async (req, res) => {
   try {
     const positions = req.body.positions as Array<{ x: number; y: number }>;
 
-    const result = analyzeMultimodal(undefined, undefined, undefined, positions);
+    const result = await analyzeMultimodal(undefined, undefined, undefined, positions);
 
     res.json(result.eyeGaze);
   } catch (error) {
@@ -79,7 +79,7 @@ router.post('/posture/analyze', requireAuth, async (req, res) => {
   try {
     const keypoints = req.body as Record<string, { x: number; y: number }>;
 
-    const result = analyzeMultimodal(undefined, undefined, undefined, undefined, keypoints);
+    const result = await analyzeMultimodal(undefined, undefined, undefined, undefined, keypoints);
 
     res.json(result.posture);
   } catch (error) {

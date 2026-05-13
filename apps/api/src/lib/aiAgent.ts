@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import Groq from "groq-sdk";
 
 export interface AgentConfig {
   name: string;
@@ -77,6 +78,12 @@ const agents: AgentConfig[] = [
 
 const tasks: AgentTask[] = [];
 
+function getGroqClient(): Groq {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) throw new Error("GROQ_API_KEY not configured");
+  return new Groq({ apiKey: key });
+}
+
 export function getAgents(): AgentConfig[] {
   return agents;
 }
@@ -109,66 +116,186 @@ export async function runAgent(agentName: string, input: Record<string, unknown>
 
   logger.info(`Running agent: ${agentName}`);
 
-  switch (agent.type) {
-    case "screening":
-      task.output = await runScreeningAgent(input) as unknown as Record<string, unknown>;
-      break;
-    case "scheduling":
-      task.output = await runSchedulingAgent(input) as unknown as Record<string, unknown>;
-      break;
-    case "feedback":
-      task.output = await runFeedbackAgent(input) as unknown as Record<string, unknown>;
-      break;
-    default:
-      task.output = { result: "completed" };
+  try {
+    switch (agent.type) {
+      case "screening":
+        task.output = await runScreeningAgent(input) as unknown as Record<string, unknown>;
+        break;
+      case "scheduling":
+        task.output = await runSchedulingAgent(input) as unknown as Record<string, unknown>;
+        break;
+      case "feedback":
+        task.output = await runFeedbackAgent(input) as unknown as Record<string, unknown>;
+        break;
+      default:
+        task.output = { result: "completed" };
+    }
+    task.status = "completed";
+  } catch (err: any) {
+    task.status = "failed";
+    task.error = err.message;
+    logger.error({ err: err.message, agentName }, "Agent execution failed");
   }
 
-  task.status = "completed";
   task.completedAt = new Date();
-
   return task;
 }
 
+/* ------------------------------------------------------------------ */
+/*  REAL AI AGENTS — Groq-powered                                      */
+/* ------------------------------------------------------------------ */
+
 async function runScreeningAgent(input: Record<string, unknown>): Promise<ResumeScreeningResult> {
-  logger.info("Running resume screening agent");
-  
+  const candidateId = String(input.candidateId || "cand_001");
+  const resumeText = String(input.resumeText || "");
+  const jobRole = String(input.jobRole || "Software Engineer");
+
+  if (!resumeText) {
+    return {
+      candidateId,
+      score: 0,
+      recommendation: "neutral",
+      strengths: [],
+      weaknesses: ["No resume text provided"],
+      interviewRounds: 0,
+      rationale: "Insufficient data to screen candidate",
+    };
+  }
+
+  const groq = getGroqClient();
+  const prompt = `You are an expert technical recruiter. Evaluate this resume for the role of ${jobRole}.
+
+Resume:
+${resumeText.slice(0, 4000)}
+
+Return ONLY a JSON object with this exact structure:
+{
+  "score": <number 0-100>,
+  "recommendation": "strong_yes" | "yes" | "neutral" | "no" | "strong_no",
+  "strengths": ["...", "..."],
+  "weaknesses": ["...", "..."],
+  "interviewRounds": <number>,
+  "rationale": "..."
+}`;
+
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.3,
+    max_tokens: 1024,
+  });
+
+  const content = completion.choices[0]?.message?.content || "{}";
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
   return {
-    candidateId: String(input.candidateId || "cand_001"),
-    score: Math.floor(Math.random() * 30) + 70,
-    recommendation: "yes",
-    strengths: ["Strong technical background", "Good communication"],
-    weaknesses: ["Limited leadership experience"],
-    interviewRounds: 2,
-    rationale: "Candidate has required skills and experience",
+    candidateId,
+    score: Math.min(100, Math.max(0, parsed.score || 50)),
+    recommendation: parsed.recommendation || "neutral",
+    strengths: parsed.strengths || ["Resume screened via AI"],
+    weaknesses: parsed.weaknesses || [],
+    interviewRounds: parsed.interviewRounds || 2,
+    rationale: parsed.rationale || "AI screening completed",
   };
 }
 
 async function runSchedulingAgent(input: Record<string, unknown>): Promise<SchedulingResult> {
-  logger.info("Running scheduling agent");
-  
+  const candidateId = String(input.candidateId || "cand_001");
+  const interviewerId = String(input.interviewerId || "interviewer_001");
+  const preferredDate = String(input.preferredDate || "");
+
+  /* Use Groq to suggest an optimal time based on context */
+  const groq = getGroqClient();
+  const prompt = `Suggest an interview schedule. Candidate: ${candidateId}. Interviewer: ${interviewerId}. Preferred: ${preferredDate || "ASAP"}.
+Return ONLY JSON: {"duration": 60, "meetingLink": "https://interviewminds.com/meeting/...", "daysFromNow": 2}`;
+
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    max_tokens: 256,
+  });
+
+  const content = completion.choices[0]?.message?.content || "{}";
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
+  const daysFromNow = parsed.daysFromNow || 2;
+  const scheduledAt = new Date();
+  scheduledAt.setDate(scheduledAt.getDate() + daysFromNow);
+
   return {
-    candidateId: String(input.candidateId || "cand_001"),
-    interviewerId: "interviewer_001",
-    scheduledAt: new Date(Date.now() + 86400000 * 2),
-    duration: 60,
-    meetingLink: `https://interviewminds.com/meeting/${Date.now()}`,
-    confirmationSent: true,
+    candidateId,
+    interviewerId,
+    scheduledAt,
+    duration: parsed.duration || 60,
+    meetingLink: parsed.meetingLink || `https://interviewminds.com/meeting/${Date.now()}`,
+    confirmationSent: false,
   };
 }
 
 async function runFeedbackAgent(input: Record<string, unknown>): Promise<FeedbackResult> {
-  logger.info("Running feedback agent");
-  
+  const interviewId = String(input.interviewId || "int_001");
+  const transcript = String(input.transcript || "");
+  const metrics = input.metrics as Array<{ subject: string; A: number }> || [];
+
+  if (!transcript && metrics.length === 0) {
+    return {
+      interviewId,
+      overallScore: 0,
+      technicalScore: 0,
+      communicationScore: 0,
+      culturalFit: 0,
+      strengths: [],
+      areasForImprovement: ["No interview data available"],
+      recommendation: "Requires manual review",
+      detailedFeedback: "Insufficient data to generate feedback.",
+    };
+  }
+
+  const groq = getGroqClient();
+  const prompt = `You are a senior engineering manager giving candidate interview feedback.
+
+Interview Transcript:
+${transcript.slice(0, 3000)}
+
+Metrics:
+${metrics.map(m => `${m.subject}: ${m.A}/100`).join("\n")}
+
+Return ONLY a JSON object with this exact structure:
+{
+  "overallScore": <number>,
+  "technicalScore": <number>,
+  "communicationScore": <number>,
+  "culturalFit": <number>,
+  "strengths": ["..."],
+  "areasForImprovement": ["..."],
+  "recommendation": "...",
+  "detailedFeedback": "..."
+}`;
+
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.4,
+    max_tokens: 1200,
+  });
+
+  const content = completion.choices[0]?.message?.content || "{}";
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
   return {
-    interviewId: String(input.interviewId || "int_001"),
-    overallScore: Math.floor(Math.random() * 20) + 75,
-    technicalScore: Math.floor(Math.random() * 20) + 75,
-    communicationScore: Math.floor(Math.random() * 20) + 80,
-    culturalFit: Math.floor(Math.random() * 20) + 70,
-    strengths: ["Strong problem-solving", "Good communication"],
-    areasForImprovement: ["System design knowledge"],
-    recommendation: "Proceed to next round",
-    detailedFeedback: "Candidate demonstrated strong technical skills...",
+    interviewId,
+    overallScore: Math.min(100, Math.max(0, parsed.overallScore || 70)),
+    technicalScore: Math.min(100, Math.max(0, parsed.technicalScore || 70)),
+    communicationScore: Math.min(100, Math.max(0, parsed.communicationScore || 70)),
+    culturalFit: Math.min(100, Math.max(0, parsed.culturalFit || 70)),
+    strengths: parsed.strengths || ["Good participation"],
+    areasForImprovement: parsed.areasForImprovement || ["Further practice recommended"],
+    recommendation: parsed.recommendation || "Proceed to next round",
+    detailedFeedback: parsed.detailedFeedback || "Feedback generated by AI.",
   };
 }
 

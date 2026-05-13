@@ -1,4 +1,7 @@
 import { logger } from "./logger";
+import { notificationService } from "./notifications";
+import { InterviewModel } from "../models/Interview";
+import axios from "axios";
 
 export interface AutomationTrigger {
   id: string;
@@ -134,28 +137,77 @@ export async function runAutomation(automationId: string, triggerEvent: string, 
   return run;
 }
 
+/* ------------------------------------------------------------------ */
+/*  REAL ACTION EXECUTION                                              */
+/* ------------------------------------------------------------------ */
+
 async function executeAction(action: AutomationAction, context: Record<string, unknown>): Promise<unknown> {
   switch (action.type) {
-    case "delay":
+    case "delay": {
       const delayMs = (action.config.minutes as number || 1) * 60000;
-      await new Promise(resolve => setTimeout(resolve, 100));
+      /* In production this should use BullMQ scheduled jobs; for now we simulate a short delay */
+      await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, 5000)));
       return { delayed: true, duration: delayMs };
+    }
 
-    case "send_email":
-      logger.info(`Sending email: ${action.config.template}`);
-      return { emailSent: true, to: context.candidateEmail };
+    case "send_email": {
+      const template = String(action.config.template || "interview-reminder");
+      const to = String(action.config.to || context.candidateEmail || "");
+      const candidateName = String(context.candidateName || "Candidate");
+      const result = await notificationService.sendTemplatedNotification(
+        String(context.userId || "system"),
+        template,
+        {
+          candidate_name: candidateName,
+          interview_time: String(context.interviewTime || new Date().toISOString()),
+          role: String(context.role || "Position"),
+          interview_link: String(context.interviewLink || ""),
+          email: to,
+        }
+      );
+      return { emailSent: !!result, notificationId: result?.id };
+    }
 
-    case "send_notification":
-      logger.info(`Sending notification: ${action.config.type}`);
-      return { notificationSent: true };
+    case "send_notification": {
+      const userId = String(context.userId || "system");
+      const title = String(context.title || "InterviewMinds Notification");
+      const message = String(context.message || "You have a new notification.");
+      const channel = String(action.config.channel || "in-app") as any;
+      const result = await notificationService.sendNotification(
+        userId,
+        String(action.config.type || "general"),
+        channel,
+        title,
+        message,
+        { to: context.candidateEmail, phone: context.candidatePhone, url: context.webhookUrl }
+      );
+      return { notificationSent: result.status === "sent", notificationId: result.id };
+    }
 
-    case "update_status":
-      logger.info(`Updating status: ${action.config.status}`);
-      return { statusUpdated: true };
+    case "update_status": {
+      const interviewId = String(context.interviewId || "");
+      const newStatus = String(action.config.status || context.newStatus || "completed");
+      if (interviewId) {
+        await InterviewModel.findByIdAndUpdate(interviewId, { status: newStatus });
+      }
+      return { statusUpdated: true, interviewId, newStatus };
+    }
 
-    case "webhook":
-      logger.info(`Calling webhook: ${action.config.url}`);
-      return { webhookCalled: true };
+    case "webhook": {
+      const url = String(action.config.url || context.webhookUrl || "");
+      if (!url) throw new Error("No webhook URL configured");
+      const payload = {
+        event: context.event,
+        interviewId: context.interviewId,
+        candidateId: context.candidateId,
+        timestamp: new Date().toISOString(),
+      };
+      const response = await axios.post(url, payload, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 15000,
+      });
+      return { webhookCalled: true, statusCode: response.status };
+    }
 
     default:
       return { actionCompleted: true };

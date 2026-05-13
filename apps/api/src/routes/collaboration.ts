@@ -43,7 +43,8 @@ router.post('/editor/leave', requireAuth, async (req, res) => {
 router.post('/editor/update', requireAuth, async (req, res) => {
   try {
     const { sessionId, code } = req.body;
-    const updatedCode = collabEditor.updateDocument(sessionId, code);
+    const userId = (req as any).auth?.userId;
+    const updatedCode = collabEditor.updateDocument(sessionId, code, userId);
     res.json({ code: updatedCode });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update code' });

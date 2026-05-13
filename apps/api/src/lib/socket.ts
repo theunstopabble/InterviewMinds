@@ -4,6 +4,9 @@ import { logger } from "./logger";
 import { MessageModel } from "../models/Message";
 import { getRequestLogger } from "./logger";
 import { verifyToken } from "@clerk/express";
+import { setCollaborationIO, updateDocument as updateCollabDocument, updateCursor as updateCollabCursor, joinCollabSession, leaveCollabSession } from "./collaborativeEditor";
+import { setWhiteboardIO, addElement, updateElement, deleteElement, clearWhiteboard, joinWhiteboard, leaveWhiteboard } from "./whiteboard";
+import { setVideoCallIO, joinVideoSession, leaveVideoSession, toggleAudio, toggleVideo, relayWebRTCSignal } from "./videoCall";
 
 interface SocketAuth {
   userId: string;
@@ -182,6 +185,86 @@ export function createSocketServer(httpServer: HttpServer, corsOrigins: string[]
       });
     });
 
+    /* -------------------------------------------------------------- */
+    /*  Collaborative Editor Events                                      */
+    /* -------------------------------------------------------------- */
+    socket.on("collab:join", (sessionId: string) => {
+      if (!socket.user) return;
+      joinCollabSession(sessionId, socket.user.userId, socket.user.fullName);
+    });
+
+    socket.on("collab:leave", (sessionId: string) => {
+      if (!socket.user) return;
+      leaveCollabSession(sessionId, socket.user.userId);
+    });
+
+    socket.on("collab:update-document", (payload: { sessionId: string; code: string }) => {
+      if (!socket.user) return;
+      updateCollabDocument(payload.sessionId, payload.code, socket.user.userId);
+    });
+
+    socket.on("collab:update-cursor", (payload: { sessionId: string; position: number }) => {
+      if (!socket.user) return;
+      updateCollabCursor(payload.sessionId, socket.user.userId, payload.position);
+    });
+
+    /* -------------------------------------------------------------- */
+    /*  Whiteboard Events                                                */
+    /* -------------------------------------------------------------- */
+    socket.on("whiteboard:join", (sessionId: string) => {
+      if (!socket.user) return;
+      joinWhiteboard(sessionId, socket.user.userId);
+    });
+
+    socket.on("whiteboard:leave", (sessionId: string) => {
+      if (!socket.user) return;
+      leaveWhiteboard(sessionId, socket.user.userId);
+    });
+
+    socket.on("whiteboard:add-element", (payload: { sessionId: string; element: any }) => {
+      if (!socket.user) return;
+      addElement(payload.sessionId, { ...payload.element, createdBy: socket.user.userId });
+    });
+
+    socket.on("whiteboard:update-element", (payload: { sessionId: string; elementId: string; updates: any }) => {
+      updateElement(payload.sessionId, payload.elementId, payload.updates);
+    });
+
+    socket.on("whiteboard:delete-element", (payload: { sessionId: string; elementId: string }) => {
+      deleteElement(payload.sessionId, payload.elementId);
+    });
+
+    socket.on("whiteboard:clear", (sessionId: string) => {
+      clearWhiteboard(sessionId);
+    });
+
+    /* -------------------------------------------------------------- */
+    /*  Video Call / WebRTC Events                                       */
+    /* -------------------------------------------------------------- */
+    socket.on("video:join", (payload: { sessionId: string; userName: string }) => {
+      if (!socket.user) return;
+      joinVideoSession(payload.sessionId, socket.user.userId, payload.userName || socket.user.fullName);
+    });
+
+    socket.on("video:leave", (sessionId: string) => {
+      if (!socket.user) return;
+      leaveVideoSession(sessionId, socket.user.userId);
+    });
+
+    socket.on("video:toggle-audio", (payload: { sessionId: string; enabled: boolean }) => {
+      if (!socket.user) return;
+      toggleAudio(payload.sessionId, socket.user.userId, payload.enabled);
+    });
+
+    socket.on("video:toggle-video", (payload: { sessionId: string; enabled: boolean }) => {
+      if (!socket.user) return;
+      toggleVideo(payload.sessionId, socket.user.userId, payload.enabled);
+    });
+
+    socket.on("video:webrtc-signal", (payload: { sessionId: string; signal: any }) => {
+      relayWebRTCSignal(payload.sessionId, payload.signal);
+    });
+
     socket.on("disconnect", (reason: string) => {
       const roomId = socket.roomId;
       if (roomId && socket.user) {
@@ -195,6 +278,11 @@ export function createSocketServer(httpServer: HttpServer, corsOrigins: string[]
       requestLogger.info({ reason, roomId }, "client disconnected");
     });
   });
+
+  /* Wire IO instances into real-time service modules */
+  setCollaborationIO(io);
+  setWhiteboardIO(io);
+  setVideoCallIO(io);
 
   return io;
 }
