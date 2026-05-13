@@ -86,6 +86,26 @@ InterviewMinds implements a **monolithic Turborepo architecture** optimized for 
 
 ---
 
+## Screenshots
+
+### Dashboard
+![Dashboard](screenshots/dashboard.png)
+*Real-time interview statistics and performance metrics*
+
+### Live Interview
+![Interview](screenshots/interview.png)
+*AI-powered interview with real-time voice and video analysis*
+
+### Code Editor
+![Code Editor](screenshots/code-editor.png)
+*Integrated coding environment with syntax highlighting and execution*
+
+### Proctoring Monitor
+![Proctoring](screenshots/proctoring.png)
+*AI-powered proctoring with face detection and behavior analysis*
+
+---
+
 ## Technology Stack
 
 | Category | Implementation |
