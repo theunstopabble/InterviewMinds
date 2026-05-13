@@ -113,7 +113,8 @@ export function startWorkers() {
     },
     { 
       connection: { url: REDIS_URL },
-      concurrency: 5,
+      concurrency: 2,
+      limiter: { max: 5, duration: 10000 },
     },
   );
 
@@ -127,6 +128,12 @@ export function startWorkers() {
 
   resumeWorker.on("error", (err) => {
     logger.error({ err: err.message }, "resume worker error");
+    // If Redis limit exceeded, pause worker to stop hammering
+    if (err.message.includes("max requests limit exceeded")) {
+      logger.warn("Redis limit exceeded — pausing resume worker for 60 seconds");
+      resumeWorker.pause();
+      setTimeout(() => resumeWorker.resume(), 60000);
+    }
   });
 
   const interviewWorker = new Worker(
@@ -142,7 +149,8 @@ export function startWorkers() {
     },
     { 
       connection: { url: REDIS_URL },
-      concurrency: 3,
+      concurrency: 1,
+      limiter: { max: 3, duration: 10000 },
     },
   );
 
@@ -156,6 +164,12 @@ export function startWorkers() {
 
   interviewWorker.on("error", (err) => {
     logger.error({ err: err.message }, "interview worker error");
+    // If Redis limit exceeded, pause worker to stop hammering
+    if (err.message.includes("max requests limit exceeded")) {
+      logger.warn("Redis limit exceeded — pausing interview worker for 60 seconds");
+      interviewWorker.pause();
+      setTimeout(() => interviewWorker.resume(), 60000);
+    }
   });
 
   workers.push(resumeWorker, interviewWorker);
