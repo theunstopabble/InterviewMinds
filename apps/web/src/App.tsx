@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 // Components
 import Navbar from "./components/Navbar";
 import { AxiosInterceptor } from "./components/AxiosInterceptor";
+import { Footer } from "./components/Footer";
 import ResumeUpload from "./components/ResumeUpload";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -136,12 +137,12 @@ function App() {
   const isPublicPage = location.pathname === "/sign-in" || location.pathname === "/sign-up";
 
   return (
-    <div className="relative min-h-screen bg-gray-950 text-white font-sans selection:bg-blue-500/30">
+    <div className="relative min-h-screen flex flex-col bg-gray-950 text-white font-sans selection:bg-blue-500/30">
       {/* 🔒 Navbar: Shows automatically when logged in, BUT HIDDEN IN FOCUS MODE */}
       <SignedIn>{!isFocusMode && <Navbar />}</SignedIn>
 
       {/* Main Content Area */}
-      <div className={isFocusMode || isPublicPage ? "" : "pt-16 sm:pt-20"}>
+      <div className={`flex-1 ${isFocusMode || isPublicPage ? "" : "pt-16 sm:pt-20"}`}>
         <AxiosInterceptor>
           <Routes>
             {/* 🔓 Public Route: Sign In */}
@@ -347,6 +348,9 @@ function App() {
           </Routes>
         </AxiosInterceptor>
       </div>
+
+      {/* Footer — Developer attribution (SEO: dofollow portfolio link) */}
+      {!isFocusMode && !isPublicPage && <Footer />}
 
       {/* Global Notifications */}
       <Toaster position="top-center" richColors theme="dark" />
