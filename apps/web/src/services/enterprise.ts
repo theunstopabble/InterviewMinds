@@ -422,6 +422,8 @@ export const tenantService = {
       body: JSON.stringify(data),
     }),
 
+  getAll: () => fetchAPI<{ tenants: any[]; count: number }>('/tenants'),
+
   get: (tenantId: string) => fetchAPI<any>(`/tenants/${tenantId}`),
 
   updateSettings: (tenantId: string, settings: any) =>

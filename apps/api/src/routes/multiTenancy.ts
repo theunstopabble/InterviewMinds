@@ -22,7 +22,32 @@ interface UpdateTenantSettingsRequest {
   };
 }
 
-const tenants: Map<string, ReturnType<typeof createTenant>> = new Map();
+const tenants: Map<string, NonNullable<ReturnType<typeof createTenant>>> = new Map();
+
+// Initialize default tenant
+const defaultTenant = createTenant({ name: 'Default Tenant', domain: 'interviewminds.com', plan: 'enterprise' });
+if (defaultTenant) {
+  tenants.set(defaultTenant.id, defaultTenant);
+}
+
+// GET all tenants
+router.get('/', async (_req, res) => {
+  try {
+    const allTenants = Array.from(tenants.values()).map(t => ({
+      id: t.id,
+      name: t.name,
+      domain: t.domain,
+      plan: t.plan,
+      status: t.status,
+      createdAt: t.createdAt,
+      settings: t.settings
+    }));
+    res.json({ tenants: allTenants, count: allTenants.length });
+  } catch (error) {
+    console.error('Error fetching tenants:', error);
+    res.status(500).json({ error: 'Failed to fetch tenants' });
+  }
+});
 
 router.post('/', async (req, res) => {
   try {

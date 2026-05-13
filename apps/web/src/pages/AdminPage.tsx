@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { complianceService } from '../services/enterprise';
+import { complianceService, tenantService } from '../services/enterprise';
+
+type Framework = 'SOC2' | 'GDPR' | 'HIPAA' | 'ISO27001';
+
+interface ComplianceReport {
+  framework: string;
+  status: string;
+  lastGenerated: string;
+  controlsPassing: number;
+  controlsTotal: number;
+  nextReview: string;
+}
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -8,6 +19,11 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [securityControls, setSecurityControls] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [tenants, setTenants] = useState<any[]>([]);
+  const [reports, setReports] = useState<ComplianceReport[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  const frameworks: Framework[] = ['SOC2', 'GDPR', 'HIPAA', 'ISO27001'];
 
   useEffect(() => {
     loadAdminData();
@@ -16,18 +32,48 @@ export default function AdminPage() {
   const loadAdminData = async () => {
     setLoading(true);
     try {
-      const [controls, auditResponse] = await Promise.all([
+      const [controls, auditResponse, tenantsData] = await Promise.all([
         complianceService.getSecurityControls().catch(() => ({ controls: [] })),
         complianceService.queryAudit({ limit: 50 }).catch(() => ({ data: [] })),
+        tenantService.getAll().catch(() => ({ tenants: [] })),
       ]);
       setSecurityControls(controls.controls || []);
       const logsData = auditResponse as { data?: any[]; logs?: any[] };
       setAuditLogs(logsData.data || logsData.logs || []);
+      setTenants(tenantsData.tenants || []);
     } catch (e) {
       console.error('Error loading admin data:', e);
     }
     setLoading(false);
   };
+
+  const loadReports = async () => {
+    setReportLoading(true);
+    try {
+      const results = await Promise.all(
+        frameworks.map(fw => 
+          complianceService.getReport(fw).catch(() => ({ framework: fw, status: 'unavailable', lastGenerated: '', controlsPassing: 0, controlsTotal: 0, nextReview: '' }))
+        )
+      );
+      setReports(results.map(r => ({
+        framework: r.framework || r.framework,
+        status: r.status || 'unavailable',
+        lastGenerated: r.lastGenerated || new Date().toISOString(),
+        controlsPassing: r.controlsPassing || 0,
+        controlsTotal: r.controlsTotal || 9,
+        nextReview: r.nextReview || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+      })));
+    } catch (e) {
+      console.error('Error loading reports:', e);
+    }
+    setReportLoading(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'reports' && reports.length === 0) {
+      loadReports();
+    }
+  }, [activeTab]);
 
   const tabs = [
     { id: 'compliance', label: 'Compliance', icon: '📋' },
@@ -78,8 +124,8 @@ export default function AdminPage() {
           <div>
             {activeTab === 'compliance' && <CompliancePanel controls={securityControls} />}
             {activeTab === 'audit' && <AuditPanel logs={auditLogs} />}
-            {activeTab === 'tenants' && <TenantsPanel />}
-            {activeTab === 'reports' && <ReportsPanel />}
+            {activeTab === 'tenants' && <TenantsPanel tenants={tenants} />}
+            {activeTab === 'reports' && <ReportsPanel reports={reports} loading={reportLoading} />}
           </div>
         )}
       </div>
@@ -176,8 +222,16 @@ function AuditPanel({ logs }: { logs: any[] }) {
   );
 }
 
-function TenantsPanel() {
+interface TenantsPanelProps {
+  tenants: any[];
+}
+
+function TenantsPanel({ tenants }: TenantsPanelProps) {
   const plans = ['free', 'starter', 'professional', 'enterprise'];
+  const planCounts = plans.map(plan => ({
+    plan,
+    count: tenants.filter((t: any) => t.plan === plan).length
+  }));
 
   return (
     <div className="space-y-6">
@@ -190,9 +244,9 @@ function TenantsPanel() {
 
       <div className="bg-gray-800 rounded-xl p-6">
         <div className="grid grid-cols-4 gap-4 mb-6">
-          {plans.map(plan => (
+          {planCounts.map(({ plan, count }) => (
             <div key={plan} className="bg-gray-700 p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold">{plan.charAt(0).toUpperCase()}</div>
+              <div className="text-2xl font-bold">{count}</div>
               <div className="text-gray-400 text-sm capitalize">{plan}</div>
             </div>
           ))}
@@ -209,15 +263,37 @@ function TenantsPanel() {
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b border-gray-700">
-              <td className="py-3 text-gray-400">tn_default</td>
-              <td className="py-3">Default Tenant</td>
-              <td className="py-3"><span className="px-2 py-1 bg-purple-600 rounded">Enterprise</span></td>
-              <td className="py-3"><span className="px-2 py-1 bg-green-600 rounded">Active</span></td>
-              <td className="py-3">
-                <button className="text-blue-400 hover:text-blue-300">Edit</button>
-              </td>
-            </tr>
+            {tenants.length > 0 ? tenants.map((tenant: any) => (
+              <tr key={tenant.id} className="border-b border-gray-700">
+                <td className="py-3 text-gray-400">{tenant.id}</td>
+                <td className="py-3">{tenant.name}</td>
+                <td className="py-3">
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    tenant.plan === 'enterprise' ? 'bg-purple-600' :
+                    tenant.plan === 'professional' ? 'bg-blue-600' :
+                    tenant.plan === 'starter' ? 'bg-green-600' : 'bg-gray-600'
+                  }`}>
+                    {tenant.plan}
+                  </span>
+                </td>
+                <td className="py-3">
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    tenant.status === 'active' ? 'bg-green-600' : 'bg-yellow-600'
+                  }`}>
+                    {tenant.status}
+                  </span>
+                </td>
+                <td className="py-3">
+                  <button className="text-blue-400 hover:text-blue-300">Edit</button>
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-gray-400">
+                  No tenants found
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -225,36 +301,63 @@ function TenantsPanel() {
   );
 }
 
-function ReportsPanel() {
-  const frameworks = ['SOC 2', 'GDPR', 'HIPAA', 'ISO 27001'];
+interface ReportsPanelProps {
+  reports: ComplianceReport[];
+  loading: boolean;
+}
+
+const frameworkLabels: Record<string, string> = {
+  SOC2: 'SOC 2',
+  GDPR: 'GDPR',
+  HIPAA: 'HIPAA',
+  ISO27001: 'ISO 27001',
+};
+
+function ReportsPanel({ reports, loading }: ReportsPanelProps) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-2 gap-6">
-      {frameworks.map((framework) => (
-        <div key={framework} className="bg-gray-800 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">{framework} Report</h2>
-            <span className="text-green-500">✓ Compliant</span>
+      {reports.map((report) => {
+        const label = frameworkLabels[report.framework] || report.framework;
+        const isCompliant = report.status === 'compliant' || report.status === 'active';
+        
+        return (
+          <div key={report.framework} className="bg-gray-800 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">{label} Report</h2>
+              <span className={isCompliant ? 'text-green-500' : 'text-yellow-500'}>
+                {isCompliant ? '✓ Compliant' : '⚠ Pending'}
+              </span>
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Last Generated</span>
+                <span>{report.lastGenerated ? new Date(report.lastGenerated).toLocaleDateString() : 'N/A'}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Controls Passing</span>
+                <span className={isCompliant ? 'text-green-500' : 'text-yellow-500'}>
+                  {report.controlsPassing}/{report.controlsTotal}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Next Review</span>
+                <span>{report.nextReview ? new Date(report.nextReview).toLocaleDateString() : 'N/A'}</span>
+              </div>
+            </div>
+            <button className="mt-4 w-full py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition">
+              Download Report
+            </button>
           </div>
-          <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Last Generated</span>
-              <span>{new Date().toLocaleDateString()}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Controls Passing</span>
-              <span className="text-green-500">9/9</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Next Review</span>
-              <span>{new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
-            </div>
-          </div>
-          <button className="mt-4 w-full py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition">
-            Download Report
-          </button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

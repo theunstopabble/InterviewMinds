@@ -16,7 +16,7 @@ import {
   anonymizeCandidate,
   sanitizeForExport,
 } from "../lib/piiMasking";
-import { checkSecurityControls } from "../lib/compliance";
+import { checkSecurityControls, generateComplianceReport as genReport } from "../lib/compliance";
 import {
   createAccessRequest,
   approveRequest,
@@ -250,6 +250,32 @@ router.get("/security-controls", requireAuth, (_req, res) => {
   } catch (error) {
     console.error('Error fetching security controls:', error);
     res.status(500).json({ error: 'Failed to fetch security controls' });
+  }
+});
+
+// GET /api/compliance/report/:framework
+router.get("/report/:framework", requireAuth, (req, res) => {
+  try {
+    const { framework } = req.params;
+    if (!['SOC2', 'GDPR', 'HIPAA', 'ISO27001'].includes(framework)) {
+      res.status(400).json({ error: 'Invalid framework' });
+      return;
+    }
+    const report = genReport(framework as 'SOC2' | 'GDPR' | 'HIPAA' | 'ISO27001');
+    const controls = checkSecurityControls();
+    const activeControls = controls.filter((c: any) => c.status === 'active').length;
+    
+    res.json({
+      framework,
+      status: activeControls >= controls.length * 0.8 ? 'compliant' : 'pending',
+      lastGenerated: (report as any).generatedAt,
+      controlsPassing: activeControls,
+      controlsTotal: controls.length,
+      nextReview: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+  } catch (error) {
+    console.error('Error generating compliance report:', error);
+    res.status(500).json({ error: 'Failed to generate compliance report' });
   }
 });
 
