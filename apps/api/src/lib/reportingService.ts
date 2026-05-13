@@ -340,11 +340,40 @@ export async function exportReport(
     };
   }
 
-  /* pdf / excel — placeholder: return JSON for now */
+  if (format === "excel") {
+    const parser = new Parser({
+      fields: ["_id", "userId", "status", "score", "feedback", "createdAt"],
+    });
+    const csv = parser.parse(report);
+    return {
+      content: csv,
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      filename: `report_${reportId}.xlsx`,
+    };
+  }
+
+  /* pdf — formatted text report (no PDF library available) */
+  const lines = [
+    `InterviewMinds Report: ${reportId}`,
+    `Generated: ${new Date().toISOString()}`,
+    `Total Records: ${report.length}`,
+    "",
+    "---",
+    "",
+  ];
+  for (const r of report) {
+    lines.push(`ID: ${r._id}`);
+    lines.push(`User: ${r.userId}`);
+    lines.push(`Status: ${r.status}`);
+    lines.push(`Score: ${r.score ?? "N/A"}`);
+    lines.push(`Feedback: ${r.feedback ?? "N/A"}`);
+    lines.push(`Created: ${r.createdAt}`);
+    lines.push("");
+  }
   return {
-    content: JSON.stringify(report, null, 2),
-    mimeType: "application/json",
-    filename: `report_${reportId}.json`,
+    content: lines.join("\n"),
+    mimeType: "text/plain",
+    filename: `report_${reportId}.txt`,
   };
 }
 

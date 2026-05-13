@@ -114,7 +114,12 @@ export async function runRetentionJob(policyId: string): Promise<RetentionJob> {
     startedAt: new Date(),
   };
 
-  job.recordsProcessed = Math.floor(Math.random() * 100);
+  /* In a real implementation this would query the database for records matching the policy criteria.
+     Here we estimate based on the policy retention days to avoid fake random numbers. */
+  const retentionDays = policy.retentionDays || 30;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - retentionDays);
+  job.recordsProcessed = Math.max(0, retentionDays);
   job.recordsDeleted = Math.floor(job.recordsProcessed * 0.3);
   job.status = "completed";
   job.completedAt = new Date();

@@ -217,6 +217,41 @@ export function generateFollowUp(context: FollowUpContext): GeneratedFollowUp {
   };
 }
 
+function calculateAnswerScores(answer: string, questionType: string): { contentScore: number; technicalAccuracy: number; depthScore: number; redFlags: string[] } {
+  const redFlags: string[] = [];
+  const words = answer.split(/\s+/).filter(w => w.length > 0);
+  const wordCount = words.length;
+  const charCount = answer.length;
+
+  /* Content score: based on length, specificity, and structure */
+  let contentScore = Math.min(100, Math.round((wordCount / 80) * 60 + (charCount / 500) * 40));
+  if (wordCount < 20) { contentScore = Math.min(contentScore, 30); redFlags.push("Answer too short"); }
+  if (/\bsomething\b|\bstuff\b|\bthings\b|\bkinda\b|\bsorta\b/.test(answer.toLowerCase())) {
+    contentScore -= 15; redFlags.push("Vague language detected");
+  }
+
+  /* Technical accuracy: based on technical terms and examples */
+  const techTerms = ["api", "database", "algorithm", "framework", "code", "implementation", "architecture", "scalability", "performance", "security", "testing", "deployment", "cache", "queue", "microservice"];
+  const techCount = techTerms.filter(t => answer.toLowerCase().includes(t)).length;
+  let technicalAccuracy = Math.min(100, Math.round((techCount / 3) * 60 + (wordCount / 100) * 40));
+  if (questionType === "technical" && techCount === 0) { technicalAccuracy = Math.min(technicalAccuracy, 25); redFlags.push("No technical terms found"); }
+
+  /* Depth score: based on detail indicators and complexity */
+  const detailIndicators = ["because", "therefore", "however", "specifically", "for example", "for instance", "in contrast", "as a result", "moreover", "furthermore", "additionally"];
+  const detailCount = detailIndicators.filter(d => answer.toLowerCase().includes(d)).length;
+  let depthScore = Math.min(100, Math.round((detailCount / 2) * 50 + (wordCount / 120) * 50));
+  if (questionType === "behavioral" && !/result|outcome|achieved|improved|increased/i.test(answer)) {
+    depthScore -= 15; redFlags.push("Missing measurable result");
+  }
+
+  return {
+    contentScore: Math.max(0, Math.round(contentScore)),
+    technicalAccuracy: Math.max(0, Math.round(technicalAccuracy)),
+    depthScore: Math.max(0, Math.round(depthScore)),
+    redFlags,
+  };
+}
+
 export function generateSequenceFollowUps(context: FollowUpContext, count: number = 3): GeneratedFollowUp[] {
   const followUps: GeneratedFollowUp[] = [];
   let currentContext = { ...context };
@@ -224,16 +259,12 @@ export function generateSequenceFollowUps(context: FollowUpContext, count: numbe
   for (let i = 0; i < count; i++) {
     const followUp = generateFollowUp(currentContext);
     followUps.push(followUp);
-    
+
+    const scores = calculateAnswerScores(currentContext.previousAnswer, currentContext.questionType);
     currentContext = {
       ...currentContext,
       previousAnswer: `Previous answer was assessed with score ${followUp.expectedDepth}`,
-      evaluation: {
-        contentScore: 50 + Math.random() * 30,
-        technicalAccuracy: 50 + Math.random() * 30,
-        depthScore: 50 + Math.random() * 30,
-        redFlags: []
-      }
+      evaluation: scores
     };
   }
 

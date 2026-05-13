@@ -1,3 +1,4 @@
+import axios from "axios";
 import { logger } from "./logger";
 
 export interface MetricData {
@@ -170,15 +171,36 @@ export async function runUptimeCheck(checkId: string): Promise<UptimeCheck | nul
   const check = uptimeChecks.find(c => c.id === checkId);
   if (!check) return null;
 
-  logger.info(`Running uptime check: ${check.name}`);
-  
+  logger.info({ checkId: check.id, url: check.url }, "Running uptime check");
   check.lastCheck = new Date();
-  check.status = Math.random() > 0.05 ? "up" : "down";
-  
-  const checks = uptimeChecks.filter(c => c.id === checkId).length;
-  check.uptimePercentage = ((checks - 1) * check.uptimePercentage + (check.status === "up" ? 100 : 0)) / checks;
+
+  try {
+    const start = Date.now();
+    const res = await axios.get(check.url, { timeout: check.timeout || 10000, validateStatus: () => true });
+    const latency = Date.now() - start;
+    check.status = res.status >= 200 && res.status < 400 ? "up" : "down";
+    if (latency > 2000) check.status = "degraded";
+  } catch {
+    check.status = "down";
+  }
+
+  /* Simple exponential moving average for uptime percentage */
+  const alpha = 0.1;
+  const upValue = check.status === "up" ? 100 : 0;
+  check.uptimePercentage = check.uptimePercentage * (1 - alpha) + upValue * alpha;
 
   return check;
+}
+
+let requestCount = 0;
+let errorCount = 0;
+const latencies: number[] = [];
+
+export function recordRequest(latencyMs: number, isError: boolean): void {
+  requestCount++;
+  if (isError) errorCount++;
+  latencies.push(latencyMs);
+  if (latencies.length > 10000) latencies.shift();
 }
 
 export function getSystemMetrics(): {
@@ -188,15 +210,29 @@ export function getSystemMetrics(): {
   errors: number;
   latency: { p50: number; p95: number; p99: number };
 } {
+  const memUsage = process.memoryUsage();
+  const cpuUsage = process.cpuUsage();
+  /* cpuUsage.user + system in microseconds; rough % over 1s sample would need history.
+     Here we report raw derived value scaled to approximate percentage. */
+  const cpuPercent = Math.min(100, Math.round(((cpuUsage.user + cpuUsage.system) / 1_000_000) % 100));
+  const memPercent = Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100);
+
+  const sorted = [...latencies].sort((a, b) => a - b);
+  const p = (arr: number[], pct: number) => {
+    if (arr.length === 0) return 0;
+    const idx = Math.ceil((pct / 100) * arr.length) - 1;
+    return arr[Math.max(0, idx)];
+  };
+
   return {
-    cpu: Math.random() * 60 + 20,
-    memory: Math.random() * 40 + 30,
-    requests: Math.floor(Math.random() * 1000),
-    errors: Math.floor(Math.random() * 10),
+    cpu: cpuPercent,
+    memory: memPercent,
+    requests: requestCount,
+    errors: errorCount,
     latency: {
-      p50: Math.floor(Math.random() * 200 + 50),
-      p95: Math.floor(Math.random() * 500 + 100),
-      p99: Math.floor(Math.random() * 1000 + 200),
+      p50: p(sorted, 50),
+      p95: p(sorted, 95),
+      p99: p(sorted, 99),
     },
   };
 }

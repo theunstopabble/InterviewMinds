@@ -115,20 +115,8 @@ function checkLiveness(sessionData: Record<string, unknown>): boolean {
   return passedChecks.length >= 2;
 }
 
-function generateMockFaceData(): number[] {
-  return Array.from({ length: 128 }, () => Math.floor(Math.random() * 256));
-}
-
-function generateMockVoiceFeatures(): number[] {
-  return Array.from({ length: 256 }, () => Math.floor(Math.random() * 256));
-}
-
-function generateMockFingerprintData(): number[] {
-  return Array.from({ length: 64 }, () => Math.floor(Math.random() * 256));
-}
-
 export function enrollFace(userId: string, faceData: number[]): BiometricTemplate {
-  const templateData = encodeFaceFaceData(faceData);
+  const templateData = encodeFaceTemplate(faceData);
   
   const enrollment: BiometricEnrollment = enrolledUsers.get(userId) || { userId, status: 'pending' };
   enrollment.faceTemplate = templateData;
@@ -290,10 +278,6 @@ export function checkRateLimit(userId: string): boolean {
   verificationAttempts.set(userId, attempts);
   
   return true;
-}
-
-function encodeFaceFaceData(faceData: number[]): string {
-  return Buffer.from(faceData.slice(0, 128)).toString('base64');
 }
 
 export function getDefaultSettings(): BiometricSettings {

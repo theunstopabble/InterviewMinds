@@ -72,11 +72,12 @@ class AIAnalysisService {
       (dataQuality * 0.4 + evidenceStrength * 0.35 + consistency * 0.25) * 100
     );
 
+    const baseScore = Math.round(overallConfidence);
     const categoryScores = {
-      technical: Math.min(95, Math.max(50, 70 + Math.random() * 20)),
-      behavioral: Math.min(95, Math.max(50, 70 + Math.random() * 20)),
-      communication: Math.min(95, Math.max(50, 70 + Math.random() * 20)),
-      problemSolving: Math.min(95, Math.max(50, 70 + Math.random() * 20)),
+      technical: Math.min(95, Math.max(50, baseScore + (evaluation.codeAnswers?.length || 0) * 3)),
+      behavioral: Math.min(95, Math.max(50, baseScore + (evaluation.examplesProvided ? 10 : 0))),
+      communication: Math.min(95, Math.max(50, baseScore + (evaluation.audioDuration && evaluation.audioDuration > 60 ? 8 : 0))),
+      problemSolving: Math.min(95, Math.max(50, baseScore + (evaluation.answers?.filter((a: any) => a.answer?.length > 100).length || 0) * 2)),
     };
 
     const disclaimer = `This confidence score is based on ${evaluation.answers?.length || 0} answers and ${evaluation.questions?.length || 0} questions. Higher confidence indicates more consistent and well-supported evaluations.`;
@@ -127,7 +128,15 @@ class AIAnalysisService {
   }
 
   private calculateConsistency(evaluation: any): number {
-    return 70 + Math.random() * 20;
+    const answers = evaluation.answers || [];
+    if (answers.length < 2) return 50;
+    const lengths = answers.map((a: any) => (a.answer?.length || 0));
+    const avg = lengths.reduce((s: number, v: number) => s + v, 0) / lengths.length;
+    const variance = lengths.reduce((s: number, v: number) => s + Math.pow(v - avg, 2), 0) / lengths.length;
+    const stdDev = Math.sqrt(variance);
+    /* Lower variance = higher consistency */
+    const score = Math.min(100, Math.max(30, 100 - stdDev / 5));
+    return Math.round(score) / 100;
   }
 
   generateComparativeAnalysis(
@@ -250,11 +259,15 @@ class AIAnalysisService {
     if (sentimentScore > 60) overallSentiment = 'positive';
     else if (sentimentScore < 40) overallSentiment = 'negative';
 
+    const wordCount = words.length;
+    const exclamationCount = (text.match(/!/g) || []).length;
+    const questionCount = (text.match(/\?/g) || []).length;
+
     const emotions = {
-      confidence: Math.min(100, Math.max(0, 50 + Math.random() * 40)),
-      enthusiasm: Math.min(100, Math.max(0, sentimentScore + Math.random() * 20)),
-      nervousness: Math.min(100, Math.max(0, 60 - sentimentScore * 0.5 + Math.random() * 20)),
-      frustration: Math.min(100, Math.max(0, (60 - sentimentScore) * 0.8 + Math.random() * 15)),
+      confidence: Math.min(100, Math.max(0, Math.round(sentimentScore + exclamationCount * 2))),
+      enthusiasm: Math.min(100, Math.max(0, Math.round(sentimentScore + exclamationCount * 3 - questionCount * 2))),
+      nervousness: Math.min(100, Math.max(0, Math.round(60 - sentimentScore * 0.5 + questionCount * 3))),
+      frustration: Math.min(100, Math.max(0, Math.round((60 - sentimentScore) * 0.8 + (wordCount < 10 ? 10 : 0)))),
     };
 
     const analysisDetails = this.generateSentimentAnalysisDetails(emotions, overallSentiment);
@@ -298,23 +311,29 @@ class AIAnalysisService {
   }
 
   getBenchmarkData(role: string, difficulty: string): any {
+    const diffMultiplier = difficulty === "expert" ? 1.2 : difficulty === "hard" ? 1.1 : difficulty === "medium" ? 1.0 : 0.9;
+    const roleHash = role.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % 10;
     return {
-      averageScore: 72,
-      technical: 70 + Math.random() * 10,
-      problemSolving: 68 + Math.random() * 12,
-      communication: 70 + Math.random() * 8,
-      cultureFit: 73 + Math.random() * 10,
-      sampleSize: 1000 + Math.floor(Math.random() * 500),
+      averageScore: Math.round(72 * diffMultiplier),
+      technical: Math.round((70 + roleHash) * diffMultiplier),
+      problemSolving: Math.round((68 + roleHash) * diffMultiplier),
+      communication: Math.round((70 + roleHash / 2) * diffMultiplier),
+      cultureFit: Math.round((73 + roleHash / 3) * diffMultiplier),
+      sampleSize: 1000 + (roleHash * 50),
     };
   }
 
   compareCandidates(candidateIds: string[]): any {
-    return candidateIds.map((id, index) => ({
-      candidateId: id,
-      overallScore: 60 + Math.random() * 30,
-      rank: index + 1,
-      percentile: Math.floor(Math.random() * 40) + 30,
-    }));
+    const scored = candidateIds.map((id) => {
+      const idHash = id.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % 30;
+      return {
+        candidateId: id,
+        overallScore: Math.round(60 + idHash),
+        percentile: Math.min(99, Math.round(30 + idHash)),
+      };
+    });
+    scored.sort((a, b) => b.overallScore - a.overallScore);
+    return scored.map((c, index) => ({ ...c, rank: index + 1 }));
   }
 }
 

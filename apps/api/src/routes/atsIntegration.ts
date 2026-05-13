@@ -14,7 +14,7 @@ const router = Router();
 const atsConfigs: Map<string, ReturnType<typeof configureATS>> = new Map();
 
 interface ATSConfigRequest {
-  provider: 'workday' | 'greenhouse' | 'lever' | 'bamboohr' | 'sap-successfactors';
+  provider: 'workday' | 'greenhouse' | 'lever' | 'bamboohr';
   apiKey?: string;
   clientId?: string;
   clientSecret?: string;
@@ -55,7 +55,7 @@ router.post('/configure', async (req, res) => {
 router.get('/jobs', async (req, res) => {
   try {
     const provider = req.query.provider as string || 'workday';
-    const jobs = fetchJobs({ provider } as any);
+    const jobs = await fetchJobs({ provider } as any);
 
     res.json({ jobs, count: jobs.length });
   } catch (error) {
@@ -68,7 +68,7 @@ router.get('/jobs/:jobId/candidates', async (req, res) => {
   try {
     const { jobId } = req.params;
     const provider = req.query.provider as string || 'workday';
-    const candidates = fetchCandidates({ provider } as any, jobId);
+    const candidates = await fetchCandidates({ provider } as any, jobId);
 
     res.json({ candidates, count: candidates.length });
   } catch (error) {
@@ -87,7 +87,7 @@ router.post('/results', async (req, res) => {
       return;
     }
 
-    const result = pushInterviewResults(
+    const result = await pushInterviewResults(
       { provider } as any,
       {
         ...body,
@@ -112,7 +112,7 @@ router.post('/sync', async (req, res) => {
       return;
     }
 
-    const result = syncCandidate({ provider } as any, candidate);
+    const result = await syncCandidate({ provider } as any, candidate);
 
     res.json(result);
   } catch (error) {
@@ -143,7 +143,7 @@ router.post('/webhooks', async (req, res) => {
       return;
     }
 
-    const result = createWebhook({ provider } as any, events);
+    const result = await createWebhook({ provider } as any, events);
 
     res.json(result);
   } catch (error) {

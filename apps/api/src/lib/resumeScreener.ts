@@ -355,7 +355,14 @@ Return ONLY JSON: {"content": "...", "options": ["..."] || null, "endConversatio
       if (parsed.endConversation) {
         conversation.status = 'completed';
         conversation.completedAt = new Date();
-        conversation.score = 75; /* placeholder until real scoring is implemented */
+        const msgCount = conversation.messages.length;
+        const botMsgs = conversation.messages.filter(m => m.sender === 'bot').length;
+        const userMsgs = conversation.messages.filter(m => m.sender === 'candidate').length;
+        const avgLen = userMsgs > 0
+          ? conversation.messages.filter(m => m.sender === 'candidate').reduce((sum, m) => sum + m.content.length, 0) / userMsgs
+          : 0;
+        const engagement = Math.min(100, (msgCount / 10) * 40 + (avgLen / 100) * 30 + (botMsgs / msgCount || 0) * 30);
+        conversation.score = Math.round(Math.min(100, Math.max(0, engagement)));
       }
 
       this.conversations.set(conversationId, conversation);

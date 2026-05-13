@@ -47,7 +47,7 @@ router.post(
         return res.status(400).json({ error: "No file uploaded" });
       }
 
-      // Create placeholder resume immediately
+      // Create resume record immediately and offload processing to queue
       const newResume = await ResumeModel.create({
         userId: userId,
         fileName: req.file.originalname,

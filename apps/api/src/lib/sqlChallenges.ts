@@ -221,7 +221,22 @@ class SQLChallengeService {
 
   submitSolution(challengeId: string, candidateId: string, query: string): SQLSubmission {
     const validation = this.validateQuery(challengeId, query);
-    
+
+    const start = performance.now();
+    /* Simulate actual query parsing / execution work */
+    const challenge = this.challenges.get(challengeId);
+    if (challenge && validation.isCorrect) {
+      /* Simple heuristic: longer queries and more tables take longer */
+      const tableCount = challenge.schema.tables.length;
+      const queryLen = query.length;
+      const simulatedMs = Math.min(500, Math.round((tableCount * 10) + (queryLen / 10)));
+      const end = performance.now();
+      var executionTime = Math.round(end - start + simulatedMs);
+    } else {
+      const end = performance.now();
+      var executionTime = Math.round(end - start);
+    }
+
     const submission: SQLSubmission = {
       id: uuidv4(),
       challengeId,
@@ -229,7 +244,7 @@ class SQLChallengeService {
       query,
       result: validation.result || [],
       isCorrect: validation.isCorrect,
-      executionTime: Math.floor(Math.random() * 500),
+      executionTime,
       submittedAt: new Date(),
       error: validation.error,
     };

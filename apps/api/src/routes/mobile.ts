@@ -39,6 +39,13 @@ import {
   formatDateForMobile,
 } from "../lib/mobileAPI";
 import { requireAuth } from "../middleware/auth";
+import { InterviewModel } from "../models/Interview";
+import { ResumeModel } from "../models/Resume";
+import { UserRoleModel } from "../models/Role";
+import { WebhookModel } from "../models/Webhook";
+import { MessageModel } from "../models/Message";
+import { AuditLogModel } from "../models/AuditLog";
+import { PracticeInterviewModel } from "../models/PracticeInterview";
 
 const router = Router();
 
@@ -218,12 +225,39 @@ router.get("/optimize/:resource", (req, res) => {
   }));
 });
 
-router.get("/pagination/:resource", (req, res) => {
+router.get("/pagination/:resource", async (req, res) => {
   const { resource } = req.params;
   const { page, pageSize } = req.query;
-  const mockData = Array(50).fill(null).map((_, i) => ({ id: i + 1, name: `Item ${i + 1}` }));
-  const result = paginateMobile(mockData, Number(page) || 1, Number(pageSize) || 10);
-  res.json(formatMobileResponse(result));
+  const p = Number(page) || 1;
+  const ps = Number(pageSize) || 10;
+
+  const resourceMap: Record<string, any> = {
+    interviews: InterviewModel,
+    resumes: ResumeModel,
+    roles: UserRoleModel,
+    webhooks: WebhookModel,
+    messages: MessageModel,
+    auditlogs: AuditLogModel,
+    practiceinterviews: PracticeInterviewModel,
+  };
+
+  const Model = resourceMap[resource.toLowerCase()];
+  if (!Model) {
+    return res.status(400).json(formatMobileError(`Unknown resource: ${resource}`));
+  }
+
+  try {
+    const total = await Model.countDocuments();
+    const docs = await Model.find().skip((p - 1) * ps).limit(ps).lean();
+    const result = paginateMobile(docs, p, ps);
+    /* override total because paginateMobile uses items.length */
+    result.pagination.total = total;
+    result.pagination.totalPages = Math.ceil(total / ps);
+    result.pagination.hasMore = p < result.pagination.totalPages;
+    res.json(formatMobileResponse(result));
+  } catch (err: any) {
+    res.status(500).json(formatMobileError(err.message));
+  }
 });
 
 export default router;

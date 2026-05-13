@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import { PracticeInterviewModel } from "../models/PracticeInterview";
+import { logger } from "./logger";
 
 export type MockStatus = 'not_started' | 'in_progress' | 'completed' | 'abandoned';
 export type MockFeedbackStatus = 'pending' | 'generated';
@@ -52,8 +54,6 @@ export interface MockInterview {
 }
 
 class MockInterviewService {
-  private mockInterviews: Map<string, MockInterview> = new Map();
-
   private defaultQuestions: MockQuestion[] = [
     {
       id: 'mock-1',
@@ -93,16 +93,14 @@ class MockInterviewService {
     },
   ];
 
-  createMockInterview(
+  async createMockInterview(
     userId: string,
     role: string,
     difficulty: 'beginner' | 'intermediate' | 'advanced' | 'expert' = 'intermediate',
     questionCount: number = 4
-  ): MockInterview {
+  ): Promise<MockInterview> {
     const questions = this.getRandomQuestions(role, difficulty, questionCount);
-
-    const mockInterview: MockInterview = {
-      id: uuidv4(),
+    const doc = await PracticeInterviewModel.create({
       userId,
       role,
       difficulty,
@@ -114,10 +112,8 @@ class MockInterviewService {
       startedAt: new Date(),
       totalDuration: 0,
       isRecorded: false,
-    };
-
-    this.mockInterviews.set(mockInterview.id, mockInterview);
-    return mockInterview;
+    });
+    return this.toInterface(doc);
   }
 
   private getRandomQuestions(role: string, difficulty: string, count: number): MockQuestion[] {
@@ -125,81 +121,64 @@ class MockInterviewService {
     return shuffled.slice(0, Math.min(count, shuffled.length));
   }
 
-  startMockInterview(mockId: string): MockInterview | null {
-    const mockInterview = this.mockInterviews.get(mockId);
-    if (!mockInterview || mockInterview.status !== 'not_started') {
-      return null;
-    }
-
-    mockInterview.status = 'in_progress';
-    this.mockInterviews.set(mockId, mockInterview);
-    return mockInterview;
+  async startMockInterview(mockId: string): Promise<MockInterview | null> {
+    const doc = await PracticeInterviewModel.findByIdAndUpdate(
+      mockId,
+      { status: 'in_progress' },
+      { new: true }
+    );
+    return doc ? this.toInterface(doc) : null;
   }
 
-  submitAnswer(
+  async submitAnswer(
     mockId: string,
     questionId: string,
     answer: string,
     code?: string,
     responseTime: number = 0
-  ): MockInterview | null {
-    const mockInterview = this.mockInterviews.get(mockId);
-    if (!mockInterview || mockInterview.status !== 'in_progress') {
-      return null;
-    }
+  ): Promise<MockInterview | null> {
+    const doc = await PracticeInterviewModel.findById(mockId);
+    if (!doc || doc.status !== 'in_progress') return null;
 
-    const existingAnswerIndex = mockInterview.answers.findIndex(a => a.questionId === questionId);
-    const mockAnswer: MockAnswer = {
-      questionId,
-      answer,
-      code,
-      responseTime,
-      timestamp: new Date(),
-    };
-
-    if (existingAnswerIndex !== -1) {
-      mockInterview.answers[existingAnswerIndex] = mockAnswer;
+    const existingIndex = doc.answers.findIndex((a: any) => a.questionId === questionId);
+    const newAnswer: any = { questionId, answer, code, responseTime, timestamp: new Date() };
+    if (existingIndex !== -1) {
+      doc.answers[existingIndex] = newAnswer;
     } else {
-      mockInterview.answers.push(mockAnswer);
+      doc.answers.push(newAnswer);
     }
-
-    this.mockInterviews.set(mockId, mockInterview);
-    return mockInterview;
+    await doc.save();
+    return this.toInterface(doc);
   }
 
-  completeMockInterview(mockId: string): MockInterview | null {
-    const mockInterview = this.mockInterviews.get(mockId);
-    if (!mockInterview || mockInterview.status !== 'in_progress') {
-      return null;
-    }
+  async completeMockInterview(mockId: string): Promise<MockInterview | null> {
+    const doc = await PracticeInterviewModel.findById(mockId);
+    if (!doc || doc.status !== 'in_progress') return null;
 
-    mockInterview.status = 'completed';
-    mockInterview.completedAt = new Date();
-    mockInterview.totalDuration = Math.floor(
-      (new Date().getTime() - mockInterview.startedAt.getTime()) / 1000
-    );
-
-    this.mockInterviews.set(mockId, mockInterview);
-    return mockInterview;
+    doc.status = 'completed';
+    doc.completedAt = new Date();
+    doc.totalDuration = Math.floor((new Date().getTime() - doc.startedAt.getTime()) / 1000);
+    await doc.save();
+    return this.toInterface(doc);
   }
 
-  generateFeedback(mockId: string): MockFeedback | null {
-    const mockInterview = this.mockInterviews.get(mockId);
-    if (!mockInterview || mockInterview.status !== 'completed') {
-      return null;
-    }
+  async generateFeedback(mockId: string): Promise<MockFeedback | null> {
+    const doc = await PracticeInterviewModel.findById(mockId);
+    if (!doc || doc.status !== 'completed') return null;
 
-    const totalQuestions = mockInterview.questions.length;
-    const answeredQuestions = mockInterview.answers.length;
-    
+    const questions = doc.questions as unknown as MockQuestion[];
+    const answers = doc.answers as unknown as MockAnswer[];
+    const totalQuestions = questions.length;
+    const answeredQuestions = answers.length;
+
     const baseScore = Math.round((answeredQuestions / totalQuestions) * 70);
     const completionBonus = answeredQuestions === totalQuestions ? 20 : 0;
-    const durationPenalty = mockInterview.totalDuration > 1800 ? 10 : 0;
-    
+    const durationPenalty = doc.totalDuration > 1800 ? 10 : 0;
+
     const overallScore = Math.min(100, Math.max(0, baseScore + completionBonus - durationPenalty));
 
-    const detailedScores = mockInterview.questions.map(q => {
-      const answer = mockInterview.answers.find(a => a.questionId === q.id);
+    const detailedScores = questions.map((q) => {
+      const answer = answers.find((a) => a.questionId === q.id);
       const hasAnswer = !!answer;
       const hasCode = !!answer?.code;
       const isComplete = answer && answer.answer.length > 50;
@@ -218,7 +197,7 @@ class MockInterviewService {
     });
 
     const strengths = this.extractStrengths(detailedScores);
-    const improvements = this.extractImprovements(detailedScores, mockInterview.questions);
+    const improvements = this.extractImprovements(detailedScores, questions);
 
     const feedback: MockFeedback = {
       overallScore,
@@ -228,62 +207,54 @@ class MockInterviewService {
       generatedAt: new Date(),
     };
 
-    mockInterview.feedback = feedback;
-    mockInterview.feedbackStatus = 'generated';
-    this.mockInterviews.set(mockId, mockInterview);
+    doc.feedback = feedback as any;
+    doc.feedbackStatus = 'generated';
+    await doc.save();
 
     return feedback;
   }
 
   private getQuestionFeedback(question: MockQuestion, answer: MockAnswer | undefined, score: number): string {
     if (!answer) return 'No answer provided';
-    
-    if (score >= 70) {
-      return 'Excellent response! Well-structured and comprehensive.';
-    } else if (score >= 40) {
-      return 'Good attempt. Consider adding more specific examples.';
-    } else {
-      return 'Needs improvement. Try to be more detailed and structured.';
-    }
+    if (score >= 70) return 'Excellent response! Well-structured and comprehensive.';
+    if (score >= 40) return 'Good attempt. Consider adding more specific examples.';
+    return 'Needs improvement. Try to be more detailed and structured.';
   }
 
   private extractStrengths(detailedScores: { questionId: string; score: number }[]): string[] {
     const strengths: string[] = [];
     const highScoring = detailedScores.filter(s => s.score >= 60);
-    
     if (highScoring.length >= 3) strengths.push('Consistent performance across questions');
     if (highScoring.some(s => s.score >= 80)) strengths.push('Strong technical understanding');
     if (detailedScores.every(s => s.score > 0)) strengths.push('Completed all questions');
-    
     return strengths;
   }
 
   private extractImprovements(detailedScores: { questionId: string; score: number }[], questions: MockQuestion[]): string[] {
     const improvements: string[] = [];
     const lowScoring = detailedScores.filter(s => s.score < 40);
-    
     if (lowScoring.length > 0) improvements.push('Focus on providing more detailed answers');
     if (detailedScores.some(s => s.score === 0)) improvements.push('Answer all questions completely');
     if (questions.some(q => q.type === 'system-design')) improvements.push('Practice system design thinking');
-    
     return improvements;
   }
 
-  getMockInterview(mockId: string): MockInterview | null {
-    return this.mockInterviews.get(mockId) || null;
+  async getMockInterview(mockId: string): Promise<MockInterview | null> {
+    const doc = await PracticeInterviewModel.findById(mockId).lean();
+    return doc ? this.toInterface(doc) : null;
   }
 
-  getUserMockInterviews(userId: string): MockInterview[] {
-    return Array.from(this.mockInterviews.values())
-      .filter(m => m.userId === userId)
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  async getUserMockInterviews(userId: string): Promise<MockInterview[]> {
+    const docs = await PracticeInterviewModel.find({ userId }).sort({ startedAt: -1 }).lean();
+    return docs.map(d => this.toInterface(d));
   }
 
-  deleteMockInterview(mockId: string): boolean {
-    return this.mockInterviews.delete(mockId);
+  async deleteMockInterview(mockId: string): Promise<boolean> {
+    const res = await PracticeInterviewModel.findByIdAndDelete(mockId);
+    return !!res;
   }
 
-  getPracticeTips(role: string): string[] {
+  getPracticeTips(_role: string): string[] {
     return [
       'Practice STAR method for behavioral questions',
       'Review fundamental data structures and algorithms',
@@ -292,6 +263,24 @@ class MockInterviewService {
       'Review your answers after completion',
       'Focus on clarity and structure',
     ];
+  }
+
+  private toInterface(doc: any): MockInterview {
+    return {
+      id: doc._id.toString(),
+      userId: doc.userId,
+      role: doc.role,
+      difficulty: doc.difficulty,
+      questions: doc.questions,
+      answers: doc.answers,
+      status: doc.status,
+      feedbackStatus: doc.feedbackStatus,
+      feedback: doc.feedback,
+      startedAt: doc.startedAt,
+      completedAt: doc.completedAt,
+      totalDuration: doc.totalDuration,
+      isRecorded: doc.isRecorded,
+    };
   }
 }
 
