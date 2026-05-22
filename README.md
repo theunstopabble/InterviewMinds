@@ -373,3 +373,14 @@ MIT License — see [LICENSE](LICENSE) for details.
 *Building enterprise-grade applications with React, Node.js, TypeScript, MongoDB, and AI/ML*
 
 </div>
+
+---
+
+## 🌐 More Projects by Gautam Kumar
+
+| Project | Description | Link |
+|---------|-------------|------|
+| **Portfolio** | Personal portfolio & developer profile | [gautam-kr.vercel.app](https://gautam-kr.vercel.app) |
+| **SwadKart** | Multi-vendor food delivery platform with AI chatbot | [swadkart.vercel.app](https://swadkart.vercel.app) |
+| **Satark-AI** | Deepfake detection & speaker verification platform | [satark-deepfake.vercel.app](https://satark-deepfake.vercel.app) |
+| **TexFolio** | AI-powered LaTeX resume builder with RBAC | [texfolio.vercel.app](https://texfolio.vercel.app) |
