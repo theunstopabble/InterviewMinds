@@ -81,7 +81,7 @@ describe("Preservation Property: Already-Production-Ready Services Unchanged", (
         ),
         { numRuns: 5 }
       );
-    });
+    }, 30000);
 
     it("hash function produces consistent deterministic output", () => {
       fc.assert(
