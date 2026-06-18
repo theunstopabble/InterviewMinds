@@ -76,7 +76,7 @@ function Home() {
               We found a saved resume from your last session. Would you like to
               continue with it or start fresh?
             </p>
-
+    
             <div className="space-y-3">
               {/* Option 1: Continue */}
               <Button
