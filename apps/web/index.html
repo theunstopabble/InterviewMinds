@@ -5,10 +5,33 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="InterviewMinds: The Flagship AI Mock Interview SaaS for Placements. Upload your resume and practice with real-time AI-driven technical interviews, code compiler, and instant feedback." />
-  <meta name="keywords" content="AI Mock Interview, Tech Interview Prep, Coding Interview, AI Resume Parsing, Frontend Interview, Backend Interview, Job Preparation, InterviewMinds, Gautam Kumar" />
+
+
+  <meta name="description"
+    content="AI-powered mock interview platform for tech roles. Upload resume, practice real-time technical & coding interviews, and get instant ML feedback." />
+  <meta name="keywords"
+    content="AI Mock Interview, Tech Interview Prep, Coding Interview Practice, AI Resume Parsing, Frontend Interview, Backend Interview, System Design Interview, Job Preparation, InterviewMinds, Gautam Kumar, AI Interview Platform" />
   <meta name="google-site-verification" content="N7Wz1Ta9dmB6G5JGUTIwCvHKG-7Lpf-EuF3zVkdGxKw" />
+
   <title>InterviewMinds - AI Mock Interview Platform</title>
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://interviewminds.vercel.app/" />
+
+  <!-- Open Graph / Social Media -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://interviewminds.vercel.app/" />
+  <meta property="og:title" content="InterviewMinds - AI Mock Interview Platform | Crack Your Dream Job" />
+  <meta property="og:description"
+    content="Prepare for your dream job with AI-powered mock interviews. Real-time technical questions, coding challenges, and instant feedback with ML proctoring." />
+  <meta property="og:image" content="https://interviewminds.vercel.app/pwa-512x512.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="InterviewMinds - AI Mock Interview Platform" />
+  <meta name="twitter:description"
+    content="Crack your next tech interview with AI-powered mock interviews. Real-time coding, feedback, and ML proctoring." />
+  <meta name="twitter:image" content="https://interviewminds.vercel.app/pwa-512x512.png" />
 
   <!-- JSON-LD Structured Data: AI & Search Engine Discoverable -->
   <script type="application/ld+json">
@@ -53,7 +76,8 @@
     window.addEventListener('beforeinstallprompt', (e) => {
       // 1. Default install banner roko
       e.preventDefault();
-      // 2. Event ko global variable me save kar lo
+
+      // 2. Event ko global variable me save kar do
       window.deferredPrompt = e;
       console.log("📱 Global PWA Event Captured inside HTML!");
     });
@@ -61,7 +85,12 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <h1
+      style="position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0;">
+      InterviewMinds - AI Mock Interview Platform
+    </h1>
+  </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 

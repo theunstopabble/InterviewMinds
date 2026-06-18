@@ -70,9 +70,8 @@ function Home() {
               <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
                 <FileText className="w-5 h-5 text-blue-400" />
               </div>
-              <h2 className="text-xl font-semibold text-white">Resume Found</h2>
+              <h3 className="text-xl font-semibold text-white">Resume Found</h3>
             </div>
-
             <p className="text-slate-400 text-sm mb-6 leading-relaxed">
               We found a saved resume from your last session. Would you like to
               continue with it or start fresh?
@@ -134,7 +133,8 @@ function Home() {
 function App() {
   const location = useLocation();
   const isFocusMode = location.pathname === "/interview";
-  const isPublicPage = location.pathname === "/sign-in" || location.pathname === "/sign-up";
+  const isPublicPage =
+    location.pathname === "/sign-in" || location.pathname === "/sign-up";
 
   return (
     <div className="relative min-h-screen flex flex-col bg-gray-950 text-white font-sans selection:bg-blue-500/30">
@@ -142,7 +142,9 @@ function App() {
       <SignedIn>{!isFocusMode && <Navbar />}</SignedIn>
 
       {/* Main Content Area */}
-      <div className={`flex-1 ${isFocusMode || isPublicPage ? "" : "pt-16 sm:pt-20"}`}>
+      <div
+        className={`flex-1 ${isFocusMode || isPublicPage ? "" : "pt-16 sm:pt-20"}`}
+      >
         <AxiosInterceptor>
           <Routes>
             {/* 🔓 Public Route: Sign In */}
