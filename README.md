@@ -205,7 +205,7 @@ InterviewMinds/
 │
 ├── packages/
 │   └── shared/                     # Shared TypeScript types & interfaces
-├── docs/                           # Comprehensive documentation (7 files)
+├── docs/                           # Comprehensive documentation (8 files)
 ├── screenshots/                    # Application screenshots
 ├── .github/workflows/              # CI/CD (GitHub Actions)
 ├── turbo.json                      # Turborepo build config
@@ -329,6 +329,7 @@ The app requires only **5 keys** to run. All other 45+ features gracefully degra
 
 | Document | Description |
 |----------|-------------|
+| [`docs/AI_DISCOVERABILITY_FRAMEWORKS.md`](docs/AI_DISCOVERABILITY_FRAMEWORKS.md) | AI answer engine & generative search optimization (AEO, GEO, LLMO, AISEO, E-E-A-T, SEO) |
 | [`docs/API.md`](docs/API.md) | Complete REST + GraphQL API reference (150+ endpoints) |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, middleware pipeline, CRDT algorithm, ML pipeline |
 | [`docs/DB_SCHEMA.md`](docs/DB_SCHEMA.md) | 7 MongoDB models with field-level documentation |
