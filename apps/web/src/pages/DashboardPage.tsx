@@ -53,7 +53,7 @@ function DashboardPage() {
   const latestInterview = interviews.length > 0 ? interviews[0] : null;
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 md:p-12">
+    <div className="min-h-screen bg-gray-950 text-white p-6 md:p-12">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* --- Header (Cleaned - No Duplicate Button) --- */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -71,7 +71,7 @@ function DashboardPage() {
         {/* --- Stats Cards --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Total Interviews */}
-          <Card className="bg-slate-900/50 border-slate-800">
+          <Card className="bg-gray-800 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-slate-400">
                 Total Interviews
@@ -90,7 +90,7 @@ function DashboardPage() {
           </Card>
 
           {/* Average Rating */}
-          <Card className="bg-slate-900/50 border-slate-800">
+          <Card className="bg-gray-800 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-slate-400">
                 Avg. Performance
@@ -112,7 +112,7 @@ function DashboardPage() {
           </Card>
 
           {/* Latest Activity */}
-          <Card className="bg-slate-900/50 border-slate-800">
+          <Card className="bg-gray-800 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-slate-400">
                 Latest Activity
@@ -185,7 +185,7 @@ function DashboardPage() {
                             : "bg-red-500/10 text-red-400 border-red-500/20"
                       }`}
                     >
-                      {Math.round(interview.score / 10)}
+                      {Math.round((interview.score || 0) / 10)}
                     </div>
 
                     {/* Details */}
