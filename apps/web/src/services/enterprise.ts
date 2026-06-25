@@ -545,7 +545,7 @@ export const analyticsService = {
 export const schedulingService = {
   getTimezones: () => fetchAPI<string[]>('/scheduling/timezones'),
 
-  getUserTimezone: () => fetchAPI<string>('/scheduling/user-timezone'),
+  getUserTimezone: () => fetchAPI<{ timezone: string }>('/scheduling/user-timezone'),
 
   getAvailableSlots: (interviewerId: string, date: string, timezone: string) =>
     fetchAPI<{ slots: any[] }>(`/scheduling/slots/${interviewerId}?date=${date}&timezone=${timezone}`),

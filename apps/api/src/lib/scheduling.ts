@@ -22,6 +22,7 @@ export interface ScheduledInterview {
   status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'no-show';
   reminderSent: boolean;
   interviewType: 'live' | 'async' | 'take-home';
+  role: string;
   meetingLink?: string;
   notes?: string;
   createdAt: Date;
@@ -153,7 +154,8 @@ class SchedulingService {
     interviewerId: string,
     slotId: string,
     candidateId: string,
-    interviewType: 'live' | 'async' | 'take-home' = 'live'
+    interviewType: 'live' | 'async' | 'take-home' = 'live',
+    role: string = 'Technical Interview'
   ): ScheduledInterview | null {
     const storedSlots = this.slots.get(interviewerId);
     if (!storedSlots) return null;
@@ -178,6 +180,7 @@ class SchedulingService {
       status: 'scheduled',
       reminderSent: false,
       interviewType,
+      role,
       meetingLink: `https://interviewminds.com/interview/${uuidv4()}`,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -281,8 +284,12 @@ export function getTimezones(): string[] {
   return schedulingService.getTimezones();
 }
 
-export function getUpcomingInterviews(_candidateId?: string): any {
-  return [];
+export function getUserTimezone(): string {
+  return schedulingService.getUserTimezone();
+}
+
+export function getUpcomingInterviews(candidateId: string = 'default'): any {
+  return schedulingService.getUpcomingInterviews(candidateId);
 }
 
 export function getAvailableSlots(tenantId: string, date: string, timezone: string): any {
@@ -292,9 +299,8 @@ export function getAvailableSlots(tenantId: string, date: string, timezone: stri
   return schedulingService.getAvailableSlots(tenantId, localDate, timezone);
 }
 
-export function bookSlot(tenantId: string, slotId: string, type: any, candidateId?: string): any {
-  // Service expects: interviewerId, slotId, candidateId, interviewType
-  const result = schedulingService.bookSlot(tenantId, slotId, candidateId || "default", type || "live");
+export function bookSlot(tenantId: string, slotId: string, type: any, candidateId?: string, role?: string): any {
+  const result = schedulingService.bookSlot(tenantId, slotId, candidateId || "default", type || "live", role || "Technical Interview");
   if (!result) {
     throw new Error('Slot not found or already booked');
   }

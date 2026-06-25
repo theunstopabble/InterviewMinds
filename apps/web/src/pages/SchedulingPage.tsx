@@ -31,23 +31,32 @@ export default function SchedulingPage() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
   useEffect(() => {
-    // Get tenant ID from Clerk organization
     const orgId = (window as any).Clerk?.organization?.id || getCurrentTenantId();
     setTenantId(orgId);
     loadInitialData();
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'calendar') {
+      loadSlots(selectedDate);
+    }
+  }, [activeTab, selectedDate]);
+
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      const [tzData, upcomingData] = await Promise.all([
+      const [tzData, userTzData, upcomingData] = await Promise.all([
         schedulingService.getTimezones().catch(() => ({ timezones: [] })),
+        schedulingService.getUserTimezone().catch(() => null),
         schedulingService.getUpcoming().catch(() => ({ interviews: [] })),
       ]);
       const tzArray = Array.isArray(tzData) ? tzData : (tzData?.timezones || []);
       setTimezones(tzArray);
       setUpcomingInterviews(upcomingData?.interviews || []);
-      if (tzArray.length > 0) {
+      const detectedTz = userTzData?.timezone;
+      if (detectedTz && tzArray.includes(detectedTz)) {
+        setSelectedTimezone(detectedTz);
+      } else if (tzArray.length > 0) {
         setSelectedTimezone(tzArray[0] as string);
       }
     } catch (e) {
@@ -70,12 +79,20 @@ export default function SchedulingPage() {
     }
   };
 
+  const loadUpcoming = async () => {
+    try {
+      const data = await schedulingService.getUpcoming();
+      setUpcomingInterviews(data?.interviews || []);
+    } catch {}
+  };
+
   const bookSlot = async (slotId: string, type: 'live' | 'async' | 'take-home') => {
     try {
       const result = await schedulingService.bookSlot(tenantId, slotId, type);
       if (result?.success || result?.interview) {
         toast.success('Interview booked successfully!');
         loadSlots(selectedDate);
+        loadUpcoming();
       } else {
         toast.error('Failed to book slot. Please try again.');
       }
@@ -264,7 +281,7 @@ export default function SchedulingPage() {
                       {availableSlots.map((slot) => (
                         <button
                           key={slot.time}
-                          onClick={() => bookSlot(slot.id, 'live')}
+                          onClick={() => bookSlot(slot.id, (selectedType || 'live') as 'live' | 'async' | 'take-home')}
                           className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition"
                         >
                           {slot.time}
@@ -333,13 +350,13 @@ export default function SchedulingPage() {
                   {availableSlots.map((slot: any, i: number) => (
                     <div
                       key={slot.id || i}
-                      onClick={() => schedulingService.bookSlot(tenantId, slot.id, (selectedType || 'live') as 'live' | 'async' | 'take-home')}
+                      onClick={() => slot.available && bookSlot(slot.id, (selectedType || 'live') as 'live' | 'async' | 'take-home')}
                       className={`p-4 rounded-lg border transition cursor-pointer ${
                         slot.available ? 'bg-gray-700 border-gray-600 hover:border-blue-500' : 'bg-gray-800 border-gray-700 opacity-50 cursor-not-allowed'
                       }`}
                     >
                       <div className="font-semibold">
-                        {new Date(slot.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {slot.time || new Date(slot.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                       <div className="text-sm text-gray-400">{slot.available ? 'Available' : 'Booked'}</div>
                     </div>

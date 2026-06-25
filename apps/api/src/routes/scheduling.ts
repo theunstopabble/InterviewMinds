@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { 
   getTimezones, 
+  getUserTimezone, 
   getUpcomingInterviews, 
   getAvailableSlots, 
   bookSlot, 
@@ -22,13 +23,25 @@ router.get('/timezones', async (_req, res) => {
 });
 
 // GET /api/scheduling/upcoming
-router.get('/upcoming', async (_req, res) => {
+router.get('/upcoming', async (req, res) => {
   try {
-    const interviews = getUpcomingInterviews();
+    const { candidateId } = req.query;
+    const interviews = getUpcomingInterviews(candidateId as string || 'default');
     res.json({ interviews });
   } catch (error) {
     console.error('Error fetching upcoming interviews:', error);
     res.status(500).json({ error: 'Failed to fetch upcoming interviews' });
+  }
+});
+
+// GET /api/scheduling/user-timezone
+router.get('/user-timezone', async (_req, res) => {
+  try {
+    const timezone = getUserTimezone();
+    res.json({ timezone });
+  } catch (error) {
+    console.error('Error fetching user timezone:', error);
+    res.status(500).json({ error: 'Failed to fetch user timezone' });
   }
 });
 
@@ -48,8 +61,8 @@ router.get('/slots/:tenantId', async (req, res) => {
 // POST /api/scheduling/book
 router.post('/book', async (req, res) => {
   try {
-    const { tenantId, slotId, type, candidateId } = req.body;
-    const interview = bookSlot(tenantId, slotId, (type as "live" | "async" | "take-home") || "live", candidateId);
+    const { tenantId, slotId, type, candidateId, role } = req.body;
+    const interview = bookSlot(tenantId, slotId, (type as "live" | "async" | "take-home") || "live", candidateId, role);
     res.json({ success: true, interview });
   } catch (error) {
     console.error('Error booking slot:', error);
