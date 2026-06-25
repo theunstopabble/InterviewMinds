@@ -314,10 +314,9 @@ export default function Navbar() {
 
       {/* ================= MOBILE MENU DROPDOWN ================= */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-black/95 backdrop-blur-xl border-b border-white/10 p-4 space-y-3 animate-in slide-in-from-top-2 absolute w-full left-0 shadow-2xl">
+        <div className="md:hidden bg-black/95 backdrop-blur-xl border-b border-white/10 p-4 space-y-1 animate-in slide-in-from-top-2 absolute w-full left-0 shadow-2xl max-h-[80vh] overflow-y-auto">
           {isSignedIn ? (
             <>
-              {/* Fallback Install Button inside Menu (Purple Theme) */}
               {!isInstalled && deferredPrompt && (
                 <Button
                   onClick={handleInstallClick}
@@ -328,33 +327,61 @@ export default function Navbar() {
                 </Button>
               )}
 
-              <Link to="/dashboard">
-                <Button
-                  variant="ghost"
-                  className={`w-full justify-start gap-2 ${
-                    isActive("/dashboard")
-                      ? "bg-white/10 text-white"
-                      : "text-slate-300 hover:text-white hover:bg-white/5"
-                  }`}
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  Dashboard
+              <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button variant="ghost" className={`w-full justify-start gap-2 ${isActive("/dashboard") ? "bg-white/10 text-white" : "text-slate-300 hover:text-white hover:bg-white/5"}`}>
+                  <LayoutDashboard className="w-4 h-4" /> Dashboard
                 </Button>
               </Link>
 
-              {/* 🚀 Mobile Link to Home */}
-              <Link to="/">
-                <Button className="w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg">
-                  <PlusCircle className="w-4 h-4" />
-                  New Interview
+              <Link to="/analytics" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button variant="ghost" className={`w-full justify-start gap-2 ${isActive("/analytics") ? "bg-white/10 text-white" : "text-slate-300 hover:text-white hover:bg-white/5"}`}>
+                  <BarChart3 className="w-4 h-4" /> Analytics
                 </Button>
               </Link>
+
+              <Link to="/scheduling" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button variant="ghost" className={`w-full justify-start gap-2 ${isActive("/scheduling") ? "bg-white/10 text-white" : "text-slate-300 hover:text-white hover:bg-white/5"}`}>
+                  <Calendar className="w-4 h-4" /> Schedule
+                </Button>
+              </Link>
+
+              <Link to="/questions" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button variant="ghost" className={`w-full justify-start gap-2 ${isActive("/questions") ? "bg-white/10 text-white" : "text-slate-300 hover:text-white hover:bg-white/5"}`}>
+                  <FileText className="w-4 h-4" /> Questions
+                </Button>
+              </Link>
+
+              <Link to="/reports" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button variant="ghost" className={`w-full justify-start gap-2 ${isActive("/reports") ? "bg-white/10 text-white" : "text-slate-300 hover:text-white hover:bg-white/5"}`}>
+                  <FileBarChart className="w-4 h-4" /> Reports
+                </Button>
+              </Link>
+
+              <Link to="/settings" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button variant="ghost" className={`w-full justify-start gap-2 ${isActive("/settings") ? "bg-white/10 text-white" : "text-slate-300 hover:text-white hover:bg-white/5"}`}>
+                  <Settings className="w-4 h-4" /> Settings
+                </Button>
+              </Link>
+
+              {userRole === "admin" && (
+                <Link to="/admin" onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button variant="ghost" className={`w-full justify-start gap-2 ${isActive("/admin") ? "bg-white/10 text-white" : "text-slate-300 hover:text-white hover:bg-white/5"}`}>
+                    <Shield className="w-4 h-4" /> Admin
+                  </Button>
+                </Link>
+              )}
+
+              <div className="border-t border-white/10 my-2 pt-2">
+                <Link to="/" onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button className="w-full justify-start gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg">
+                    <PlusCircle className="w-4 h-4" /> New Interview
+                  </Button>
+                </Link>
+              </div>
             </>
           ) : (
             <Link to="/sign-in">
-              <Button className="w-full bg-blue-600 hover:bg-blue-500 text-white">
-                Sign In
-              </Button>
+              <Button className="w-full bg-blue-600 hover:bg-blue-500 text-white">Sign In</Button>
             </Link>
           )}
         </div>

@@ -113,12 +113,12 @@ export default function InterviewPage() {
   }, []);
 
   useEffect(() => {
-    if (window.innerWidth < 1024) return;
+    if (isMobile) return;
     if (!localStorage.getItem("resumeId")) {
       toast.error("No resume found");
       navigate("/");
     }
-  }, [navigate]);
+  }, [navigate, isMobile]);
 
   useEffect(() => {
     if (transcript) setInput(transcript);

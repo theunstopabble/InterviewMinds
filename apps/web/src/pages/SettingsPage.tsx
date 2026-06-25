@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { biometricService, ssoService, encryptionService, geoFencingService } from '../services/enterprise';
 
 function getCurrentUserId(): string {
-  // @ts-ignore - Clerk global
-  return window.Clerk?.user?.id || 'default-user';
+  return (window as any).Clerk?.user?.id || 'default-user';
 }
 
 export default function SettingsPage() {
@@ -12,14 +11,12 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('security');
   const [loading, setLoading] = useState(false);
 
-  // State for various settings
   const [biometricStatus, setBiometricStatus] = useState<any>(null);
   const [ssoConfig, setSsoConfig] = useState<any>(null);
   const [encryptionStatus, setEncryptionStatus] = useState<any>(null);
   const [geoConfig, setGeoConfig] = useState<any>(null);
 
   useEffect(() => {
-    // Get user ID from Clerk
     const uid = (window as any).Clerk?.user?.id || getCurrentUserId();
     loadSettings(uid);
   }, []);

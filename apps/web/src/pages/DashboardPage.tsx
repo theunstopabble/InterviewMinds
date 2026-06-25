@@ -253,11 +253,11 @@ class DashboardErrorBoundary extends Component<{ children: React.ReactNode }, Er
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="min-h-screen flex items-center justify-center bg-black">
           <div className="text-center p-8">
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Something went wrong</h2>
-            <p className="text-slate-600 mb-4">{this.state.error?.message || "An unexpected error occurred"}</p>
+            <h2 className="text-2xl font-bold text-white mb-2">Something went wrong</h2>
+            <p className="text-slate-400 mb-4">{this.state.error?.message || "An unexpected error occurred"}</p>
             <Button onClick={() => window.location.reload()}>Refresh Page</Button>
           </div>
         </div>

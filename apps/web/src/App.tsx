@@ -129,6 +129,18 @@ function Home() {
   );
 }
 
+// 🔒 Reusable Protected Route Wrapper
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <SignedIn>{children}</SignedIn>
+      <SignedOut>
+        <Navigate to="/sign-in" replace />
+      </SignedOut>
+    </>
+  );
+}
+
 // 🌐 Main App Component
 function App() {
   const location = useLocation();
@@ -150,200 +162,20 @@ function App() {
             {/* 🔓 Public Route: Sign In */}
             <Route path="/sign-in" element={<SignInPage />} />
 
-            {/* 🔒 Protected Route: Home (Resume Upload) */}
-            <Route
-              path="/"
-              element={
-                <>
-                  <SignedIn>
-                    <Home />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Dashboard (History & Stats) */}
-            <Route
-              path="/dashboard"
-              element={
-                <>
-                  <SignedIn>
-                    <DashboardPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Interview Session */}
-            <Route
-              path="/interview"
-              element={
-                <>
-                  <SignedIn>
-                    <InterviewPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Feedback Report */}
-            <Route
-              path="/feedback/:id"
-              element={
-                <>
-                  <SignedIn>
-                    <FeedbackPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Enterprise Settings */}
-            <Route
-              path="/settings"
-              element={
-                <>
-                  <SignedIn>
-                    <SettingsPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Analytics Dashboard */}
-            <Route
-              path="/analytics"
-              element={
-                <>
-                  <SignedIn>
-                    <AnalyticsPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Admin Dashboard */}
-            <Route
-              path="/admin"
-              element={
-                <>
-                  <SignedIn>
-                    <AdminPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Candidate Portal */}
-            <Route
-              path="/candidate-portal"
-              element={
-                <>
-                  <SignedIn>
-                    <CandidatePortal />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Scheduling */}
-            <Route
-              path="/scheduling"
-              element={
-                <>
-                  <SignedIn>
-                    <SchedulingPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Question Bank */}
-            <Route
-              path="/questions"
-              element={
-                <>
-                  <SignedIn>
-                    <QuestionBankPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Reports */}
-            <Route
-              path="/reports"
-              element={
-                <>
-                  <SignedIn>
-                    <ReportsPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Preparation */}
-            <Route
-              path="/preparation"
-              element={
-                <>
-                  <SignedIn>
-                    <PreparationPage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
-
-            {/* 🔒 Protected Route: Pipeline */}
-            <Route
-              path="/pipeline"
-              element={
-                <>
-                  <SignedIn>
-                    <PipelinePage />
-                  </SignedIn>
-                  <SignedOut>
-                    <Navigate to="/sign-in" replace />
-                  </SignedOut>
-                </>
-              }
-            />
+            {/* 🔒 Protected Routes */}
+            <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+            <Route path="/interview" element={<ProtectedRoute><InterviewPage /></ProtectedRoute>} />
+            <Route path="/feedback/:id" element={<ProtectedRoute><FeedbackPage /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+            <Route path="/candidate-portal" element={<ProtectedRoute><CandidatePortal /></ProtectedRoute>} />
+            <Route path="/scheduling" element={<ProtectedRoute><SchedulingPage /></ProtectedRoute>} />
+            <Route path="/questions" element={<ProtectedRoute><QuestionBankPage /></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+            <Route path="/preparation" element={<ProtectedRoute><PreparationPage /></ProtectedRoute>} />
+            <Route path="/pipeline" element={<ProtectedRoute><PipelinePage /></ProtectedRoute>} />
 
             {/* 404 Catch-All */}
             <Route path="*" element={<Navigate to="/" replace />} />
