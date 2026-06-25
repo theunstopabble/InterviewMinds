@@ -14,6 +14,18 @@ export default function SignInPage() {
 
       {/* Clerk ka bana-banaya Login Component */}
       <SignIn />
+
+      <div className="mt-8 text-center">
+        <p className="text-gray-500 text-xs mb-2">Don't have a resume yet?</p>
+        <a
+          href="https://texfolio.vercel.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+        >
+          Build one with TexFolio →
+        </a>
+      </div>
     </div>
   );
 }

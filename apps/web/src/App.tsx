@@ -123,6 +123,23 @@ function Home() {
           )}
 
           <ResumeUpload />
+
+          {!hasResume && (
+            <div className="mt-6 text-center border border-slate-800 rounded-xl p-5 bg-slate-900/30">
+              <p className="text-slate-400 text-sm mb-3">
+                Don't have a resume yet?
+              </p>
+              <a
+                href="https://texfolio.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg text-sm font-medium transition-all shadow-lg shadow-emerald-600/20"
+              >
+                <FileText className="w-4 h-4" />
+                Build One with TexFolio →
+              </a>
+            </div>
+          )}
         </div>
       )}
     </div>
