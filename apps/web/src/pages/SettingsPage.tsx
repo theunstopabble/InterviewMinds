@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { biometricService, ssoService, encryptionService, geoFencingService } from '../services/enterprise';
 
 function getCurrentUserId(): string {
@@ -89,10 +90,10 @@ export default function SettingsPage() {
         ) : (
           <div className="bg-gray-800 rounded-xl p-6">
             {activeTab === 'security' && <SecuritySettings />}
-            {activeTab === 'biometric' && <BiometricSettings status={biometricStatus} />}
-            {activeTab === 'sso' && <SSOSettings config={ssoConfig} />}
+            {activeTab === 'biometric' && <BiometricSettings status={biometricStatus} userId={getCurrentUserId()} />}
+            {activeTab === 'sso' && <SSOSettings config={ssoConfig} userId={getCurrentUserId()} />}
             {activeTab === 'geo' && <GeoSettings config={geoConfig} />}
-            {activeTab === 'encryption' && <EncryptionSettings status={encryptionStatus} />}
+            {activeTab === 'encryption' && <EncryptionSettings status={encryptionStatus} userId={getCurrentUserId()} />}
           </div>
         )}
       </div>
@@ -135,8 +136,26 @@ function SecuritySettings() {
   );
 }
 
-function BiometricSettings({ status }: { status: any }) {
+function BiometricSettings({ status, userId }: { status: any; userId: string }) {
   const [enrolling, setEnrolling] = useState(false);
+  const [selectedType, setSelectedType] = useState<'face' | 'voice' | 'fingerprint'>('face');
+  const [enrollingLoading, setEnrollingLoading] = useState(false);
+
+  const handleEnroll = async () => {
+    setEnrollingLoading(true);
+    try {
+      const result = await biometricService.enroll(userId, selectedType, []);
+      if (result.success) {
+        toast.success(`Enrolled ${selectedType} successfully`);
+        setEnrolling(false);
+      } else {
+        toast.error('Enrollment failed');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Enrollment failed');
+    }
+    setEnrollingLoading(false);
+  };
 
   return (
     <div>
@@ -174,25 +193,76 @@ function BiometricSettings({ status }: { status: any }) {
           </div>
         </div>
         {enrolling ? (
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-            <p className="text-sm text-blue-400">Enrollment flow started. Follow the on-screen instructions.</p>
-            <button onClick={() => setEnrolling(false)} className="mt-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+          <div className="bg-gray-700 p-4 rounded-lg space-y-3">
+            <h3 className="font-medium">Select biometric type to enroll</h3>
+            <div className="flex gap-3">
+              {(['face', 'voice', 'fingerprint'] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setSelectedType(type)}
+                  className={`px-4 py-2 rounded-lg capitalize ${
+                    selectedType === type ? 'bg-blue-600' : 'bg-gray-600 hover:bg-gray-500'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleEnroll}
+                disabled={enrollingLoading}
+                className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition disabled:opacity-50"
+              >
+                {enrollingLoading ? 'Enrolling...' : 'Confirm Enrollment'}
+              </button>
+              <button
+                onClick={() => setEnrolling(false)}
+                className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500 transition"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         ) : (
-        <button
-          onClick={() => setEnrolling(true)}
-          className="mt-4 px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition"
-        >
-          + Enroll New Biometric
-        </button>
+          <button
+            onClick={() => setEnrolling(true)}
+            className="mt-4 px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition"
+          >
+            + Enroll New Biometric
+          </button>
         )}
       </div>
     </div>
   );
 }
 
-function SSOSettings({ config }: { config: any }) {
+function SSOSettings({ config, userId }: { config: any; userId: string }) {
   const providers = ['okta', 'azure-ad', 'google-workspace', 'custom'];
+
+  const handleSetup = async (provider: string) => {
+    try {
+      const result = await ssoService.getLoginUrl(provider);
+      if (result.redirectUrl) {
+        toast.info(`Redirecting to ${provider}...`);
+        window.location.href = result.redirectUrl;
+      } else {
+        toast.error('Failed to get SSO login URL');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'SSO setup failed');
+    }
+  };
+
+  const handleDisconnect = async (provider: string) => {
+    try {
+      await ssoService.configure({ provider: null, enabled: false, userId });
+      toast.success(`${provider} disconnected`);
+      window.location.reload();
+    } catch (e: any) {
+      toast.error(e.message || 'Disconnect failed');
+    }
+  };
 
   return (
     <div>
@@ -207,9 +277,10 @@ function SSOSettings({ config }: { config: any }) {
               </p>
             </div>
             <button
+              onClick={() => config?.provider === provider ? handleDisconnect(provider) : handleSetup(provider)}
               className={`px-4 py-2 rounded-lg ${
                 config?.provider === provider
-                  ? 'bg-green-600'
+                  ? 'bg-green-600 hover:bg-green-500'
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
@@ -283,7 +354,33 @@ function GeoSettings({ config }: { config: any }) {
   );
 }
 
-function EncryptionSettings({ status }: { status: any }) {
+function EncryptionSettings({ status, userId }: { status: any; userId: string }) {
+  const handleGenerateKeys = async () => {
+    const password = prompt('Enter a password for key generation:');
+    if (!password) return;
+    try {
+      await encryptionService.createKeys(userId, password);
+      toast.success('Keys generated successfully');
+      window.location.reload();
+    } catch (e: any) {
+      toast.error(e.message || 'Key generation failed');
+    }
+  };
+
+  const handleRotateKeys = async () => {
+    const oldPassword = prompt('Enter current password:');
+    if (!oldPassword) return;
+    const newPassword = prompt('Enter new password:');
+    if (!newPassword) return;
+    try {
+      await encryptionService.rotateKeys(userId, oldPassword, newPassword);
+      toast.success('Keys rotated successfully');
+      window.location.reload();
+    } catch (e: any) {
+      toast.error(e.message || 'Key rotation failed');
+    }
+  };
+
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4">End-to-End Encryption</h2>
@@ -308,10 +405,10 @@ function EncryptionSettings({ status }: { status: any }) {
           </div>
         </div>
         <div className="flex gap-4 mt-4">
-          <button className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition">
+          <button onClick={handleGenerateKeys} className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition">
             Generate New Keys
           </button>
-          <button className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500 transition">
+          <button onClick={handleRotateKeys} className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500 transition">
             Rotate Keys
           </button>
         </div>
