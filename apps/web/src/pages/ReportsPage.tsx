@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { reportService } from '../services/enterprise';
 
 interface Report {
@@ -45,10 +46,14 @@ export default function ReportsPage() {
   const generateReport = async () => {
     setLoading(true);
     try {
-      await reportService.generate(userId, []).catch(() => {});
+      const result = await reportService.generate(userId, []);
+      if (result?.success || result?.report) {
+        toast.success('Report generated successfully!');
+      }
       loadReports(userId);
     } catch (e) {
       console.error('Error generating report:', e);
+      toast.error('Failed to generate report');
     }
     setLoading(false);
   };
@@ -57,27 +62,17 @@ export default function ReportsPage() {
     try {
       if (exportFormat === 'pdf') {
         await reportService.downloadPDF(reportId);
+        toast.success('Report downloaded');
       } else if (exportFormat === 'csv') {
-        const data = await reportService.downloadCSV([reportId]);
-        const blob = new Blob([data], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `report-${reportId}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+        await reportService.downloadCSV([reportId]);
+        toast.success('CSV exported');
       } else {
-        const data = await reportService.downloadJSON([reportId]);
-        const blob = new Blob([data], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `report-${reportId}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+        await reportService.downloadJSON([reportId]);
+        toast.success('JSON exported');
       }
     } catch (e) {
       console.error('Error downloading report:', e);
+      toast.error('Download failed. Please try again.');
     }
   };
 

@@ -680,26 +680,57 @@ export const reportService = {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     });
     if (!response.ok) throw new Error('PDF download failed');
-    const blob = await response.blob();
+    const text = await response.text();
+    const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `report-${reportId}.pdf`;
+    a.download = `report-${reportId}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   },
 
-  downloadCSV: (reportIds: string[]) =>
-    fetchAPI<string>('/reports/export/csv', {
+  downloadCSV: async (reportIds: string[]) => {
+    const token = await window.Clerk?.session?.getToken();
+    const response = await fetch(`${API_URL}/reports/export/csv`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ reportIds }),
-    }),
+    });
+    if (!response.ok) throw new Error('CSV download failed');
+    const text = await response.text();
+    const blob = new Blob([text], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reports-export.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 
-  downloadJSON: (reportIds: string[]) =>
-    fetchAPI<string>('/reports/export/json', {
+  downloadJSON: async (reportIds: string[]) => {
+    const token = await window.Clerk?.session?.getToken();
+    const response = await fetch(`${API_URL}/reports/export/json`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ reportIds }),
-    }),
+    });
+    if (!response.ok) throw new Error('JSON download failed');
+    const text = await response.text();
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reports-export.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };
 
 // ============== Async Video ==============
