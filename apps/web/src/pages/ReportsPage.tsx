@@ -65,6 +65,7 @@ export default function ReportsPage() {
         a.href = url;
         a.download = `report-${reportId}.csv`;
         a.click();
+        URL.revokeObjectURL(url);
       } else {
         const data = await reportService.downloadJSON([reportId]);
         const blob = new Blob([data], { type: 'application/json' });
@@ -73,6 +74,7 @@ export default function ReportsPage() {
         a.href = url;
         a.download = `report-${reportId}.json`;
         a.click();
+        URL.revokeObjectURL(url);
       }
     } catch (e) {
       console.error('Error downloading report:', e);
@@ -93,7 +95,7 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -163,7 +165,7 @@ export default function ReportsPage() {
               reports.map((report) => (
                 <div
                   key={report.reportId}
-                  className="bg-gray-800 rounded-xl p-4 hover:bg-gray-750 transition cursor-pointer"
+                  className="bg-gray-800 rounded-xl p-4 hover:bg-gray-700 transition cursor-pointer"
                   onClick={() => setSelectedReport(report)}
                 >
                   <div className="flex items-center justify-between">

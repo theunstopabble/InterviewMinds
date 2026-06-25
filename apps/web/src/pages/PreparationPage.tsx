@@ -29,6 +29,7 @@ export default function PreparationPage() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [breakTimerActive, setBreakTimerActive] = useState(false);
   const [breakTime, setBreakTime] = useState(0);
+  const [showSampleAnswer, setShowSampleAnswer] = useState(false);
 
   const runSystemCheck = async () => {
     setChecking(true);
@@ -110,7 +111,7 @@ export default function PreparationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -248,18 +249,17 @@ export default function PreparationPage() {
             </div>
 
             <div className="mb-6">
-              <button
-                onClick={() => {
-                  const el = document.getElementById('sample-answer');
-                  if (el) el.classList.toggle('hidden');
-                }}
-                className="text-blue-400 hover:text-blue-300 text-sm"
-              >
-                📝 Show Sample Answer
-              </button>
-              <div id="sample-answer" className="hidden mt-3 p-4 bg-blue-500/10 rounded-lg text-gray-300">
-                {questions[currentQuestion].sampleAnswer}
-              </div>
+                <button
+                  onClick={() => setShowSampleAnswer(!showSampleAnswer)}
+                  className="text-blue-400 hover:text-blue-300 text-sm"
+                >
+                  📝 {showSampleAnswer ? 'Hide' : 'Show'} Sample Answer
+                </button>
+                {showSampleAnswer && (
+                <div className="mt-3 p-4 bg-blue-500/10 rounded-lg text-gray-300">
+                  {questions[currentQuestion].sampleAnswer}
+                </div>
+                )}
             </div>
 
             <div className="flex gap-4">

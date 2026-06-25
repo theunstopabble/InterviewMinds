@@ -30,9 +30,10 @@ export function detectAnomalies(
     return values.map(v => ({ isAnomaly: false, score: 0 }));
   }
 
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
   const stats = {
-    mean: values.reduce((a, b) => a + b, 0) / values.length,
-    std: Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - values[0], 2), 0) / values.length),
+    mean,
+    std: Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length),
   };
 
   return values.map(value => {

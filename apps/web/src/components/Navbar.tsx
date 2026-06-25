@@ -3,6 +3,7 @@ import { UserButton, useAuth } from "@clerk/clerk-react";
 import { LayoutDashboard, PlusCircle, Download, Menu, X, BarChart3, Shield, Settings, Calendar, FileText, FileBarChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
+import { api } from "@/lib/api";
 
 // ✅ TypeScript definition for Global Window Variable
 declare global {
@@ -27,14 +28,8 @@ export default function Navbar() {
 
   const fetchUserRole = async () => {
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:8000/api"}/users/me/role`,
-        {
-          headers: { Authorization: `Bearer ${await window.Clerk?.session?.getToken()}` },
-        }
-      );
-      const data = await response.json();
-      setUserRole(data.role || "candidate");
+      const response = await api.get("/users/me/role");
+      setUserRole(response.data.role || "candidate");
     } catch {
       setUserRole("candidate");
     }

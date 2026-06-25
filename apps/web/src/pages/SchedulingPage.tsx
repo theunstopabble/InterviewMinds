@@ -28,6 +28,7 @@ export default function SchedulingPage() {
   const [selectedTimezone, setSelectedTimezone] = useState('');
   const [loading, setLoading] = useState(false);
   const [tenantId, setTenantId] = useState<string>('default');
+  const [selectedType, setSelectedType] = useState<string | null>(null);
 
   useEffect(() => {
     // Get tenant ID from Clerk organization
@@ -122,7 +123,7 @@ export default function SchedulingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -183,7 +184,7 @@ export default function SchedulingPage() {
                   upcomingInterviews.map((interview) => (
                     <div
                       key={interview.id}
-                      className="bg-gray-800 rounded-xl p-4 flex items-center justify-between hover:bg-gray-750 transition"
+                      className="bg-gray-800 rounded-xl p-4 flex items-center justify-between hover:bg-gray-700 transition"
                     >
                       <div className="flex items-center gap-4">
                         <div className="text-2xl">{getTypeIcon(interview.interviewType)}</div>
@@ -283,11 +284,13 @@ export default function SchedulingPage() {
                       ].map((item) => (
                         <button
                           key={item.type}
-                          onClick={() => {}}
-                          className="p-3 bg-gray-700 hover:bg-gray-600 rounded-lg text-center transition"
+                          onClick={() => setSelectedType(item.type)}
+                          className={`p-3 rounded-lg text-center transition ${
+                            selectedType === item.type ? 'bg-blue-600 ring-2 ring-blue-400' : 'bg-gray-700 hover:bg-gray-600'
+                          }`}
                         >
-                          <div className="text-lg mb-1">{item.label.split(' ')[0]}</div>
-                          <div className="text-xs text-gray-400">{item.label.split(' ')[1]}</div>
+                          <div className="text-lg mb-1">{item.label}</div>
+                          <div className="text-xs text-gray-400">{item.desc}</div>
                         </button>
                       ))}
                     </div>
@@ -303,7 +306,7 @@ export default function SchedulingPage() {
                   <h2 className="text-xl font-semibold">{formatDate(selectedDate)}</h2>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() - 1)))}
+                      onClick={() => setSelectedDate(new Date(selectedDate.getTime() - 86400000))}
                       className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600"
                     >
                       ← Prev
@@ -315,7 +318,7 @@ export default function SchedulingPage() {
                       Today
                     </button>
                     <button
-                      onClick={() => setSelectedDate(new Date(selectedDate.setDate(selectedDate.getDate() + 1)))}
+                      onClick={() => setSelectedDate(new Date(selectedDate.getTime() + 86400000))}
                       className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600"
                     >
                       Next →
@@ -323,19 +326,26 @@ export default function SchedulingPage() {
                   </div>
                 </div>
 
+                {availableSlots.length === 0 ? (
+                  <p className="text-gray-400 text-center py-8">No slots loaded. Check available slots for this date first.</p>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {Array.from({ length: 8 }, (_, i) => i + 9).map((hour) => (
+                  {availableSlots.map((slot: any, i: number) => (
                     <div
-                      key={hour}
-                      className="p-4 bg-gray-700 rounded-lg border border-gray-600 hover:border-blue-500 transition cursor-pointer"
+                      key={slot.id || i}
+                      onClick={() => schedulingService.bookSlot(tenantId, slot.id, (selectedType || 'live') as 'live' | 'async' | 'take-home')}
+                      className={`p-4 rounded-lg border transition cursor-pointer ${
+                        slot.available ? 'bg-gray-700 border-gray-600 hover:border-blue-500' : 'bg-gray-800 border-gray-700 opacity-50 cursor-not-allowed'
+                      }`}
                     >
                       <div className="font-semibold">
-                        {hour > 12 ? `${hour - 12}:00 PM` : `${hour}:00 AM`}
+                        {new Date(slot.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
-                      <div className="text-sm text-gray-400">Available</div>
+                      <div className="text-sm text-gray-400">{slot.available ? 'Available' : 'Booked'}</div>
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             )}
           </>

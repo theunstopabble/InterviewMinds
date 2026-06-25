@@ -30,6 +30,11 @@ export default function QuestionBankPage() {
   const [difficulty, setDifficulty] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [formData, setFormData] = useState({
+    title: '', description: '', type: 'coding', difficulty: 'medium',
+    timeLimit: 30, points: 100,
+  });
 
   useEffect(() => {
     loadData();
@@ -71,6 +76,28 @@ export default function QuestionBankPage() {
     setLoading(false);
   };
 
+  const handleCreate = async () => {
+    try {
+      await questionBankService.create({
+        title: formData.title, description: formData.description,
+        type: formData.type, difficulty: formData.difficulty,
+        timeLimit: formData.timeLimit, points: formData.points,
+      });
+      setShowCreateModal(false);
+      setEditingQuestion(null);
+      setFormData({ title: '', description: '', type: 'coding', difficulty: 'medium', timeLimit: 30, points: 100 });
+      loadData();
+    } catch (e) {
+      console.error('Error creating question:', e);
+    }
+  };
+
+  const handleEditClick = (q: Question) => {
+    setEditingQuestion(q);
+    setFormData({ title: q.title, description: q.description, type: q.type, difficulty: q.difficulty, timeLimit: q.timeLimit, points: q.points });
+    setShowCreateModal(true);
+  };
+
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
       case 'easy':
@@ -104,7 +131,7 @@ export default function QuestionBankPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -199,7 +226,7 @@ export default function QuestionBankPage() {
               questions.map((q) => (
                 <div
                   key={q.id}
-                  className="bg-gray-800 rounded-xl p-4 hover:bg-gray-750 transition cursor-pointer"
+                  className="bg-gray-800 rounded-xl p-4 hover:bg-gray-700 transition cursor-pointer"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -227,7 +254,7 @@ export default function QuestionBankPage() {
                       )}
                     </div>
                     <div className="flex gap-2">
-                      <button className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
+                      <button onClick={() => handleEditClick(q)} className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
                         Edit
                       </button>
                       <button className="px-3 py-1 bg-blue-600 rounded hover:bg-blue-500 text-sm">
@@ -245,12 +272,14 @@ export default function QuestionBankPage() {
         {showCreateModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
             <div className="bg-gray-800 rounded-xl p-6 w-full max-w-2xl">
-              <h2 className="text-2xl font-bold mb-4">Add New Question</h2>
+              <h2 className="text-2xl font-bold mb-4">{editingQuestion ? 'Edit Question' : 'Add New Question'}</h2>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-gray-400 mb-2">Title</label>
                   <input
                     type="text"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
                     placeholder="e.g., Two Sum Problem"
                   />
@@ -258,6 +287,8 @@ export default function QuestionBankPage() {
                 <div>
                   <label className="block text-sm text-gray-400 mb-2">Description</label>
                   <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 h-32"
                     placeholder="Describe the problem..."
                   />
@@ -265,7 +296,8 @@ export default function QuestionBankPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm text-gray-400 mb-2">Type</label>
-                    <select className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2">
+                    <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2">
                       <option value="coding">Coding</option>
                       <option value="multiple-choice">Multiple Choice</option>
                       <option value="sql">SQL</option>
@@ -275,7 +307,8 @@ export default function QuestionBankPage() {
                   </div>
                   <div>
                     <label className="block text-sm text-gray-400 mb-2">Difficulty</label>
-                    <select className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2">
+                    <select value={formData.difficulty} onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2">
                       <option value="easy">Easy</option>
                       <option value="medium">Medium</option>
                       <option value="hard">Hard</option>
@@ -288,29 +321,31 @@ export default function QuestionBankPage() {
                     <label className="block text-sm text-gray-400 mb-2">Time Limit (min)</label>
                     <input
                       type="number"
+                      value={formData.timeLimit}
+                      onChange={(e) => setFormData({ ...formData, timeLimit: parseInt(e.target.value) || 0 })}
                       className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                      defaultValue={30}
                     />
                   </div>
                   <div>
                     <label className="block text-sm text-gray-400 mb-2">Points</label>
                     <input
                       type="number"
+                      value={formData.points}
+                      onChange={(e) => setFormData({ ...formData, points: parseInt(e.target.value) || 0 })}
                       className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2"
-                      defaultValue={100}
                     />
                   </div>
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => { setShowCreateModal(false); setEditingQuestion(null); }}
                   className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition"
                 >
                   Cancel
                 </button>
-                <button className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition">
-                  Create Question
+                <button onClick={handleCreate} className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition">
+                  {editingQuestion ? 'Save Changes' : 'Create Question'}
                 </button>
               </div>
             </div>

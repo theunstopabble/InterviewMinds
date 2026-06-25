@@ -49,7 +49,7 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -136,7 +136,7 @@ function SecuritySettings() {
 }
 
 function BiometricSettings({ status }: { status: any }) {
-  const [, setEnrolling] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
 
   return (
     <div>
@@ -173,12 +173,19 @@ function BiometricSettings({ status }: { status: any }) {
             <span className="text-green-500">● {status?.livenessDetection ? 'Active' : 'Inactive'}</span>
           </div>
         </div>
+        {enrolling ? (
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <p className="text-sm text-blue-400">Enrollment flow started. Follow the on-screen instructions.</p>
+            <button onClick={() => setEnrolling(false)} className="mt-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+          </div>
+        ) : (
         <button
           onClick={() => setEnrolling(true)}
           className="mt-4 px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition"
         >
           + Enroll New Biometric
         </button>
+        )}
       </div>
     </div>
   );
@@ -206,7 +213,7 @@ function SSOSettings({ config }: { config: any }) {
                   : 'bg-gray-600 hover:bg-gray-500'
               }`}
             >
-              {config?.provider === provider ? 'Configure' : 'Setup'}
+              {config?.provider === provider ? 'Configured' : 'Setup'}
             </button>
           </div>
         ))}

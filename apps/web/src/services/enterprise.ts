@@ -674,8 +674,20 @@ export const reportService = {
   getCandidateReports: (candidateId: string) =>
     fetchAPI<{ reports: any[] }>(`/reports/candidate/${candidateId}`),
 
-  downloadPDF: (reportId: string) =>
-    fetchAPI<any>(`/reports/${reportId}/pdf`),
+  downloadPDF: async (reportId: string) => {
+    const token = await window.Clerk?.session?.getToken();
+    const response = await fetch(`${API_URL}/reports/${reportId}/pdf`, {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    if (!response.ok) throw new Error('PDF download failed');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `report-${reportId}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 
   downloadCSV: (reportIds: string[]) =>
     fetchAPI<string>('/reports/export/csv', {

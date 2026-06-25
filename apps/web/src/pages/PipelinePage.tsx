@@ -92,14 +92,14 @@ export default function PipelinePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -141,7 +141,7 @@ export default function PipelinePage() {
             return (
               <div key={stage} className={`p-4 rounded-xl ${stageLabels[stage].color}`}>
                 <div className="text-2xl font-bold">{count}</div>
-                <div className="text-sm text-gray-400">{stageLabels[stage].label.split(' ')[1]}</div>
+                <div className="text-sm text-gray-400 capitalize">{stage}</div>
               </div>
             );
           })}
@@ -206,7 +206,7 @@ export default function PipelinePage() {
               </thead>
               <tbody>
                 {filteredCandidates.map(candidate => (
-                  <tr key={candidate.id} className="border-t border-gray-700 hover:bg-gray-750">
+                  <tr key={candidate.id} className="border-t border-gray-700 hover:bg-gray-700">
                     <td className="px-4 py-3 font-medium">{candidate.name}</td>
                     <td className="px-4 py-3 text-gray-400">{candidate.role}</td>
                     <td className={`px-4 py-3 font-bold ${getScoreColor(candidate.score)}`}>

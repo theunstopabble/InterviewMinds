@@ -185,10 +185,9 @@ export default function WebcamAnalysis({
 
       if (detections.length > 0) {
         const expressions = detections[0].expressions;
-        const maxEmotion = Object.keys(expressions).reduce((a, b) =>
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore
-          expressions[a] > expressions[b] ? a : b,
+        const exps = expressions as unknown as Record<string, number>;
+        const maxEmotion = Object.keys(expressions).reduce((a: string, b: string) =>
+          exps[a] > exps[b] ? a : b,
         );
 
         setCurrentEmotion(maxEmotion);

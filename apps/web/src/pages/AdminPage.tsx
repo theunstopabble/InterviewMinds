@@ -55,8 +55,8 @@ export default function AdminPage() {
           complianceService.getReport(fw).catch(() => ({ framework: fw, status: 'unavailable', lastGenerated: '', controlsPassing: 0, controlsTotal: 0, nextReview: '' }))
         )
       );
-      setReports(results.map(r => ({
-        framework: r.framework || r.framework,
+      setReports(results.map((r, i) => ({
+        framework: r.framework || frameworks[i],
         status: r.status || 'unavailable',
         lastGenerated: r.lastGenerated || new Date().toISOString(),
         controlsPassing: r.controlsPassing || 0,
@@ -83,7 +83,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -134,12 +134,18 @@ export default function AdminPage() {
 }
 
 function CompliancePanel({ controls }: { controls: any[] }) {
+  const frameworkMap = ['SOC 2', 'GDPR', 'HIPAA', 'ISO 27001'].reduce((acc, fw) => {
+    acc[fw] = controls.filter(c => c.category === fw || c.name?.includes(fw));
+    return acc;
+  }, {} as Record<string, any[]>);
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-4 gap-4">
         {['SOC 2', 'GDPR', 'HIPAA', 'ISO 27001'].map((framework) => {
-          const activeCount = controls.filter(c => c.status === 'active').length;
-          const percentage = Math.round((activeCount / (controls.length || 1)) * 100);
+          const fwControls = frameworkMap[framework] || [];
+          const activeCount = fwControls.filter(c => c.status === 'active').length;
+          const percentage = Math.round((activeCount / (fwControls.length || 1)) * 100);
           return (
             <div key={framework} className="bg-gray-800 rounded-xl p-6">
               <h3 className="font-semibold">{framework}</h3>

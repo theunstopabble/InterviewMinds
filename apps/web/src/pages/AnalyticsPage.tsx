@@ -31,7 +31,7 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -193,6 +193,9 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Trends Chart Placeholder */}
+            {(() => {
+              const maxCount = Math.max(...trends.map((d: any) => d.count), 1);
+              return (
             <div className="bg-gray-800 rounded-xl p-6">
               <h2 className="text-xl font-semibold mb-4">Interview Trends (30 Days)</h2>
               <div className="h-64 flex items-end gap-2">
@@ -200,13 +203,15 @@ export default function AnalyticsPage() {
                   <div key={i} className="flex-1 flex flex-col items-center">
                     <div
                       className="w-full bg-blue-500 rounded-t"
-                      style={{ height: `${(day.count / 50) * 100}%`, minHeight: '4px' }}
+                      style={{ height: `${(day.count / maxCount) * 100}%`, minHeight: '4px' }}
                     ></div>
                     <span className="text-xs text-gray-400 mt-2">{new Date(day.date).getDate()}</span>
                   </div>
                 ))}
               </div>
             </div>
+              );
+            })()}
           </div>
         )}
       </div>

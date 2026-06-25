@@ -48,21 +48,13 @@ export function useProctoring(isActive: boolean) {
       triggerViolation("Window Focus Lost");
     };
 
-    // 3. Mouse Leave (User ka mouse browser se bahar gaya)
-    const handleMouseLeave = () => {
-      // Thoda strict hai, isliye sirf count badhayenge, toast spam nahi karenge
-      // triggerViolation("Mouse Left Window");
-    };
-
     // Listeners attach karo
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleBlur);
-    document.body.addEventListener("mouseleave", handleMouseLeave);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
-      document.body.removeEventListener("mouseleave", handleMouseLeave);
     };
   }, [isActive, triggerViolation]);
 
