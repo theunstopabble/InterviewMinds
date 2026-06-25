@@ -21,9 +21,9 @@ export default function AnalyticsPage() {
         analyticsService.getTrends(30).catch(() => ({ trends: [] })),
         analyticsService.getTopPerformers(10).catch(() => ({ performers: [] })),
       ]);
-      setAnalytics(dashboard);
-      setTrends(trendsData.trends || []);
-      setTopPerformers(performers.performers || []);
+      setAnalytics(dashboard?.data || dashboard);
+      setTrends((trendsData?.trends || []).map((t: any) => ({ ...t, count: t.interviews ?? t.count })));
+      setTopPerformers((performers?.performers || []).map((p: any) => ({ ...p, trend: p.trend || 'stable' })));
     } catch (e) {
       console.error('Error loading analytics:', e);
     }
