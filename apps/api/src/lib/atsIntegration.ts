@@ -1,13 +1,15 @@
 import axios from "axios";
 import { logger } from "./logger";
+import { ATSConfigModel } from "../models/ATSConfig";
 
 interface ATSConfig {
-  provider: 'greenhouse' | 'lever' | 'workday' | 'bamboohr';
+  provider: 'greenhouse' | 'lever' | 'workday' | 'bamboohr' | 'ashby';
   apiKey?: string;
   clientId?: string;
   clientSecret?: string;
   tenantUrl?: string;
   webhookUrl?: string;
+  _id?: string;
 }
 
 interface ATSJob {
@@ -43,11 +45,109 @@ interface ATSInterviewResult {
   conductedAt: string;
 }
 
-const atsJobs = new Map<string, ATSJob[]>();
-const atsCandidates = new Map<string, ATSCandidate[]>();
+/* ------------------------------------------------------------------ */
+/*  Local MongoDB storage collections (for local ATS mode)             */
+/* ------------------------------------------------------------------ */
+
+import mongoose from "mongoose";
+
+const localJobSchema = new mongoose.Schema({
+  provider: { type: String, required: true, index: true },
+  job: {
+    id: String,
+    title: String,
+    description: String,
+    requirements: [String],
+    location: String,
+    department: String,
+    status: { type: String, enum: ["open", "closed", "draft"] },
+    createdAt: String,
+  },
+}, { timestamps: true });
+
+const localCandidateSchema = new mongoose.Schema({
+  provider: { type: String, required: true, index: true },
+  jobId: { type: String, index: true },
+  candidate: {
+    id: String,
+    email: String,
+    firstName: String,
+    lastName: String,
+    phone: String,
+    resumeUrl: String,
+    status: { type: String, enum: ["new", "screening", "interview", "offer", "hired", "rejected"] },
+    source: String,
+  },
+}, { timestamps: true });
+
+const localResultSchema = new mongoose.Schema({
+  provider: { type: String, required: true, index: true },
+  result: {
+    candidateId: String,
+    jobId: String,
+    interviewId: String,
+    score: Number,
+    assessment: String,
+    recommendation: { type: String, enum: ["advance", "hold", "reject"] },
+    conductedAt: String,
+  },
+  externalId: String,
+}, { timestamps: true });
+
+const LocalJobModel = mongoose.models.LocalATSSJob || mongoose.model("LocalATSSJob", localJobSchema);
+const LocalCandidateModel = mongoose.models.LocalATSCandidate || mongoose.model("LocalATSCandidate", localCandidateSchema);
+const LocalResultModel = mongoose.models.LocalATSResult || mongoose.model("LocalATSResult", localResultSchema);
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 
 function generateATSId(): string {
   return `ats_${crypto.randomUUID().slice(0, 10)}`;
+}
+
+function mapCandidateStatus(status: string): ATSCandidate['status'] {
+  const s = status.toLowerCase().replace(/[_\s]/g, "");
+  const map: Record<string, ATSCandidate['status']> = {
+    new: "new", applied: "new", screening: "screening", inprogress: "interview",
+    interview: "interview", offer: "offer", hired: "hired", rejected: "rejected",
+  };
+  return map[s] || "new";
+}
+
+/* ------------------------------------------------------------------ */
+/*  Provider config helpers                                           */
+/* ------------------------------------------------------------------ */
+
+async function getProviderConfig(provider: string): Promise<ATSConfig | null> {
+  try {
+    const doc = await ATSConfigModel.findOne({ provider }).lean();
+    if (!doc) return null;
+    return {
+      provider: doc.provider as ATSConfig['provider'],
+      apiKey: doc.apiKey || undefined,
+      clientId: doc.clientId || undefined,
+      clientSecret: doc.clientSecret || undefined,
+      tenantUrl: doc.tenantUrl || undefined,
+      webhookUrl: doc.webhookUrl || undefined,
+      _id: String(doc._id),
+    };
+  } catch (error) {
+    logger.error({ err: error, provider }, 'Failed to get ATS config from MongoDB');
+    return null;
+  }
+}
+
+async function saveProviderConfig(config: ATSConfig): Promise<void> {
+  await ATSConfigModel.findOneAndUpdate(
+    { provider: config.provider },
+    { $set: { ...config, connected: true } },
+    { upsert: true, new: true },
+  );
+}
+
+function hasApiCredentials(config: ATSConfig): boolean {
+  return !!(config.apiKey || (config.clientId && config.clientSecret));
 }
 
 /* ------------------------------------------------------------------ */
@@ -165,130 +265,220 @@ async function fetchWorkdayCandidates(config: ATSConfig): Promise<ATSCandidate[]
   }));
 }
 
-function mapCandidateStatus(status: string): ATSCandidate['status'] {
-  const s = status.toLowerCase().replace(/[_\s]/g, "");
-  const map: Record<string, ATSCandidate['status']> = {
-    new: "new", applied: "new", screening: "screening", inprogress: "interview",
-    interview: "interview", offer: "offer", hired: "hired", rejected: "rejected",
-  };
-  return map[s] || "new";
+async function fetchBambooHRJobs(apiKey: string, subdomain: string): Promise<ATSJob[]> {
+  logger.info("Fetching jobs from BambooHR API");
+  const res = await axios.get(`https://${subdomain}.bamboohr.com/api/gateway.php/${subdomain}/v1/employment/job/openings`, {
+    headers: { Authorization: `Basic ${Buffer.from(`${apiKey}:`).toString('base64')}` },
+    timeout: 15000,
+  });
+  return (res.data || []).map((j: any) => ({
+    id: String(j.id),
+    title: String(j.title || ""),
+    description: String(j.description || ""),
+    requirements: (j.educationRequirements || []).map(String),
+    location: String(j.location?.city || ""),
+    department: String(j.department?.title || ""),
+    status: j.status === "open" ? "open" : "closed",
+    createdAt: j.postedDate || new Date().toISOString(),
+  }));
 }
 
-export function configureATS(config: ATSConfig): { success: boolean; message: string } {
-  if (!config.tenantUrl && !config.apiKey) {
-    return { success: false, message: 'API key or tenant URL is required' };
-  }
-  return { success: true, message: `Connected to ${config.provider} ATS` };
-}
+/* ------------------------------------------------------------------ */
+/*  Exported API                                                      */
+/* ------------------------------------------------------------------ */
 
-export async function fetchJobs(config: ATSConfig): Promise<ATSJob[]> {
+export async function configureATS(config: ATSConfig): Promise<{ success: boolean; message: string }> {
   try {
-    let jobs: ATSJob[] = [];
-    switch (config.provider) {
-      case "greenhouse":
-        jobs = config.apiKey ? await fetchGreenhouseJobs(config.apiKey) : [];
-        break;
-      case "lever":
-        jobs = config.apiKey ? await fetchLeverJobs(config.apiKey) : [];
-        break;
-      case "workday":
-        jobs = await fetchWorkdayJobs(config);
-        break;
-      default:
-        jobs = [];
-    }
-    atsJobs.set(config.provider, jobs);
-    return jobs;
-  } catch (err: any) {
-    logger.error({ provider: config.provider, err: err.message }, "Failed to fetch ATS jobs");
-    return atsJobs.get(config.provider) || [];
+    await saveProviderConfig(config);
+    logger.info({ provider: config.provider }, "ATS provider configured");
+    return { success: true, message: `Connected to ${config.provider} ATS` };
+  } catch (error) {
+    logger.error({ err: error, provider: config.provider }, "Failed to configure ATS");
+    return { success: false, message: 'Failed to save ATS configuration' };
   }
 }
 
-export async function fetchCandidates(config: ATSConfig, jobId: string): Promise<ATSCandidate[]> {
-  try {
-    let candidates: ATSCandidate[] = [];
-    switch (config.provider) {
-      case "greenhouse":
-        candidates = config.apiKey ? await fetchGreenhouseCandidates(config.apiKey, jobId) : [];
-        break;
-      case "lever":
-        candidates = config.apiKey ? await fetchLeverCandidates(config.apiKey) : [];
-        break;
-      case "workday":
-        candidates = await fetchWorkdayCandidates(config);
-        break;
-      default:
-        candidates = [];
+export async function fetchJobs(config?: ATSConfig, provider?: string): Promise<ATSJob[]> {
+  const resolvedConfig = config || (provider ? await getProviderConfig(provider) : null);
+  if (!resolvedConfig) return [];
+
+  const prov = resolvedConfig.provider;
+
+  if (hasApiCredentials(resolvedConfig)) {
+    try {
+      let jobs: ATSJob[] = [];
+      switch (prov) {
+        case "greenhouse":
+          jobs = await fetchGreenhouseJobs(resolvedConfig.apiKey!);
+          break;
+        case "lever":
+          jobs = await fetchLeverJobs(resolvedConfig.apiKey!);
+          break;
+        case "workday":
+          jobs = await fetchWorkdayJobs(resolvedConfig);
+          break;
+        case "bamboohr":
+          jobs = await fetchBambooHRJobs(resolvedConfig.apiKey!, resolvedConfig.tenantUrl || 'default');
+          break;
+        default:
+          jobs = [];
+      }
+      for (const job of jobs) {
+        await LocalJobModel.findOneAndUpdate(
+          { provider: prov, 'job.id': job.id },
+          { $set: { job } },
+          { upsert: true },
+        );
+      }
+      return jobs;
+    } catch (err: any) {
+      logger.error({ provider: prov, err: err.message }, "Failed to fetch ATS jobs from API, falling back to local");
     }
-    atsCandidates.set(jobId, candidates);
-    return candidates;
-  } catch (err: any) {
-    logger.error({ provider: config.provider, jobId, err: err.message }, "Failed to fetch ATS candidates");
-    return atsCandidates.get(jobId) || [];
   }
+
+  const localJobs = await LocalJobModel.find({ provider: prov }).lean();
+  return localJobs.map((j: any) => j.job as ATSJob);
 }
 
-export async function pushInterviewResults(config: ATSConfig, result: ATSInterviewResult): Promise<{ success: boolean; externalId?: string }> {
-  try {
-    let externalId = generateATSId();
-    if (config.provider === "greenhouse" && config.apiKey) {
-      const res = await axios.post(
-        `https://harvest.greenhouse.io/v1/candidates/${result.candidateId}/scorecards`,
-        { score: result.score, interview: result.assessment, recommendation: result.recommendation },
-        { auth: { username: config.apiKey, password: "" }, timeout: 15000 }
-      );
-      externalId = String(res.data?.id || externalId);
+export async function fetchCandidates(config?: ATSConfig, jobId?: string, provider?: string): Promise<ATSCandidate[]> {
+  const resolvedConfig = config || (provider ? await getProviderConfig(provider) : null);
+  if (!resolvedConfig) return [];
+
+  const prov = resolvedConfig.provider;
+
+  if (hasApiCredentials(resolvedConfig)) {
+    try {
+      let candidates: ATSCandidate[] = [];
+      switch (prov) {
+        case "greenhouse":
+          candidates = await fetchGreenhouseCandidates(resolvedConfig.apiKey!, jobId || "");
+          break;
+        case "lever":
+          candidates = await fetchLeverCandidates(resolvedConfig.apiKey!);
+          break;
+        case "workday":
+          candidates = await fetchWorkdayCandidates(resolvedConfig);
+          break;
+        default:
+          candidates = [];
+      }
+      for (const candidate of candidates) {
+        await LocalCandidateModel.findOneAndUpdate(
+          { provider: prov, 'candidate.id': candidate.id },
+          { $set: { jobId: jobId || null, provider: prov, candidate } },
+          { upsert: true },
+        );
+      }
+      return candidates;
+    } catch (err: any) {
+      logger.error({ provider: prov, jobId, err: err.message }, "Failed to fetch ATS candidates, falling back to local");
     }
-    return { success: true, externalId };
-  } catch (err: any) {
-    logger.error({ err: err.message }, "Failed to push interview results to ATS");
-    return { success: false };
   }
+
+  const filter: Record<string, unknown> = { provider: prov };
+  if (jobId) filter.jobId = jobId;
+  const localCandidates = await LocalCandidateModel.find(filter).lean();
+  return localCandidates.map((c: any) => c.candidate as ATSCandidate);
 }
 
-export async function syncCandidate(config: ATSConfig, candidate: ATSCandidate): Promise<{ success: boolean; externalId?: string }> {
-  try {
-    let externalId = generateATSId();
-    if (config.provider === "greenhouse" && config.apiKey) {
-      const res = await axios.post(
-        "https://harvest.greenhouse.io/v1/candidates",
-        { first_name: candidate.firstName, last_name: candidate.lastName, email_addresses: [{ value: candidate.email, type: "personal" }] },
-        { auth: { username: config.apiKey, password: "" }, timeout: 15000 }
-      );
-      externalId = String(res.data?.id || externalId);
+export async function pushInterviewResults(config?: ATSConfig, result?: ATSInterviewResult, provider?: string): Promise<{ success: boolean; externalId?: string }> {
+  const resolvedConfig = config || (provider ? await getProviderConfig(provider) : null);
+  if (!resolvedConfig) return { success: false };
+
+  const prov = resolvedConfig.provider;
+  const resultData = result || { candidateId: '', jobId: '', interviewId: '', score: 0, assessment: '', recommendation: 'hold' as const, conductedAt: new Date().toISOString() };
+
+  let externalId = generateATSId();
+
+  if (hasApiCredentials(resolvedConfig)) {
+    try {
+      if (prov === "greenhouse" && resolvedConfig.apiKey) {
+        const res = await axios.post(
+          `https://harvest.greenhouse.io/v1/candidates/${resultData.candidateId}/scorecards`,
+          { score: resultData.score, interview: resultData.assessment, recommendation: resultData.recommendation },
+          { auth: { username: resolvedConfig.apiKey, password: "" }, timeout: 15000 }
+        );
+        externalId = String(res.data?.id || externalId);
+      }
+      if (prov === "lever" && resolvedConfig.apiKey) {
+        const res = await axios.post(
+          `https://api.lever.co/v1/opportunities/${resultData.candidateId}/interviews`,
+          { result: resultData },
+          { headers: { Authorization: `Bearer ${resolvedConfig.apiKey}` }, timeout: 15000 }
+        );
+        externalId = String(res.data?.data?.id || externalId);
+      }
+    } catch (err: any) {
+      logger.error({ err: err.message }, "Failed to push interview results to ATS API, storing locally");
     }
-    const existing = atsCandidates.get(candidate.id) || [];
-    existing.push(candidate);
-    atsCandidates.set(candidate.id, existing);
-    return { success: true, externalId };
-  } catch (err: any) {
-    logger.error({ err: err.message }, "Failed to sync candidate to ATS");
-    return { success: false };
   }
+
+  await LocalResultModel.create({ provider: prov, result: resultData, externalId });
+  return { success: true, externalId };
 }
 
-export function getWebhooks(config: ATSConfig): { events: string[]; url: string } {
+export async function syncCandidate(config?: ATSConfig, candidate?: ATSCandidate, provider?: string): Promise<{ success: boolean; externalId?: string }> {
+  const resolvedConfig = config || (provider ? await getProviderConfig(provider) : null);
+  const cand = candidate || { id: generateATSId(), email: '', firstName: '', lastName: '', status: 'new' as const };
+
+  if (!resolvedConfig) {
+    await LocalCandidateModel.create({ provider: 'local', candidate: cand });
+    return { success: true, externalId: cand.id };
+  }
+
+  const prov = resolvedConfig.provider;
+  let externalId = generateATSId();
+
+  if (hasApiCredentials(resolvedConfig)) {
+    try {
+      if (prov === "greenhouse" && resolvedConfig.apiKey) {
+        const res = await axios.post(
+          "https://harvest.greenhouse.io/v1/candidates",
+          { first_name: cand.firstName, last_name: cand.lastName, email_addresses: [{ value: cand.email, type: "personal" }] },
+          { auth: { username: resolvedConfig.apiKey, password: "" }, timeout: 15000 }
+        );
+        externalId = String(res.data?.id || externalId);
+      }
+    } catch (err: any) {
+      logger.error({ err: err.message }, "Failed to sync candidate to ATS API, storing locally");
+    }
+  }
+
+  await LocalCandidateModel.findOneAndUpdate(
+    { provider: prov, 'candidate.email': cand.email },
+    { $set: { provider: prov, candidate: { ...cand, id: externalId } } },
+    { upsert: true },
+  );
+
+  return { success: true, externalId };
+}
+
+export function getWebhooks(config?: ATSConfig, provider?: string): { events: string[]; url: string } {
   return {
     events: ['candidate.created', 'candidate.status_changed', 'job.created'],
-    url: config.webhookUrl || process.env.ATS_WEBHOOK_URL || 'https://api.interviewminds.com/webhooks/ats'
+    url: config?.webhookUrl || provider ? process.env.ATS_WEBHOOK_URL || 'https://api.interviewminds.com/webhooks/ats' : ''
   };
 }
 
-export async function createWebhook(config: ATSConfig, events: string[]): Promise<{ success: boolean; webhookId?: string }> {
-  if (!config.webhookUrl) {
+export async function createWebhook(config?: ATSConfig, events?: string[], provider?: string): Promise<{ success: boolean; webhookId?: string }> {
+  const resolvedConfig = config || (provider ? await getProviderConfig(provider) : null);
+  if (!resolvedConfig?.webhookUrl) {
     return { success: false };
   }
+
   try {
     let webhookId = `wh_${crypto.randomUUID().slice(0, 8)}`;
-    if (config.provider === "greenhouse" && config.apiKey) {
+    const prov = resolvedConfig.provider;
+
+    if (prov === "greenhouse" && resolvedConfig.apiKey) {
       const res = await axios.post(
         "https://harvest.greenhouse.io/v1/webhooks",
-        { url: config.webhookUrl, events },
-        { auth: { username: config.apiKey, password: "" }, timeout: 15000 }
+        { url: resolvedConfig.webhookUrl, events: events || [] },
+        { auth: { username: resolvedConfig.apiKey, password: "" }, timeout: 15000 }
       );
       webhookId = String(res.data?.id || webhookId);
     }
+
     return { success: true, webhookId };
   } catch (err: any) {
     logger.error({ err: err.message }, "Failed to create ATS webhook");

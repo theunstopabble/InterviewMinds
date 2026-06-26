@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import { logger } from './logger';
+import { renderEmailTemplate } from './emailTemplates';
 
 export type NotificationChannel = 'email' | 'sms' | 'in-app' | 'slack' | 'webhook';
 export type NotificationStatus = 'pending' | 'sent' | 'delivered' | 'failed';
@@ -49,10 +50,11 @@ export interface SlackNotification {
 /* ------------------------------------------------------------------ */
 /*  Environment-based provider config                                    */
 /* ------------------------------------------------------------------ */
-const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'sendgrid'; // sendgrid | smtp | mailgun
+const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'sendgrid'; // sendgrid | smtp | mailgun | brevo
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587');
 const SMTP_USER = process.env.SMTP_USER;
@@ -225,6 +227,22 @@ class NotificationService {
       return false;
     }
 
+    /* Brevo (Sendinblue) */
+    if (EMAIL_PROVIDER === 'brevo' && BREVO_API_KEY) {
+      await axios.post(
+        'https://api.brevo.com/v3/smtp/email',
+        {
+          sender: { email: FROM_EMAIL },
+          to: [{ email: to }],
+          subject,
+          htmlContent: body,
+        },
+        { headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' } }
+      );
+      logger.info({ to, subject }, "Email sent via Brevo");
+      return true;
+    }
+
     /* SendGrid */
     if (EMAIL_PROVIDER === 'sendgrid' && SENDGRID_API_KEY) {
       await axios.post(
@@ -367,6 +385,15 @@ class NotificationService {
       title = title.replace(new RegExp(`{{${v}}}`, 'g'), value);
     });
 
+    /* For email channels, use HTML templates for interview/result/offer types */
+    if (template.channel === 'email' && ['interview', 'results', 'offer'].includes(template.type)) {
+      const rendered = renderEmailTemplate(templateId, variables);
+      if (rendered) {
+        message = rendered.html;
+        title = rendered.subject;
+      }
+    }
+
     return this.sendNotification(
       userId,
       template.type,
@@ -434,10 +461,11 @@ class NotificationService {
     type: string,
     channel: NotificationChannel,
     title: string,
-    message: string
+    message: string,
+    data?: Record<string, any>
   ): Promise<Notification[]> {
     return Promise.all(
-      userIds.map(userId => this.sendNotification(userId, type, channel, title, message))
+      userIds.map(userId => this.sendNotification(userId, type, channel, title, message, data))
     );
   }
 }

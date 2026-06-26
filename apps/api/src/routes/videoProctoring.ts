@@ -1,110 +1,47 @@
 import { Router } from 'express';
 import { logger } from '../lib/logger';
-import { processVideoFrame, processAudioFrame, checkScreenState, evaluateProctoringSession } from '../lib/videoProctoring';
+import { processVideoFrame, processAudioFrame, checkScreenState, evaluateAndSaveSession, fetchProctoringResults } from '../lib/videoProctoring';
 
 const router = Router();
 
-interface VideoFrameRequest {
-  interviewId: string;
-  frameData: string;
-  previousPositions?: { x: number; y: number }[];
-}
-
-interface AudioFrameRequest {
-  interviewId: string;
-  audioData: number[];
-}
-
-interface SessionEvaluationRequest {
-  interviewId: string;
-  videoMetrics: {
-    timestamp: number;
-    faceDetection: {
-      present: boolean;
-      faceCount: number;
-      position: { x: number; y: number; z: number };
-      lighting: string;
-      occlusion: boolean;
-      confidence: number;
-    };
-    eyeTracking: {
-      gazeDirection: string;
-      blinkRate: number;
-      eyeContactPercentage: number;
-      lookingAwayEvents: number;
-    };
-    expressions: Record<string, number>;
-    presence: {
-      personCount: number;
-      leavingFrame: boolean;
-      objectDetection: string[];
-      multipleFaces: boolean;
-    };
-  }[];
-  audioMetrics: {
-    timestamp: number;
-    audio: {
-      transcript: string;
-      confidence: number;
-      language: string;
-      voiceCount: number;
-      backgroundSounds: string[];
-      fillerWords: string[];
-      pace: number;
-      volume: number;
-      clarity: number;
-    };
-  }[];
-  screenMetrics: {
-    timestamp: number;
-    screen: {
-      tabSwitches: number;
-      focusLoss: number;
-      recordingDetected: boolean;
-      externalDisplay: boolean;
-      devToolsOpen: boolean;
-    };
-  }[];
-}
-
 router.post('/video/analyze', async (req, res) => {
   try {
-    const body = req.body as VideoFrameRequest;
+    const { frameData, previousPositions, interviewId } = req.body;
 
-    if (!body.frameData) {
+    if (!frameData) {
       res.status(400).json({ error: 'Frame data is required' });
       return;
     }
 
-    const metrics = await processVideoFrame(body.frameData, body.previousPositions);
+    const metrics = await processVideoFrame(frameData, previousPositions, interviewId);
     res.json(metrics);
   } catch (error) {
-    logger.error({ err: error }, 'Error analyzing video frame:');
+    logger.error({ err: error }, 'Error analyzing video frame');
     res.status(500).json({ error: 'Failed to analyze video frame' });
   }
 });
 
 router.post('/audio/analyze', async (req, res) => {
   try {
-    const body = req.body as AudioFrameRequest;
+    const { audioData, interviewId } = req.body;
 
-    if (!body.audioData || body.audioData.length === 0) {
+    if (!audioData || audioData.length === 0) {
       res.status(400).json({ error: 'Audio data is required' });
       return;
     }
 
-    const audioBuffer = new Float32Array(body.audioData);
-    const metrics = await processAudioFrame(audioBuffer);
+    const audioBuffer = new Float32Array(audioData);
+    const metrics = await processAudioFrame(audioBuffer, interviewId);
     res.json(metrics);
   } catch (error) {
-    logger.error({ err: error }, 'Error analyzing audio frame:');
+    logger.error({ err: error }, 'Error analyzing audio frame');
     res.status(500).json({ error: 'Failed to analyze audio frame' });
   }
 });
 
 router.post('/screen/check', async (req, res) => {
   try {
-    // Use real client-reported tab switch events
+    const { interviewId } = req.body;
     const clientReport = {
       tabSwitchCount: req.body.tabSwitchCount || 0,
       focusLossCount: req.body.focusLossCount || 0,
@@ -113,33 +50,33 @@ router.post('/screen/check', async (req, res) => {
       devToolsOpen: req.body.devToolsOpen || false,
     };
 
-    const metrics = await checkScreenState(clientReport);
+    const metrics = await checkScreenState(clientReport, interviewId);
     res.json(metrics);
   } catch (error) {
-    logger.error({ err: error }, 'Error checking screen state:');
+    logger.error({ err: error }, 'Error checking screen state');
     res.status(500).json({ error: 'Failed to check screen state' });
   }
 });
 
 router.post('/session/evaluate', async (req, res) => {
   try {
-    const body = req.body as SessionEvaluationRequest;
+    const { interviewId, videoMetrics, audioMetrics, screenMetrics } = req.body;
 
-    if (!body.interviewId) {
+    if (!interviewId) {
       res.status(400).json({ error: 'Interview ID is required' });
       return;
     }
 
-    const result = evaluateProctoringSession(
-      body.interviewId,
-      body.videoMetrics as any,
-      body.audioMetrics as any,
-      body.screenMetrics as any
+    const result = await evaluateAndSaveSession(
+      interviewId,
+      videoMetrics || [],
+      audioMetrics || [],
+      screenMetrics || []
     );
 
     res.json(result);
   } catch (error) {
-    logger.error({ err: error }, 'Error evaluating proctoring session:');
+    logger.error({ err: error }, 'Error evaluating proctoring session');
     res.status(500).json({ error: 'Failed to evaluate session' });
   }
 });
@@ -148,22 +85,16 @@ router.get('/interview/:interviewId/results', async (req, res) => {
   try {
     const { interviewId } = req.params;
 
-    const mockResult = {
-      interviewId,
-      riskScore: 25,
-      violations: [],
-      recommendation: 'pass',
-      metricsSummary: {
-        totalFacePresentTime: 2700000,
-        averageEyeContact: 82,
-        tabSwitchCount: 2,
-        audioQuality: 88
-      }
-    };
+    const result = await fetchProctoringResults(interviewId);
 
-    res.json(mockResult);
+    if (!result) {
+      res.status(404).json({ error: 'Proctoring results not found for this interview' });
+      return;
+    }
+
+    res.json(result);
   } catch (error) {
-    logger.error({ err: error }, 'Error fetching proctoring results:');
+    logger.error({ err: error }, 'Error fetching proctoring results');
     res.status(500).json({ error: 'Failed to fetch proctoring results' });
   }
 });

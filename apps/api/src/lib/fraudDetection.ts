@@ -1,3 +1,6 @@
+import { logger } from './logger';
+import { FraudDetectionModel } from '../models/FraudDetection';
+
 interface BrowserFingerprint {
   userAgent: string;
   screen: { width: number; height: number };
@@ -33,7 +36,7 @@ interface SessionMetrics {
 }
 
 interface FraudDetectionResult {
-  riskScore: number; // 0-100
+  riskScore: number;
   flags: FraudFlag[];
   recommendations: string[];
   isTrusted: boolean;
@@ -59,42 +62,11 @@ type FraudFlagType =
   | 'concurrent_sessions'
   | 'session_replay';
 
-function generateCanvasFingerprint(): string {
-  const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
-  if (!canvas) return 'unknown';
-  
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return 'unknown';
-  
-  ctx.textBaseline = 'top';
-  ctx.font = '14px Arial';
-  ctx.fillStyle = '#f60';
-  ctx.fillRect(125, 1, 62, 20);
-  ctx.fillStyle = '#069';
-  ctx.fillText('InterviewMinds', 2, 15);
-  ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
-  ctx.fillText('FraudCheck', 4, 17);
-  
-  return canvas.toDataURL();
-}
+/* ------------------------------------------------------------------ */
+/*  Browser Fingerprint Analysis                                       */
+/* ------------------------------------------------------------------ */
 
-function generateWebGLFingerprint(): string {
-  if (typeof document === 'undefined') return 'unknown';
-  
-  const canvas = document.createElement('canvas');
-  const gl = canvas.getContext('webgl') as WebGLRenderingContext | null;
-  if (!gl) return 'unknown';
-  
-  const debugInfo = gl.getExtension('WEBGL_debug_renderer_info') as unknown;
-  if (!debugInfo) return 'unknown';
-  
-  const renderer = gl.getParameter((debugInfo as { UNMASKED_RENDERER_WEBGL: number }).UNMASKED_RENDERER_WEBGL);
-  const vendor = gl.getParameter((debugInfo as { UNMASKED_VENDOR_WEBGL: number }).UNMASKED_VENDOR_WEBGL);
-  
-  return `${vendor}|${renderer}`;
-}
-
-export function analyzeBrowserFingerprint(fingerprint: BrowserFingerprint): FraudFlag[] {
+function analyzeBrowserFingerprint(fingerprint: BrowserFingerprint): FraudFlag[] {
   const flags: FraudFlag[] = [];
 
   const headlessIndicators = [
@@ -134,6 +106,17 @@ export function analyzeBrowserFingerprint(fingerprint: BrowserFingerprint): Frau
     });
   }
 
+  if (!fingerprint.plugins.includes('Chrome PDF Plugin') &&
+      !fingerprint.plugins.includes('PDF Viewer') &&
+      fingerprint.plugins.length < 2) {
+    flags.push({
+      type: 'headless_browser',
+      severity: 'low',
+      description: 'Minimal browser plugins detected',
+      evidence: `Plugins count: ${fingerprint.plugins.length}`
+    });
+  }
+
   if (fingerprint.canvasFingerprint && fingerprint.canvasFingerprint.includes('InterviewMinds')) {
     flags.push({
       type: 'bot_detection',
@@ -146,14 +129,18 @@ export function analyzeBrowserFingerprint(fingerprint: BrowserFingerprint): Frau
   return flags;
 }
 
-export function analyzeBehaviorPattern(behavior: BehaviorPattern): FraudFlag[] {
+/* ------------------------------------------------------------------ */
+/*  Behavioral Analysis                                                */
+/* ------------------------------------------------------------------ */
+
+function analyzeBehaviorPattern(behavior: BehaviorPattern): FraudFlag[] {
   const flags: FraudFlag[] = [];
 
   if (behavior.mouseMovements.length > 0) {
     const movements = behavior.mouseMovements;
     let perfectStraightLines = 0;
     
-    for (let i = 1; i < movements.length; i++) {
+    for (let i = 1; i < movements.length - 1; i++) {
       const dx = movements[i].x - movements[i-1].x;
       const dy = movements[i].y - movements[i-1].y;
       const distance = Math.sqrt(dx * dx + dy * dy);
@@ -210,7 +197,7 @@ export function analyzeBehaviorPattern(behavior: BehaviorPattern): FraudFlag[] {
     });
   }
 
-  if (behavior.clickPattern.avgTimeBetweenClicks < 100) {
+  if (behavior.clickPattern.avgTimeBetweenClicks < 100 && behavior.clickPattern.totalClicks > 3) {
     flags.push({
       type: 'bot_detection',
       severity: 'medium',
@@ -222,7 +209,11 @@ export function analyzeBehaviorPattern(behavior: BehaviorPattern): FraudFlag[] {
   return flags;
 }
 
-export function analyzeSessionMetrics(metrics: SessionMetrics, historicalSessions: SessionMetrics[]): FraudFlag[] {
+/* ------------------------------------------------------------------ */
+/*  Session Metrics Analysis                                           */
+/* ------------------------------------------------------------------ */
+
+function analyzeSessionMetrics(metrics: SessionMetrics, historicalSessions: SessionMetrics[]): FraudFlag[] {
   const flags: FraudFlag[] = [];
 
   if (metrics.ipChange) {
@@ -262,8 +253,22 @@ export function analyzeSessionMetrics(metrics: SessionMetrics, historicalSession
     });
   }
 
+  const sessionDuration = Date.now() - metrics.sessionStartTime;
+  if (sessionDuration < 60000 && metrics.concurrentSessions > 0) {
+    flags.push({
+      type: 'session_replay',
+      severity: 'low',
+      description: 'Very short session with concurrent activity',
+      evidence: `Session duration: ${sessionDuration}ms`
+    });
+  }
+
   return flags;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Risk Scoring & Recommendations                                     */
+/* ------------------------------------------------------------------ */
 
 function calculateRiskScore(flags: FraudFlag[]): number {
   const severityWeights: Record<string, number> = {
@@ -311,11 +316,17 @@ function generateRecommendations(flags: FraudFlag[], riskScore: number): string[
   return recommendations;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Public API                                                        */
+/* ------------------------------------------------------------------ */
+
 export async function detectFraud(
   fingerprint: BrowserFingerprint,
   behavior: BehaviorPattern,
   sessionMetrics: SessionMetrics,
-  historicalSessions: SessionMetrics[] = []
+  historicalSessions: SessionMetrics[] = [],
+  sessionId?: string,
+  userId?: string
 ): Promise<FraudDetectionResult> {
   const allFlags: FraudFlag[] = [];
 
@@ -331,12 +342,31 @@ export async function detectFraud(
   const riskScore = calculateRiskScore(allFlags);
   const recommendations = generateRecommendations(allFlags, riskScore);
 
-  return {
+  const result: FraudDetectionResult = {
     riskScore,
     flags: allFlags,
     recommendations,
     isTrusted: riskScore < 30
   };
+
+  try {
+    await FraudDetectionModel.create({
+      sessionId: sessionId || crypto.randomUUID(),
+      userId: userId || null,
+      riskScore,
+      flags: allFlags,
+      recommendations,
+      isTrusted: riskScore < 30,
+      fingerprint,
+      behavior,
+      sessionMetrics,
+    });
+    logger.info({ riskScore, flagCount: allFlags.length }, 'Fraud detection result persisted');
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to persist fraud detection result');
+  }
+
+  return result;
 }
 
 export function createFingerprint(userAgent: string, screen: { width: number; height: number }, timezone: string, language: string, platform: string, plugins: string[]): BrowserFingerprint {
@@ -347,7 +377,28 @@ export function createFingerprint(userAgent: string, screen: { width: number; he
     language,
     platform,
     plugins,
-    canvasFingerprint: generateCanvasFingerprint(),
-    webglFingerprint: generateWebGLFingerprint()
   };
+}
+
+export async function getSessionAnalysis(sessionId: string): Promise<FraudDetectionResult | null> {
+  try {
+    const doc = await FraudDetectionModel.findOne({ sessionId })
+      .sort({ createdAt: -1 })
+      .lean();
+    if (!doc) return null;
+    return {
+      riskScore: doc.riskScore,
+      flags: doc.flags.map(f => ({
+        type: f.type as FraudFlagType,
+        severity: f.severity as 'low' | 'medium' | 'high' | 'critical',
+        description: f.description,
+        evidence: f.evidence,
+      })),
+      recommendations: doc.recommendations,
+      isTrusted: doc.isTrusted,
+    };
+  } catch (error) {
+    logger.error({ err: error, sessionId }, 'Failed to fetch session analysis from MongoDB');
+    return null;
+  }
 }

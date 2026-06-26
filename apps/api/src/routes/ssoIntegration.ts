@@ -1,43 +1,8 @@
 import { Router } from 'express';
-import { initiateSSOLogin, handleSSOCallback, getDefaultSSOConfig, validateSSOConfig } from '../lib/ssoIntegration';
-
-interface SSOConfig {
-  provider: 'okta' | 'azure-ad' | 'google-workspace' | 'custom';
-  enabled: boolean;
-  samlSettings?: {
-    entryPoint: string;
-    issuer: string;
-    cert: string;
-    callbackUrl: string;
-    signatureAlgorithm: 'SHA1' | 'SHA256' | 'SHA512';
-  };
-  oauthSettings?: {
-    authorizationUrl: string;
-    tokenUrl: string;
-    clientId: string;
-    clientSecret: string;
-    redirectUri: string;
-    scope: string[];
-  };
-  attributeMapping: {
-    email: string;
-    firstName: string;
-    lastName: string;
-    department?: string;
-    role?: string;
-    groups?: string | string[];
-  };
-}
+import { logger } from '../lib/logger';
+import { initiateSSOLogin, handleSSOCallback, getDefaultSSOConfig, validateSSOConfig, getSSOConfig, saveSSOConfig } from '../lib/ssoIntegration';
 
 const router = Router();
-
-interface SSOLoginRequest {
-  provider: 'okta' | 'azure-ad' | 'google-workspace' | 'custom';
-  code?: string;
-  idToken?: string;
-  samlResponse?: string;
-  relayState?: string;
-}
 
 interface SSOConfigRequest {
   provider: 'okta' | 'azure-ad' | 'google-workspace' | 'custom';
@@ -66,16 +31,42 @@ interface SSOConfigRequest {
   };
 }
 
+interface SSOLoginRequest {
+  provider: 'okta' | 'azure-ad' | 'google-workspace' | 'custom';
+  code?: string;
+  idToken?: string;
+  samlResponse?: string;
+  relayState?: string;
+}
+
 router.get('/config', async (req, res) => {
   try {
-    const config = getDefaultSSOConfig();
+    const provider = (req.query.provider as string) || 'custom';
+    const config = await getSSOConfig(provider);
+
+    if (!config) {
+      const defaultConfig = getDefaultSSOConfig();
+      res.json({
+        provider: defaultConfig.provider,
+        enabled: defaultConfig.enabled,
+        attributeMapping: defaultConfig.attributeMapping
+      });
+      return;
+    }
+
     res.json({
       provider: config.provider,
       enabled: config.enabled,
-      attributeMapping: config.attributeMapping
+      attributeMapping: config.attributeMapping,
+      samlSettings: config.samlSettings ? {
+        entryPoint: config.samlSettings.entryPoint,
+        issuer: config.samlSettings.issuer,
+        callbackUrl: config.samlSettings.callbackUrl,
+        signatureAlgorithm: config.samlSettings.signatureAlgorithm,
+      } : undefined,
     });
   } catch (error) {
-    console.error('Error fetching SSO config:', error);
+    logger.error({ err: error }, 'Error fetching SSO config');
     res.status(500).json({ error: 'Failed to fetch SSO configuration' });
   }
 });
@@ -84,7 +75,33 @@ router.post('/config', async (req, res) => {
   try {
     const body = req.body as SSOConfigRequest;
 
-    const configToValidate: Partial<SSOConfig> = {
+    const configToValidate: Partial<{
+      provider: 'okta' | 'azure-ad' | 'google-workspace' | 'custom';
+      enabled: boolean;
+      samlSettings?: {
+        entryPoint: string;
+        issuer: string;
+        cert: string;
+        callbackUrl: string;
+        signatureAlgorithm: 'SHA1' | 'SHA256' | 'SHA512';
+      };
+      oauthSettings?: {
+        authorizationUrl: string;
+        tokenUrl: string;
+        clientId: string;
+        clientSecret: string;
+        redirectUri: string;
+        scope: string[];
+      };
+      attributeMapping: {
+        email: string;
+        firstName: string;
+        lastName: string;
+        department?: string;
+        role?: string;
+        groups?: string | string[];
+      };
+    }> = {
       provider: body.provider,
       enabled: body.enabled,
       samlSettings: body.samlSettings ? {
@@ -92,7 +109,7 @@ router.post('/config', async (req, res) => {
         signatureAlgorithm: 'SHA256'
       } : undefined,
       oauthSettings: body.oauthSettings,
-      attributeMapping: body.attributeMapping
+      attributeMapping: body.attributeMapping || getDefaultSSOConfig().attributeMapping,
     };
 
     const validatedConfig = validateSSOConfig(configToValidate);
@@ -100,6 +117,8 @@ router.post('/config', async (req, res) => {
       res.status(400).json({ error: 'Invalid SSO configuration' });
       return;
     }
+
+    await saveSSOConfig(validatedConfig);
 
     res.json({
       success: true,
@@ -110,7 +129,7 @@ router.post('/config', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error updating SSO config:', error);
+    logger.error({ err: error }, 'Error updating SSO config');
     res.status(500).json({ error: 'Failed to update SSO configuration' });
   }
 });
@@ -125,12 +144,12 @@ router.get('/login/:provider', async (req, res) => {
       return;
     }
 
-    const defaultConfig = getDefaultSSOConfig();
-    const { redirectUrl, state } = await initiateSSOLogin(provider, defaultConfig);
+    const config = await getSSOConfig(provider);
+    const { redirectUrl, state } = await initiateSSOLogin(provider, config || undefined);
 
     res.json({ redirectUrl, state });
   } catch (error) {
-    console.error('Error initiating SSO login:', error);
+    logger.error({ err: error, provider: req.params.provider }, 'Error initiating SSO login');
     res.status(500).json({ error: 'Failed to initiate SSO login' });
   }
 });
@@ -144,8 +163,8 @@ router.post('/callback', async (req, res) => {
       return;
     }
 
-    const defaultConfig = getDefaultSSOConfig();
-    const result = await handleSSOCallback(body, defaultConfig);
+    const config = await getSSOConfig(body.provider);
+    const result = await handleSSOCallback(body, config || undefined);
 
     if (!result.success) {
       res.status(401).json(result);
@@ -158,7 +177,7 @@ router.post('/callback', async (req, res) => {
       sessionToken: result.sessionToken
     });
   } catch (error) {
-    console.error('Error handling SSO callback:', error);
+    logger.error({ err: error }, 'Error handling SSO callback');
     res.status(500).json({ error: 'SSO authentication failed' });
   }
 });
@@ -172,10 +191,10 @@ router.post('/saml/assertion', async (req, res) => {
       return;
     }
 
-    const defaultConfig = getDefaultSSOConfig();
+    const config = await getSSOConfig('okta');
     const result = await handleSSOCallback(
       { provider: 'okta', samlResponse, relayState },
-      defaultConfig
+      config || undefined
     );
 
     if (!result.success) {
@@ -189,7 +208,7 @@ router.post('/saml/assertion', async (req, res) => {
       sessionToken: result.sessionToken
     });
   } catch (error) {
-    console.error('Error processing SAML assertion:', error);
+    logger.error({ err: error }, 'Error processing SAML assertion');
     res.status(500).json({ error: 'SAML authentication failed' });
   }
 });

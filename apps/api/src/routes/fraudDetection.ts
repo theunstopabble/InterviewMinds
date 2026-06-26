@@ -1,45 +1,32 @@
 import { Router } from 'express';
 import { logger } from '../lib/logger';
-import { detectFraud, createFingerprint } from '../lib/fraudDetection';
+import { detectFraud, createFingerprint, getSessionAnalysis } from '../lib/fraudDetection';
 
 const router = Router();
 
-interface BrowserFingerprint {
-  userAgent: string;
-  screen: { width: number; height: number };
-  timezone: string;
-  language: string;
-  platform: string;
-  plugins: string[];
-}
-
-interface BehaviorPattern {
-  mouseMovements: { x: number; y: number; timestamp: number }[];
-  keystrokeTimings: number[];
-  scrollBehavior: {
-    totalScrolls: number;
-    avgScrollDistance: number;
-    scrollSpeed: number;
-  };
-  clickPattern: {
-    totalClicks: number;
-    avgTimeBetweenClicks: number;
-  };
-}
-
-interface SessionMetrics {
-  ipAddress: string;
-  ipChange: boolean;
-  deviceChange: boolean;
-  locationChange: boolean;
-  concurrentSessions: number;
-  sessionStartTime: number;
-}
-
 interface FraudDetectionRequest {
-  fingerprint: BrowserFingerprint;
-  behavior: BehaviorPattern;
-  session: SessionMetrics;
+  fingerprint: {
+    userAgent: string;
+    screen: { width: number; height: number };
+    timezone: string;
+    language: string;
+    platform: string;
+    plugins: string[];
+  };
+  behavior?: {
+    mouseMovements: { x: number; y: number; timestamp: number }[];
+    keystrokeTimings: number[];
+    scrollBehavior: { totalScrolls: number; avgScrollDistance: number; scrollSpeed: number };
+    clickPattern: { totalClicks: number; avgTimeBetweenClicks: number };
+  };
+  session: {
+    ipAddress: string;
+    ipChange: boolean;
+    deviceChange: boolean;
+    locationChange: boolean;
+    concurrentSessions: number;
+    sessionStartTime: number;
+  };
   userId?: string;
 }
 
@@ -63,6 +50,7 @@ router.post('/analyze', async (req, res) => {
       body.fingerprint.plugins
     );
 
+    const sessionId = crypto.randomUUID();
     const result = await detectFraud(
       fingerprint,
       body.behavior || {
@@ -72,12 +60,18 @@ router.post('/analyze', async (req, res) => {
         clickPattern: { totalClicks: 0, avgTimeBetweenClicks: 0 }
       },
       body.session,
-      []
+      [],
+      sessionId,
+      body.userId
     );
 
-    res.json(result);
+    res.json({
+      ...result,
+      sessionId,
+      lastChecked: new Date().toISOString(),
+    });
   } catch (error) {
-    logger.error({ err: error }, 'Error in fraud detection:');
+    logger.error({ err: error }, 'Error in fraud detection');
     res.status(500).json({ error: 'Failed to analyze fraud risk' });
   }
 });
@@ -86,18 +80,20 @@ router.get('/session/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
     
-    const mockResult = {
-      sessionId,
-      riskScore: 15,
-      flags: [],
-      recommendations: ['Session appears normal'],
-      isTrusted: true,
-      lastChecked: new Date().toISOString()
-    };
+    const result = await getSessionAnalysis(sessionId);
 
-    res.json(mockResult);
+    if (!result) {
+      res.status(404).json({ error: 'Session analysis not found' });
+      return;
+    }
+
+    res.json({
+      sessionId,
+      ...result,
+      lastChecked: new Date().toISOString()
+    });
   } catch (error) {
-    logger.error({ err: error }, 'Error fetching session analysis:');
+    logger.error({ err: error }, 'Error fetching session analysis');
     res.status(500).json({ error: 'Failed to fetch session analysis' });
   }
 });

@@ -12,10 +12,8 @@ import {
 
 const router = Router();
 
-const atsConfigs: Map<string, ReturnType<typeof configureATS>> = new Map();
-
 interface ATSConfigRequest {
-  provider: 'workday' | 'greenhouse' | 'lever' | 'bamboohr';
+  provider: 'workday' | 'greenhouse' | 'lever' | 'bamboohr' | 'ashby';
   apiKey?: string;
   clientId?: string;
   clientSecret?: string;
@@ -41,14 +39,11 @@ router.post('/configure', async (req, res) => {
       return;
     }
 
-    const result = configureATS(body);
-    if (result.success) {
-      atsConfigs.set(body.provider, result);
-    }
+    const result = await configureATS(body);
 
     res.json(result);
   } catch (error) {
-    logger.error({ err: error }, 'Error configuring ATS:');
+    logger.error({ err: error }, 'Error configuring ATS');
     res.status(500).json({ error: 'Failed to configure ATS' });
   }
 });
@@ -56,11 +51,11 @@ router.post('/configure', async (req, res) => {
 router.get('/jobs', async (req, res) => {
   try {
     const provider = req.query.provider as string || 'workday';
-    const jobs = await fetchJobs({ provider } as any);
+    const jobs = await fetchJobs(undefined, provider);
 
     res.json({ jobs, count: jobs.length });
   } catch (error) {
-    logger.error({ err: error }, 'Error fetching jobs:');
+    logger.error({ err: error }, 'Error fetching jobs');
     res.status(500).json({ error: 'Failed to fetch jobs' });
   }
 });
@@ -69,11 +64,11 @@ router.get('/jobs/:jobId/candidates', async (req, res) => {
   try {
     const { jobId } = req.params;
     const provider = req.query.provider as string || 'workday';
-    const candidates = await fetchCandidates({ provider } as any, jobId);
+    const candidates = await fetchCandidates(undefined, jobId, provider);
 
     res.json({ candidates, count: candidates.length });
   } catch (error) {
-    logger.error({ err: error }, 'Error fetching candidates:');
+    logger.error({ err: error }, 'Error fetching candidates');
     res.status(500).json({ error: 'Failed to fetch candidates' });
   }
 });
@@ -89,16 +84,17 @@ router.post('/results', async (req, res) => {
     }
 
     const result = await pushInterviewResults(
-      { provider } as any,
+      undefined,
       {
         ...body,
         conductedAt: new Date().toISOString()
-      }
+      },
+      provider
     );
 
     res.json(result);
   } catch (error) {
-    logger.error({ err: error }, 'Error pushing results:');
+    logger.error({ err: error }, 'Error pushing results');
     res.status(500).json({ error: 'Failed to push results' });
   }
 });
@@ -113,11 +109,11 @@ router.post('/sync', async (req, res) => {
       return;
     }
 
-    const result = await syncCandidate({ provider } as any, candidate);
+    const result = await syncCandidate(undefined, candidate, provider);
 
     res.json(result);
   } catch (error) {
-    logger.error({ err: error }, 'Error syncing candidate:');
+    logger.error({ err: error }, 'Error syncing candidate');
     res.status(500).json({ error: 'Failed to sync candidate' });
   }
 });
@@ -125,11 +121,11 @@ router.post('/sync', async (req, res) => {
 router.get('/webhooks', async (req, res) => {
   try {
     const provider = req.query.provider as string || 'workday';
-    const webhooks = getWebhooks({ provider } as any);
+    const webhooks = getWebhooks(undefined, provider);
 
     res.json(webhooks);
   } catch (error) {
-    logger.error({ err: error }, 'Error fetching webhooks:');
+    logger.error({ err: error }, 'Error fetching webhooks');
     res.status(500).json({ error: 'Failed to fetch webhooks' });
   }
 });
@@ -144,11 +140,11 @@ router.post('/webhooks', async (req, res) => {
       return;
     }
 
-    const result = await createWebhook({ provider } as any, events);
+    const result = await createWebhook(undefined, events, provider);
 
     res.json(result);
   } catch (error) {
-    logger.error({ err: error }, 'Error creating webhook:');
+    logger.error({ err: error }, 'Error creating webhook');
     res.status(500).json({ error: 'Failed to create webhook' });
   }
 });

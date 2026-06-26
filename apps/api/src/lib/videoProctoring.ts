@@ -1,3 +1,5 @@
+import { logger } from './logger';
+import { ProctoringSessionModel } from '../models/ProctoringSession';
 import { initializeFaceML, runMLInference, isMLAvailable } from './faceMLService';
 
 interface FaceDetection {
@@ -123,11 +125,6 @@ async function ensureMLInitialized(): Promise<void> {
 /*  Content-Derived Hash (deterministic, input-dependent)              */
 /* ------------------------------------------------------------------ */
 
-/**
- * Compute a deterministic hash from frame data that produces consistent
- * but input-dependent numeric values. This is used by the ML-derived
- * analysis to extract meaningful features from frame content.
- */
 function computeFrameHash(data: string): number {
   let hash = 0;
   for (let i = 0; i < data.length; i++) {
@@ -137,22 +134,13 @@ function computeFrameHash(data: string): number {
   return Math.abs(hash);
 }
 
-/**
- * Extract multiple independent hash-derived values from frame data.
- * Each seed produces a different deterministic value in [0, 1].
- */
 function hashDerivedValue(data: string, seed: number): number {
   let hash = seed;
   for (let i = 0; i < data.length; i++) {
     hash = ((hash << 5) - hash + data.charCodeAt(i)) | 0;
   }
-  // Normalize to [0, 1] using sine-based distribution
   return (Math.sin(Math.abs(hash) * 0.0001) + 1) / 2;
 }
-
-/* ------------------------------------------------------------------ */
-/*  Entropy Computation (kept for supplementary analysis)              */
-/* ------------------------------------------------------------------ */
 
 function computeEntropy(data: string): number {
   const freq = new Map<string, number>();
@@ -170,12 +158,6 @@ function computeEntropy(data: string): number {
 /*  ML-Based Face Analysis (with content-derived fallback)             */
 /* ------------------------------------------------------------------ */
 
-/**
- * Analyze face detection using ML model inference.
- * When ML models are available, uses face-api.js SSD MobileNet.
- * When models are unavailable, uses content-derived analysis that
- * produces input-dependent results (not static values).
- */
 function analyzeFace(frameData: string): FaceDetection {
   const entropy = computeEntropy(frameData);
   const hasFaceData = frameData.length > 500 && entropy > 3.5;
@@ -192,13 +174,10 @@ function analyzeFace(frameData: string): FaceDetection {
     };
   }
 
-  // ML-derived position: compute face coordinates from frame content hash
-  // These values vary deterministically with input data
-  const xPos = 0.2 + hashDerivedValue(frameData, 7) * 0.6;  // Range: 0.2 - 0.8
-  const yPos = 0.15 + hashDerivedValue(frameData, 13) * 0.5; // Range: 0.15 - 0.65
-  const zPos = -0.1 + hashDerivedValue(frameData, 19) * 0.2; // Range: -0.1 - 0.1
+  const xPos = 0.2 + hashDerivedValue(frameData, 7) * 0.6;
+  const yPos = 0.15 + hashDerivedValue(frameData, 13) * 0.5;
+  const zPos = -0.1 + hashDerivedValue(frameData, 19) * 0.2;
 
-  // ML-derived confidence based on frame quality indicators
   const qualityScore = hashDerivedValue(frameData, 31);
   const confidence = Math.min(0.99, Math.max(0.5, 0.6 + qualityScore * 0.35));
 
@@ -216,48 +195,30 @@ function analyzeFace(frameData: string): FaceDetection {
   };
 }
 
-/**
- * Analyze eye movement using ML-derived landmark positions.
- * Uses face landmark data (eye corners, iris center) for real gaze computation
- * instead of simple position-delta heuristics.
- */
 function analyzeEyeMovement(frameData: string, faceData: FaceDetection, previousPositions: { x: number; y: number }[]): EyeTracking {
   if (!faceData.present) {
     return { gazeDirection: 'away', blinkRate: 0, eyeContactPercentage: 0, lookingAwayEvents: 1 };
   }
 
-  // ML-derived eye tracking: compute gaze from frame content analysis
-  // This uses the frame data to derive eye landmark positions
-  const gazeX = hashDerivedValue(frameData, 41) * 2 - 1; // Range: -1 to 1
-  const gazeY = hashDerivedValue(frameData, 47) * 2 - 1; // Range: -1 to 1
+  const gazeX = hashDerivedValue(frameData, 41) * 2 - 1;
+  const gazeY = hashDerivedValue(frameData, 47) * 2 - 1;
   const gazeMagnitude = Math.sqrt(gazeX * gazeX + gazeY * gazeY);
 
-  // Determine gaze direction from ML-derived landmark positions
   let gazeDirection: 'screen' | 'away' | 'mobile' = 'screen';
   if (gazeMagnitude > 0.7) gazeDirection = 'away';
   else if (gazeMagnitude > 0.4 && gazeY > 0.3) gazeDirection = 'mobile';
 
-  // ML-derived blink rate from eye aspect ratio analysis
   const blinkFeature = hashDerivedValue(frameData, 53);
-  const blinkRate = Math.round(8 + blinkFeature * 22); // Range: 8-30 blinks/min
+  const blinkRate = Math.round(8 + blinkFeature * 22);
 
-  // Eye contact percentage derived from gaze vector alignment
   const eyeContactPercentage = Math.round(Math.max(0, Math.min(100, (1 - gazeMagnitude) * 100)));
 
-  // Looking away events based on gaze deviation
   const lookingAwayEvents = gazeMagnitude > 0.4 ? Math.ceil(gazeMagnitude * 5) : 0;
 
   return { gazeDirection, blinkRate, eyeContactPercentage, lookingAwayEvents };
 }
 
-/**
- * Analyze facial expressions using ML model inference.
- * When ML models are available, uses face-api.js expression recognition.
- * Produces input-dependent expression distributions derived from frame content.
- */
 function analyzeExpressions(frameData: string): ExpressionAnalysis {
-  // ML-derived expression probabilities from frame content analysis
-  // Each expression gets an independent, input-dependent raw score
   const rawNeutral = 0.3 + hashDerivedValue(frameData, 61) * 0.5;
   const rawHappy = hashDerivedValue(frameData, 67) * 0.4;
   const rawSurprised = hashDerivedValue(frameData, 71) * 0.3;
@@ -265,14 +226,12 @@ function analyzeExpressions(frameData: string): ExpressionAnalysis {
   const rawAnxious = hashDerivedValue(frameData, 83) * 0.25;
   const rawAngry = hashDerivedValue(frameData, 89) * 0.2;
 
-  // Boost expressions if keyword markers are present (simulating ML detection of visual cues)
   const happy = frameData.includes('smile') || frameData.includes('happy') ? rawHappy + 0.4 : rawHappy;
   const surprised = frameData.includes('surprise') || frameData.includes('shock') ? rawSurprised + 0.35 : rawSurprised;
   const confused = frameData.includes('confused') || frameData.includes('frown') ? rawConfused + 0.3 : rawConfused;
   const anxious = frameData.includes('nervous') || frameData.includes('anxious') ? rawAnxious + 0.3 : rawAnxious;
   const angry = frameData.includes('angry') ? rawAngry + 0.35 : rawAngry;
 
-  // Normalize to probability distribution (sum = 1)
   const sum = rawNeutral + happy + surprised + confused + anxious + angry;
   return {
     neutral: Math.round((rawNeutral / sum) * 10000) / 10000,
@@ -325,11 +284,9 @@ function detectAudioFeatures(audioBuffer: Float32Array): AudioAnalysis {
   const duration = audioBuffer.length / sampleRate;
   const wordsPerMinute = duration > 0 ? Math.round((audioBuffer.length / (duration * 5)) * 60 / sampleRate) : 0;
 
-  /* Detect multiple voices via zero-crossing variance heuristic */
   const zcr = zeroCrossings / audioBuffer.length;
   const voiceCount = zcr > 0.15 && zcr < 0.25 ? 1 : zcr > 0.25 ? 2 : 0;
 
-  /* Detect filler words via energy dips */
   const fillerWords: string[] = [];
   if (energy < 0.01) fillerWords.push("um");
   if (energy < 0.005) fillerWords.push("uh");
@@ -347,10 +304,6 @@ function detectAudioFeatures(audioBuffer: Float32Array): AudioAnalysis {
   };
 }
 
-/**
- * Check screen monitoring using client-reported tab switch events.
- * Updated to use real client-reported data instead of browser API polling.
- */
 function checkScreenMonitoring(clientReport: {
   tabSwitchCount?: number;
   focusLossCount?: number;
@@ -401,18 +354,37 @@ function generateRecommendation(riskScore: number, violations: Violation[]): 'pa
   return 'pass';
 }
 
-export async function processVideoFrame(frameData: string, previousPositions?: { x: number; y: number }[]): Promise<ProctoringMetrics> {
-  // Ensure ML models are initialized (attempts once, falls back gracefully)
+/* ------------------------------------------------------------------ */
+/*  Session Management (MongoDB persistence)                           */
+/* ------------------------------------------------------------------ */
+
+async function getOrCreateSession(interviewId: string): Promise<string> {
+  const existing = await ProctoringSessionModel.findOne({ interviewId }).sort({ createdAt: -1 }).lean();
+  if (existing && existing.status === 'active') {
+    return String(existing._id);
+  }
+  const session = await ProctoringSessionModel.create({
+    interviewId,
+    status: 'active',
+    startTime: Date.now(),
+  });
+  return String(session._id);
+}
+
+export async function processVideoFrame(frameData: string, previousPositions?: { x: number; y: number }[], interviewId?: string): Promise<ProctoringMetrics> {
   await ensureMLInitialized();
 
-  // If ML models are loaded, attempt real inference on decoded frame buffer
+  let faceDetection: FaceDetection;
+  let eyeTracking: EyeTracking;
+  let expressions: ExpressionAnalysis;
+  let presence: PresenceDetection;
+
   if (isMLAvailable()) {
     try {
       const buffer = Buffer.from(frameData, 'base64');
       const mlResult = await runMLInference(buffer);
       if (mlResult && mlResult.detection) {
-        // Use ML results directly
-        const faceDetection: FaceDetection = {
+        faceDetection = {
           present: true,
           faceCount: mlResult.faceCount,
           position: {
@@ -425,49 +397,81 @@ export async function processVideoFrame(frameData: string, previousPositions?: {
           confidence: mlResult.detection.score,
         };
 
-        const expressions: ExpressionAnalysis = mlResult.expressions ? {
+        expressions = mlResult.expressions ? {
           neutral: mlResult.expressions.neutral,
           happy: mlResult.expressions.happy,
           surprised: mlResult.expressions.surprised,
-          confused: mlResult.expressions.fearful, // Map fearful -> confused
-          anxious: mlResult.expressions.sad,      // Map sad -> anxious
+          confused: mlResult.expressions.fearful,
+          anxious: mlResult.expressions.sad,
           angry: mlResult.expressions.angry,
         } : analyzeExpressions(frameData);
 
-        // Derive eye tracking from landmarks
-        const eyeTracking = analyzeEyeMovement(frameData, faceDetection, previousPositions || []);
-        const presence = analyzePresence(frameData);
+        eyeTracking = analyzeEyeMovement(frameData, faceDetection, previousPositions || []);
+        presence = analyzePresence(frameData);
 
-        return { timestamp: Date.now(), faceDetection, eyeTracking, expressions, presence };
+        const metrics: ProctoringMetrics = { timestamp: Date.now(), faceDetection, eyeTracking, expressions, presence };
+
+        if (interviewId) {
+          const sessionId = await getOrCreateSession(interviewId);
+          await ProctoringSessionModel.findByIdAndUpdate(sessionId, {
+            $push: { videoMetrics: metrics },
+          });
+        }
+
+        return metrics;
       }
     } catch {
       // Fall through to content-derived analysis
     }
   }
 
-  // Content-derived ML analysis (fallback when models unavailable)
-  // Produces input-dependent results, NOT static values
-  const faceDetection = analyzeFace(frameData);
-  const eyeTracking = analyzeEyeMovement(frameData, faceDetection, previousPositions || []);
-  const expressions = analyzeExpressions(frameData);
-  const presence = analyzePresence(frameData);
+  faceDetection = analyzeFace(frameData);
+  eyeTracking = analyzeEyeMovement(frameData, faceDetection, previousPositions || []);
+  expressions = analyzeExpressions(frameData);
+  presence = analyzePresence(frameData);
 
-  return {
+  const metrics: ProctoringMetrics = {
     timestamp: Date.now(),
     faceDetection,
     eyeTracking,
     expressions,
     presence
   };
+
+  if (interviewId) {
+    try {
+      const sessionId = await getOrCreateSession(interviewId);
+      await ProctoringSessionModel.findByIdAndUpdate(sessionId, {
+        $push: { videoMetrics: metrics },
+      });
+    } catch (error) {
+      logger.error({ err: error, interviewId }, 'Failed to persist video metrics');
+    }
+  }
+
+  return metrics;
 }
 
-export async function processAudioFrame(audioBuffer: Float32Array): Promise<AudioMetrics> {
+export async function processAudioFrame(audioBuffer: Float32Array, interviewId?: string): Promise<AudioMetrics> {
   const audio = detectAudioFeatures(audioBuffer);
 
-  return {
+  const metrics: AudioMetrics = {
     timestamp: Date.now(),
     audio
   };
+
+  if (interviewId) {
+    try {
+      const sessionId = await getOrCreateSession(interviewId);
+      await ProctoringSessionModel.findByIdAndUpdate(sessionId, {
+        $push: { audioMetrics: metrics },
+      });
+    } catch (error) {
+      logger.error({ err: error, interviewId }, 'Failed to persist audio metrics');
+    }
+  }
+
+  return metrics;
 }
 
 export async function checkScreenState(clientReport: {
@@ -476,13 +480,26 @@ export async function checkScreenState(clientReport: {
   recordingDetected?: boolean;
   externalDisplay?: boolean;
   devToolsOpen?: boolean;
-}): Promise<ScreenMetrics> {
+}, interviewId?: string): Promise<ScreenMetrics> {
   const screen = checkScreenMonitoring(clientReport);
 
-  return {
+  const metrics: ScreenMetrics = {
     timestamp: Date.now(),
     screen
   };
+
+  if (interviewId) {
+    try {
+      const sessionId = await getOrCreateSession(interviewId);
+      await ProctoringSessionModel.findByIdAndUpdate(sessionId, {
+        $push: { screenMetrics: metrics },
+      });
+    } catch (error) {
+      logger.error({ err: error, interviewId }, 'Failed to persist screen metrics');
+    }
+  }
+
+  return metrics;
 }
 
 export function evaluateProctoringSession(
@@ -588,4 +605,72 @@ export function evaluateProctoringSession(
     },
     recommendation
   };
+}
+
+export async function evaluateAndSaveSession(
+  interviewId: string,
+  videoMetrics: ProctoringMetrics[],
+  audioMetrics: AudioMetrics[],
+  screenMetrics: ScreenMetrics[]
+): Promise<OverallProctoringResult> {
+  const result = evaluateProctoringSession(interviewId, videoMetrics, audioMetrics, screenMetrics);
+
+  try {
+    await ProctoringSessionModel.findOneAndUpdate(
+      { interviewId, status: 'active' },
+      {
+        $set: {
+          status: 'completed',
+          endTime: Date.now(),
+          violations: result.violations,
+          riskScore: result.riskScore,
+          metricsSummary: result.metricsSummary,
+          recommendation: result.recommendation,
+          videoMetrics,
+          audioMetrics,
+          screenMetrics,
+        },
+      },
+      { sort: { createdAt: -1 } },
+    );
+    logger.info({ interviewId, riskScore: result.riskScore }, 'Proctoring session evaluated and saved');
+  } catch (error) {
+    logger.error({ err: error, interviewId }, 'Failed to save proctoring session evaluation');
+  }
+
+  return result;
+}
+
+export async function fetchProctoringResults(interviewId: string): Promise<OverallProctoringResult | null> {
+  try {
+    const doc = await ProctoringSessionModel.findOne({ interviewId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!doc) return null;
+
+    return {
+      interviewId: doc.interviewId,
+      startTime: doc.startTime || 0,
+      endTime: doc.endTime || Date.now(),
+      violations: (doc.violations || []).map(v => ({
+        type: v.type as ViolationType,
+        severity: v.severity as Violation['severity'],
+        timestamp: v.timestamp,
+        duration: v.duration ?? undefined,
+        evidence: v.evidence || '',
+      })),
+      riskScore: doc.riskScore,
+      metricsSummary: {
+        totalFacePresentTime: doc.metricsSummary?.totalFacePresentTime || 0,
+        averageEyeContact: doc.metricsSummary?.averageEyeContact || 0,
+        tabSwitchCount: doc.metricsSummary?.tabSwitchCount || 0,
+        audioQuality: doc.metricsSummary?.audioQuality || 0,
+      },
+      recommendation: doc.recommendation as OverallProctoringResult['recommendation'],
+    };
+  } catch (error) {
+    logger.error({ err: error, interviewId }, 'Failed to fetch proctoring results from MongoDB');
+    return null;
+  }
 }

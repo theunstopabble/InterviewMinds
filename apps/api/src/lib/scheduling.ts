@@ -1,4 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
+import { InterviewSlotModel, ScheduledInterviewModel } from '../models/Scheduling';
+import { notificationService } from '../lib/notifications';
+import { logger } from '../lib/logger';
 
 export interface InterviewSlot {
   id: string;
@@ -33,12 +36,10 @@ export interface TimeSlot {
   date: string;
   time: string;
   available: boolean;
+  id?: string;
 }
 
 class SchedulingService {
-  private slots: Map<string, InterviewSlot[]> = new Map();
-  private interviews: Map<string, ScheduledInterview[]> = new Map();
-
   getTimezones(): string[] {
     return [
       'America/New_York',
@@ -67,13 +68,13 @@ class SchedulingService {
     return date.toLocaleString('en-US', { timeZone: timezone });
   }
 
-  generateAvailableSlots(
+  async generateAvailableSlots(
     interviewerId: string,
     startDate: Date,
     endDate: Date,
     duration: number = 60,
     workingHours: { start: number; end: number } = { start: 9, end: 18 }
-  ): InterviewSlot[] {
+  ): Promise<InterviewSlot[]> {
     const slots: InterviewSlot[] = [];
     const current = new Date(startDate);
 
@@ -99,36 +100,44 @@ class SchedulingService {
       current.setDate(current.getDate() + 1);
     }
 
+    await InterviewSlotModel.insertMany(slots.map(s => ({
+      id: s.id,
+      interviewerId: s.interviewerId,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      status: s.status,
+      timezone: s.timezone,
+    })));
+
     return slots;
   }
 
-  getAvailableSlots(
+  async getAvailableSlots(
     interviewerId: string,
     date: Date,
-    timezone: string
-  ): TimeSlot[] {
+    _timezone: string
+  ): Promise<TimeSlot[]> {
     const dayStart = new Date(date);
     dayStart.setHours(0, 0, 0, 0);
 
     const dayEnd = new Date(date);
     dayEnd.setHours(23, 59, 59, 999);
 
-    let storedSlots = this.slots.get(interviewerId) || [];
+    let storedSlots = await InterviewSlotModel.find({ interviewerId }).lean();
 
-    // Generate default slots if none exist
     if (storedSlots.length === 0) {
       const startDate = new Date(date);
       startDate.setDate(startDate.getDate() - 7);
       const endDate = new Date(date);
       endDate.setDate(endDate.getDate() + 14);
-      storedSlots = this.generateAvailableSlots(
+      await this.generateAvailableSlots(
         interviewerId,
         startDate,
         endDate,
         60,
         { start: 9, end: 18 }
       );
-      this.slots.set(interviewerId, storedSlots);
+      storedSlots = await InterviewSlotModel.find({ interviewerId }).lean();
     }
 
     const availableSlots = storedSlots.filter(
@@ -150,129 +159,225 @@ class SchedulingService {
     }));
   }
 
-  bookSlot(
+  async bookSlot(
     interviewerId: string,
     slotId: string,
     candidateId: string,
     interviewType: 'live' | 'async' | 'take-home' = 'live',
     role: string = 'Technical Interview'
-  ): ScheduledInterview | null {
-    const storedSlots = this.slots.get(interviewerId);
-    if (!storedSlots) return null;
+  ): Promise<ScheduledInterview | null> {
+    try {
+      const slot = await InterviewSlotModel.findOne({ id: slotId, interviewerId });
+      if (!slot || slot.status !== 'available') return null;
 
-    const slotIndex = storedSlots.findIndex((s) => s.id === slotId);
-    if (slotIndex === -1 || storedSlots[slotIndex].status !== 'available') {
+      slot.status = 'booked';
+      slot.candidateId = candidateId;
+      await slot.save();
+
+      const interviewDoc = await ScheduledInterviewModel.create({
+        candidateId,
+        interviewerId,
+        slotId,
+        scheduledTime: slot.startTime,
+        endTime: slot.endTime,
+        timezone: slot.timezone,
+        status: 'scheduled',
+        reminderSent: false,
+        interviewType,
+        role,
+        meetingLink: `https://interviewminds.com/interview/${uuidv4()}`,
+      });
+
+      notificationService.sendTemplatedNotification(
+        candidateId,
+        'interview-scheduled',
+        {
+          candidate_name: candidateId,
+          role,
+          interview_date: slot.startTime.toLocaleDateString('en-US'),
+          interview_time: slot.startTime.toLocaleTimeString('en-US'),
+        }
+      ).catch((err) => {
+        logger.error({ err, candidateId }, 'Failed to send interview-scheduled notification');
+      });
+
+      return {
+        id: interviewDoc.id,
+        candidateId: interviewDoc.candidateId,
+        interviewerId: interviewDoc.interviewerId,
+        slotId: interviewDoc.slotId,
+        scheduledTime: interviewDoc.scheduledTime,
+        endTime: interviewDoc.endTime,
+        timezone: interviewDoc.timezone,
+        status: interviewDoc.status,
+        reminderSent: interviewDoc.reminderSent,
+        interviewType: interviewDoc.interviewType,
+        role: interviewDoc.role,
+        meetingLink: interviewDoc.meetingLink,
+        notes: interviewDoc.notes,
+        createdAt: interviewDoc.createdAt,
+        updatedAt: interviewDoc.updatedAt,
+      };
+    } catch (error) {
+      logger.error({ err: error, slotId, interviewerId }, 'Error booking slot');
       return null;
     }
-
-    const slot = storedSlots[slotIndex];
-    slot.status = 'booked';
-    slot.candidateId = candidateId;
-
-    const interview: ScheduledInterview = {
-      id: uuidv4(),
-      candidateId,
-      interviewerId,
-      slotId,
-      scheduledTime: slot.startTime,
-      endTime: slot.endTime,
-      timezone: slot.timezone,
-      status: 'scheduled',
-      reminderSent: false,
-      interviewType,
-      role,
-      meetingLink: `https://interviewminds.com/interview/${uuidv4()}`,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const interviews = this.interviews.get(candidateId) || [];
-    interviews.push(interview);
-    this.interviews.set(candidateId, interviews);
-
-    this.slots.set(interviewerId, storedSlots);
-
-    return interview;
   }
 
-  rescheduleInterview(
+  async rescheduleInterview(
     interviewId: string,
     newSlotId: string,
     newInterviewerId?: string
-  ): ScheduledInterview | null {
-    for (const [candidateId, interviews] of this.interviews.entries()) {
-      const interview = interviews.find((i) => i.id === interviewId);
-      if (interview) {
-        if (newInterviewerId && newInterviewerId !== interview.interviewerId) {
-          interview.interviewerId = newInterviewerId;
+  ): Promise<ScheduledInterview | null> {
+    try {
+      const interview = await ScheduledInterviewModel.findOne({ id: interviewId });
+      if (!interview) return null;
+
+      if (newInterviewerId && newInterviewerId !== interview.interviewerId) {
+        interview.interviewerId = newInterviewerId;
+      }
+      interview.slotId = newSlotId;
+      await interview.save();
+
+      notificationService.sendTemplatedNotification(
+        interview.candidateId,
+        'interview-rescheduled',
+        {
+          candidate_name: interview.candidateId,
+          role: interview.role,
+          interview_date: interview.scheduledTime.toLocaleDateString('en-US'),
+          interview_time: interview.scheduledTime.toLocaleTimeString('en-US'),
         }
-        interview.slotId = newSlotId;
-        interview.updatedAt = new Date();
-        return interview;
-      }
+      ).catch((err) => {
+        logger.error({ err, interviewId }, 'Failed to send interview-rescheduled notification');
+      });
+
+      return {
+        id: interview.id,
+        candidateId: interview.candidateId,
+        interviewerId: interview.interviewerId,
+        slotId: interview.slotId,
+        scheduledTime: interview.scheduledTime,
+        endTime: interview.endTime,
+        timezone: interview.timezone,
+        status: interview.status,
+        reminderSent: interview.reminderSent,
+        interviewType: interview.interviewType,
+        role: interview.role,
+        meetingLink: interview.meetingLink,
+        notes: interview.notes,
+        createdAt: interview.createdAt,
+        updatedAt: interview.updatedAt,
+      };
+    } catch (error) {
+      logger.error({ err: error, interviewId }, 'Error rescheduling interview');
+      return null;
     }
-    return null;
   }
 
-  cancelInterview(interviewId: string, reason?: string): boolean {
-    for (const [candidateId, interviews] of this.interviews.entries()) {
-      const interviewIndex = interviews.findIndex((i) => i.id === interviewId);
-      if (interviewIndex !== -1) {
-        interviews[interviewIndex].status = 'cancelled';
-        interviews[interviewIndex].notes = reason;
-        interviews[interviewIndex].updatedAt = new Date();
-        return true;
-      }
+  async cancelInterview(interviewId: string, reason?: string): Promise<boolean> {
+    try {
+      const interview = await ScheduledInterviewModel.findOne({ id: interviewId });
+      if (!interview) return false;
+
+      interview.status = 'cancelled';
+      if (reason) interview.notes = reason;
+      await interview.save();
+
+      return true;
+    } catch (error) {
+      logger.error({ err: error, interviewId }, 'Error cancelling interview');
+      return false;
     }
-    return false;
   }
 
-  getUpcomingInterviews(candidateId: string): ScheduledInterview[] {
-    const interviews = this.interviews.get(candidateId) || [];
-    const now = new Date();
-    return interviews
-      .filter((i) => new Date(i.scheduledTime) > now && i.status === 'scheduled')
-      .sort(
-        (a, b) =>
-          new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()
-      );
+  async getUpcomingInterviews(candidateId: string): Promise<ScheduledInterview[]> {
+    try {
+      const now = new Date();
+      const interviews = await ScheduledInterviewModel.find({
+        candidateId,
+        scheduledTime: { $gt: now },
+        status: 'scheduled',
+      }).sort({ scheduledTime: 1 }).lean();
+
+      return interviews.map((i) => ({
+        id: i.id,
+        candidateId: i.candidateId,
+        interviewerId: i.interviewerId,
+        slotId: i.slotId,
+        scheduledTime: i.scheduledTime,
+        endTime: i.endTime,
+        timezone: i.timezone,
+        status: i.status,
+        reminderSent: i.reminderSent,
+        interviewType: i.interviewType,
+        role: i.role,
+        meetingLink: i.meetingLink,
+        notes: i.notes,
+        createdAt: i.createdAt,
+        updatedAt: i.updatedAt,
+      }));
+    } catch (error) {
+      logger.error({ err: error, candidateId }, 'Error fetching upcoming interviews');
+      return [];
+    }
   }
 
-  getInterviewerSchedule(interviewerId: string): ScheduledInterview[] {
-    const allInterviews: ScheduledInterview[] = [];
-    for (const interviews of this.interviews.values()) {
-      allInterviews.push(
-        ...interviews.filter((i) => i.interviewerId === interviewerId)
-      );
+  async getInterviewerSchedule(interviewerId: string): Promise<ScheduledInterview[]> {
+    try {
+      const interviews = await ScheduledInterviewModel.find({
+        interviewerId,
+      }).sort({ scheduledTime: 1 }).lean();
+
+      return interviews.map((i) => ({
+        id: i.id,
+        candidateId: i.candidateId,
+        interviewerId: i.interviewerId,
+        slotId: i.slotId,
+        scheduledTime: i.scheduledTime,
+        endTime: i.endTime,
+        timezone: i.timezone,
+        status: i.status,
+        reminderSent: i.reminderSent,
+        interviewType: i.interviewType,
+        role: i.role,
+        meetingLink: i.meetingLink,
+        notes: i.notes,
+        createdAt: i.createdAt,
+        updatedAt: i.updatedAt,
+      }));
+    } catch (error) {
+      logger.error({ err: error, interviewerId }, 'Error fetching interviewer schedule');
+      return [];
     }
-    return allInterviews.sort(
-      (a, b) =>
-        new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()
-    );
   }
 
-  markNoShow(interviewId: string): boolean {
-    for (const interviews of this.interviews.values()) {
-      const interview = interviews.find((i) => i.id === interviewId);
-      if (interview) {
-        interview.status = 'no-show';
-        interview.updatedAt = new Date();
-        return true;
-      }
+  async markNoShow(interviewId: string): Promise<boolean> {
+    try {
+      const interview = await ScheduledInterviewModel.findOne({ id: interviewId });
+      if (!interview) return false;
+
+      interview.status = 'no-show';
+      await interview.save();
+      return true;
+    } catch (error) {
+      logger.error({ err: error, interviewId }, 'Error marking no-show');
+      return false;
     }
-    return false;
   }
 
-  completeInterview(interviewId: string): boolean {
-    for (const interviews of this.interviews.values()) {
-      const interview = interviews.find((i) => i.id === interviewId);
-      if (interview) {
-        interview.status = 'completed';
-        interview.updatedAt = new Date();
-        return true;
-      }
+  async completeInterview(interviewId: string): Promise<boolean> {
+    try {
+      const interview = await ScheduledInterviewModel.findOne({ id: interviewId });
+      if (!interview) return false;
+
+      interview.status = 'completed';
+      await interview.save();
+      return true;
+    } catch (error) {
+      logger.error({ err: error, interviewId }, 'Error completing interview');
+      return false;
     }
-    return false;
   }
 }
 
@@ -288,29 +393,28 @@ export function getUserTimezone(): string {
   return schedulingService.getUserTimezone();
 }
 
-export function getUpcomingInterviews(candidateId: string = 'default'): any {
+export async function getUpcomingInterviews(candidateId: string = 'default'): Promise<any> {
   return schedulingService.getUpcomingInterviews(candidateId);
 }
 
-export function getAvailableSlots(tenantId: string, date: string, timezone: string): any {
-  // Parse date as local timezone, not UTC
+export async function getAvailableSlots(tenantId: string, date: string, timezone: string): Promise<any> {
   const [year, month, day] = date.split('-').map(Number);
   const localDate = new Date(year, month - 1, day);
   return schedulingService.getAvailableSlots(tenantId, localDate, timezone);
 }
 
-export function bookSlot(tenantId: string, slotId: string, type: any, candidateId?: string, role?: string): any {
-  const result = schedulingService.bookSlot(tenantId, slotId, candidateId || "default", type || "live", role || "Technical Interview");
+export async function bookSlot(tenantId: string, slotId: string, type: any, candidateId?: string, role?: string): Promise<any> {
+  const result = await schedulingService.bookSlot(tenantId, slotId, candidateId || "default", type || "live", role || "Technical Interview");
   if (!result) {
     throw new Error('Slot not found or already booked');
   }
   return result;
 }
 
-export function rescheduleInterview(interviewId: string, newSlotId: string): any {
+export async function rescheduleInterview(interviewId: string, newSlotId: string): Promise<any> {
   return schedulingService.rescheduleInterview(interviewId, newSlotId);
 }
 
-export function cancelInterview(interviewId: string): any {
+export async function cancelInterview(interviewId: string): Promise<any> {
   return schedulingService.cancelInterview(interviewId, "Cancelled by user");
 }

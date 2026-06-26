@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { TenantModel } from '../models/Tenant';
+import { PlanLimitsModel } from '../models/PlanLimits';
+import { logger } from '../lib/logger';
 
 interface Tenant {
   id: string;
@@ -42,15 +45,26 @@ const tenantSettingsSchema = z.object({
   isolationLevel: z.enum(['database', 'schema', 'row', 'application']).default('row'),
   storageLimit: z.number().min(0).default(1073741824),
   apiRateLimit: z.number().min(1).default(1000),
-  features: z.array(z.string()).default([])
+  features: z.array(z.string()).default([]),
+  customBranding: z.object({
+    primaryColor: z.string(),
+    secondaryColor: z.string(),
+    logoUrl: z.string(),
+    companyName: z.string(),
+  }).optional(),
 });
 
-const planLimits: Record<string, { storage: number; rateLimit: number; features: string[] }> = {
-  free: { storage: 1073741824, rateLimit: 100, features: ['basic'] },
-  starter: { storage: 10737418240, rateLimit: 1000, features: ['basic', 'proctoring'] },
-  professional: { storage: 53687091200, rateLimit: 5000, features: ['basic', 'proctoring', 'analytics'] },
-  enterprise: { storage: -1, rateLimit: -1, features: ['basic', 'proctoring', 'analytics', 'custom'] }
-};
+const DEFAULT_PLAN_LIMITS: Array<{
+  plan: 'free' | 'starter' | 'professional' | 'enterprise';
+  storage: number;
+  rateLimit: number;
+  features: string[];
+}> = [
+  { plan: 'free', storage: 1073741824, rateLimit: 100, features: ['basic'] },
+  { plan: 'starter', storage: 10737418240, rateLimit: 1000, features: ['basic', 'proctoring'] },
+  { plan: 'professional', storage: 53687091200, rateLimit: 5000, features: ['basic', 'proctoring', 'analytics'] },
+  { plan: 'enterprise', storage: -1, rateLimit: -1, features: ['basic', 'proctoring', 'analytics', 'custom'] }
+];
 
 function generateTenantId(): string {
   return `tn_${crypto.randomUUID().slice(0, 12)}`;
@@ -58,7 +72,7 @@ function generateTenantId(): string {
 
 function getTenantConnectionString(tenant: Tenant): string {
   const baseUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-  
+
   switch (tenant.settings.isolationLevel) {
     case 'database':
       return `${baseUri.split('/')[0]}//${tenant.id}`;
@@ -71,20 +85,31 @@ function getTenantConnectionString(tenant: Tenant): string {
   }
 }
 
-interface TenantInput {
-  name: string;
-  domain?: string;
-  plan?: 'free' | 'starter' | 'professional' | 'enterprise';
+export async function initializeDefaultPlanLimits(): Promise<void> {
+  try {
+    for (const limits of DEFAULT_PLAN_LIMITS) {
+      const existing = await PlanLimitsModel.findOne({ plan: limits.plan });
+      if (!existing) {
+        await PlanLimitsModel.create(limits);
+        logger.info({ plan: limits.plan }, 'Created default plan limits');
+      }
+    }
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to initialize default plan limits');
+  }
 }
 
-export function createTenant(data: unknown): Tenant | null {
+export async function createTenant(data: unknown): Promise<Tenant | null> {
   try {
-    const parsed = tenantSchema.parse(data) as TenantInput;
+    const parsed = tenantSchema.parse(data) as { name: string; domain?: string; plan?: 'free' | 'starter' | 'professional' | 'enterprise' };
     const plan = parsed.plan || 'free';
-    const limits = planLimits[plan];
 
-    const tenant: Tenant = {
-      id: generateTenantId(),
+    const planLimits = await PlanLimitsModel.findOne({ plan });
+    const limits = planLimits || DEFAULT_PLAN_LIMITS.find(p => p.plan === plan) || DEFAULT_PLAN_LIMITS[0];
+
+    const tenantId = generateTenantId();
+    const tenantDoc = await TenantModel.create({
+      tenantId,
       name: parsed.name,
       domain: parsed.domain || `${parsed.name.toLowerCase().replace(/\s+/g, '')}.interviewminds.com`,
       plan,
@@ -94,12 +119,102 @@ export function createTenant(data: unknown): Tenant | null {
         isolationLevel: 'row',
         storageLimit: limits.storage,
         apiRateLimit: limits.rateLimit,
-        features: limits.features
+        features: limits.features,
+      }
+    });
+
+    return {
+      id: tenantDoc.tenantId,
+      name: tenantDoc.name,
+      domain: tenantDoc.domain,
+      plan: tenantDoc.plan,
+      status: tenantDoc.status,
+      createdAt: tenantDoc.createdAt,
+      settings: {
+        isolationLevel: tenantDoc.settings.isolationLevel,
+        storageLimit: tenantDoc.settings.storageLimit,
+        apiRateLimit: tenantDoc.settings.apiRateLimit,
+        features: tenantDoc.settings.features,
+        customBranding: tenantDoc.settings.customBranding,
       }
     };
+  } catch (error) {
+    logger.error({ err: error }, 'Error creating tenant');
+    return null;
+  }
+}
 
-    return tenant;
-  } catch {
+export async function getTenantByTenantId(tenantId: string): Promise<Tenant | null> {
+  try {
+    const tenantDoc = await TenantModel.findOne({ tenantId });
+    if (!tenantDoc) return null;
+    return {
+      id: tenantDoc.tenantId,
+      name: tenantDoc.name,
+      domain: tenantDoc.domain,
+      plan: tenantDoc.plan,
+      status: tenantDoc.status,
+      createdAt: tenantDoc.createdAt,
+      settings: {
+        isolationLevel: tenantDoc.settings.isolationLevel,
+        storageLimit: tenantDoc.settings.storageLimit,
+        apiRateLimit: tenantDoc.settings.apiRateLimit,
+        features: tenantDoc.settings.features,
+        customBranding: tenantDoc.settings.customBranding,
+      }
+    };
+  } catch (error) {
+    logger.error({ err: error, tenantId }, 'Error fetching tenant');
+    return null;
+  }
+}
+
+export async function getAllTenants(): Promise<Tenant[]> {
+  try {
+    const tenantDocs = await TenantModel.find().sort({ createdAt: -1 }).lean();
+    return tenantDocs.map((t) => ({
+      id: t.tenantId,
+      name: t.name,
+      domain: t.domain,
+      plan: t.plan,
+      status: t.status,
+      createdAt: t.createdAt,
+      settings: {
+        isolationLevel: t.settings.isolationLevel,
+        storageLimit: t.settings.storageLimit,
+        apiRateLimit: t.settings.apiRateLimit,
+        features: t.settings.features,
+        customBranding: t.settings.customBranding,
+      }
+    }));
+  } catch (error) {
+    logger.error({ err: error }, 'Error fetching all tenants');
+    return [];
+  }
+}
+
+export async function updateTenantSettings(tenantId: string, settings: unknown): Promise<TenantSettings | null> {
+  try {
+    const validated = tenantSettingsSchema.parse(settings);
+    const tenantDoc = await TenantModel.findOne({ tenantId });
+    if (!tenantDoc) return null;
+
+    const merged = {
+      ...(tenantDoc.settings as object),
+      ...validated,
+    };
+    tenantDoc.settings = merged;
+    await tenantDoc.save();
+
+    return {
+      isolationLevel: tenantDoc.settings.isolationLevel,
+      storageLimit: tenantDoc.settings.storageLimit,
+      apiRateLimit: tenantDoc.settings.apiRateLimit,
+      features: tenantDoc.settings.features,
+      customBranding: tenantDoc.settings.customBranding,
+    };
+  } catch (error) {
+    logger.error({ err: error, tenantId }, 'Error updating tenant settings');
     return null;
   }
 }
@@ -168,9 +283,15 @@ export function validateTenantStatus(tenant: Tenant): boolean {
   return false;
 }
 
-export function getPlanInfo(plan: string): { name: string; limits: typeof planLimits[string] } {
+export async function getPlanInfo(plan: string): Promise<{ name: string; limits: { storage: number; rateLimit: number; features: string[] } }> {
+  const planLimits = await PlanLimitsModel.findOne({ plan });
+  const limits = planLimits || DEFAULT_PLAN_LIMITS.find(p => p.plan === plan) || DEFAULT_PLAN_LIMITS[0];
   return {
     name: plan.charAt(0).toUpperCase() + plan.slice(1),
-    limits: planLimits[plan] || planLimits.free
+    limits: {
+      storage: limits.storage,
+      rateLimit: limits.rateLimit,
+      features: limits.features,
+    }
   };
 }

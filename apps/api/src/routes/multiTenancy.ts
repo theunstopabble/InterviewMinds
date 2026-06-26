@@ -1,6 +1,15 @@
 import { Router } from 'express';
 import { logger } from '../lib/logger';
-import { createTenant, validateTenantSettings, checkFeatureAccess, checkRateLimit, checkStorageLimit, getTenantContext, hasPermission, validateTenantStatus, getPlanInfo } from '../lib/multiTenancy';
+import {
+  createTenant,
+  getTenantByTenantId,
+  getAllTenants,
+  updateTenantSettings,
+  validateTenantSettings,
+  checkFeatureAccess,
+  validateTenantStatus,
+  getPlanInfo,
+} from '../lib/multiTenancy';
 
 const router = Router();
 
@@ -10,39 +19,10 @@ interface CreateTenantRequest {
   plan?: 'free' | 'starter' | 'professional' | 'enterprise';
 }
 
-interface UpdateTenantSettingsRequest {
-  isolationLevel?: 'database' | 'schema' | 'row' | 'application';
-  storageLimit?: number;
-  apiRateLimit?: number;
-  features?: string[];
-  customBranding?: {
-    primaryColor: string;
-    secondaryColor: string;
-    logoUrl: string;
-    companyName: string;
-  };
-}
-
-const tenants: Map<string, NonNullable<ReturnType<typeof createTenant>>> = new Map();
-
-// Initialize default tenant
-const defaultTenant = createTenant({ name: 'Default Tenant', domain: 'interviewminds.com', plan: 'enterprise' });
-if (defaultTenant) {
-  tenants.set(defaultTenant.id, defaultTenant);
-}
-
 // GET all tenants
 router.get('/', async (_req, res) => {
   try {
-    const allTenants = Array.from(tenants.values()).map(t => ({
-      id: t.id,
-      name: t.name,
-      domain: t.domain,
-      plan: t.plan,
-      status: t.status,
-      createdAt: t.createdAt,
-      settings: t.settings
-    }));
+    const allTenants = await getAllTenants();
     res.json({ tenants: allTenants, count: allTenants.length });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching tenants:');
@@ -59,13 +39,11 @@ router.post('/', async (req, res) => {
       return;
     }
 
-    const tenant = createTenant(body);
+    const tenant = await createTenant(body);
     if (!tenant) {
       res.status(400).json({ error: 'Invalid tenant data' });
       return;
     }
-
-    tenants.set(tenant.id, tenant);
 
     res.status(201).json({
       success: true,
@@ -87,7 +65,7 @@ router.post('/', async (req, res) => {
 router.get('/:tenantId', async (req, res) => {
   try {
     const { tenantId } = req.params;
-    const tenant = tenants.get(tenantId);
+    const tenant = await getTenantByTenantId(tenantId);
 
     if (!tenant) {
       res.status(404).json({ error: 'Tenant not found' });
@@ -112,7 +90,7 @@ router.get('/:tenantId', async (req, res) => {
 router.put('/:tenantId/settings', async (req, res) => {
   try {
     const { tenantId } = req.params;
-    const tenant = tenants.get(tenantId);
+    const tenant = await getTenantByTenantId(tenantId);
 
     if (!tenant) {
       res.status(404).json({ error: 'Tenant not found' });
@@ -125,12 +103,21 @@ router.put('/:tenantId/settings', async (req, res) => {
       return;
     }
 
-    const updatedSettings = { ...tenant.settings, ...settings };
-    tenant.settings = updatedSettings;
+    const updatedSettings = await updateTenantSettings(tenantId, settings);
+    if (!updatedSettings) {
+      res.status(500).json({ error: 'Failed to update settings' });
+      return;
+    }
 
     res.json({
       success: true,
-      settings: tenant.settings
+      settings: {
+        isolationLevel: updatedSettings.isolationLevel,
+        storageLimit: updatedSettings.storageLimit,
+        apiRateLimit: updatedSettings.apiRateLimit,
+        features: updatedSettings.features,
+        customBranding: updatedSettings.customBranding,
+      }
     });
   } catch (error) {
     logger.error({ err: error }, 'Error updating tenant settings:');
@@ -142,7 +129,7 @@ router.post('/:tenantId/check-feature', async (req, res) => {
   try {
     const { tenantId } = req.params;
     const { feature } = req.body as { feature: string };
-    const tenant = tenants.get(tenantId);
+    const tenant = await getTenantByTenantId(tenantId);
 
     if (!tenant) {
       res.status(404).json({ error: 'Tenant not found' });
@@ -161,14 +148,14 @@ router.post('/:tenantId/check-feature', async (req, res) => {
 router.get('/:tenantId/plan', async (req, res) => {
   try {
     const { tenantId } = req.params;
-    const tenant = tenants.get(tenantId);
+    const tenant = await getTenantByTenantId(tenantId);
 
     if (!tenant) {
       res.status(404).json({ error: 'Tenant not found' });
       return;
     }
 
-    const planInfo = getPlanInfo(tenant.plan);
+    const planInfo = await getPlanInfo(tenant.plan);
 
     res.json({
       plan: tenant.plan,
@@ -184,7 +171,7 @@ router.get('/:tenantId/plan', async (req, res) => {
 router.post('/validate-status', async (req, res) => {
   try {
     const { tenantId } = req.body as { tenantId: string };
-    const tenant = tenants.get(tenantId);
+    const tenant = await getTenantByTenantId(tenantId);
 
     if (!tenant) {
       res.status(404).json({ error: 'Tenant not found' });

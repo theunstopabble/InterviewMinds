@@ -14,6 +14,7 @@ import videoProctoringRoutes from "./routes/videoProctoring";
 import ssoIntegrationRoutes from "./routes/ssoIntegration";
 import webhooksRoutes from "./routes/webhooks";
 import multiTenancyRoutes from "./routes/multiTenancy";
+import { initializeDefaultPlanLimits } from "./lib/multiTenancy";
 import jobMatchingRoutes from "./routes/jobMatching";
 import questionGenerationRoutes from "./routes/questionGeneration";
 import codeAnalysisRoutes from "./routes/codeAnalysis";
@@ -28,9 +29,11 @@ import observabilityRoutes from "./routes/observability";
 import agentRoutes from "./routes/agent";
 import chatRoutes from "./routes/chat";
 import interviewRoutes from "./routes/interview";
+import feedbackRoutes from "./routes/feedback";
 import { requireAuth } from "./middleware/auth";
 import compilerRoutes from "./routes/compiler";
 import ttsRoutes from "./routes/tts";
+import codeEvaluationRoutes from "./routes/codeEvaluation";
 import { logger } from "./lib/logger";
 import { correlationMiddleware, CorrelatedRequest } from "./lib/correlation";
 import { getRedisClient, closeRedisClient } from "./lib/redis";
@@ -475,6 +478,11 @@ app.use(
   interviewRoutes,
 );
 app.use(
+  "/api/feedback",
+  requireAuth,
+  feedbackRoutes,
+);
+app.use(
   "/api/compiler",
   requireAuth,
   attachRole,
@@ -489,6 +497,14 @@ app.use(
   aiLimiter,
   auditLog("tts"),
   ttsRoutes,
+);
+app.use(
+  "/api/code-evaluation",
+  requireAuth,
+  attachRole,
+  aiLimiter,
+  auditLog("code-evaluation"),
+  codeEvaluationRoutes,
 );
 
 // 11. Admin & Export Routes (require admin/auditor permissions)
@@ -563,8 +579,9 @@ if (!MONGO_URI) {
       socketTimeoutMS: 45000,
       bufferCommands: false,
     })
-    .then(() => {
+    .then(async () => {
       logger.info("MongoDB connected");
+      await initializeDefaultPlanLimits();
       // Start background job workers after DB is ready
       try {
         startWorkers();

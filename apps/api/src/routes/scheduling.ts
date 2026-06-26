@@ -1,12 +1,14 @@
 import { Router } from 'express';
-import { 
-  getTimezones, 
-  getUserTimezone, 
-  getUpcomingInterviews, 
-  getAvailableSlots, 
-  bookSlot, 
-  rescheduleInterview, 
-  cancelInterview 
+import { requireAuth } from '../middleware/auth';
+import { logger } from '../lib/logger';
+import {
+  getTimezones,
+  getUserTimezone,
+  getUpcomingInterviews,
+  getAvailableSlots,
+  bookSlot,
+  rescheduleInterview,
+  cancelInterview
 } from '../lib/scheduling';
 
 const router = Router();
@@ -17,19 +19,19 @@ router.get('/timezones', async (_req, res) => {
     const timezones = getTimezones();
     res.json({ timezones });
   } catch (error) {
-    console.error('Error fetching timezones:', error);
+    logger.error({ err: error }, 'Error fetching timezones');
     res.status(500).json({ error: 'Failed to fetch timezones' });
   }
 });
 
 // GET /api/scheduling/upcoming
-router.get('/upcoming', async (req, res) => {
+router.get('/upcoming', requireAuth, async (req, res) => {
   try {
     const { candidateId } = req.query;
-    const interviews = getUpcomingInterviews(candidateId as string || 'default');
+    const interviews = await getUpcomingInterviews(candidateId as string || 'default');
     res.json({ interviews });
   } catch (error) {
-    console.error('Error fetching upcoming interviews:', error);
+    logger.error({ err: error }, 'Error fetching upcoming interviews');
     res.status(500).json({ error: 'Failed to fetch upcoming interviews' });
   }
 });
@@ -40,56 +42,56 @@ router.get('/user-timezone', async (_req, res) => {
     const timezone = getUserTimezone();
     res.json({ timezone });
   } catch (error) {
-    console.error('Error fetching user timezone:', error);
+    logger.error({ err: error }, 'Error fetching user timezone');
     res.status(500).json({ error: 'Failed to fetch user timezone' });
   }
 });
 
 // GET /api/scheduling/slots/:tenantId
-router.get('/slots/:tenantId', async (req, res) => {
+router.get('/slots/:tenantId', requireAuth, async (req, res) => {
   try {
     const { tenantId } = req.params;
     const { date, timezone } = req.query;
-    const slots = getAvailableSlots(tenantId, date as string, timezone as string);
+    const slots = await getAvailableSlots(tenantId, date as string, timezone as string);
     res.json({ slots });
   } catch (error) {
-    console.error('Error fetching slots:', error);
+    logger.error({ err: error }, 'Error fetching slots');
     res.status(500).json({ error: 'Failed to fetch slots' });
   }
 });
 
 // POST /api/scheduling/book
-router.post('/book', async (req, res) => {
+router.post('/book', requireAuth, async (req, res) => {
   try {
     const { tenantId, slotId, type, candidateId, role } = req.body;
-    const interview = bookSlot(tenantId, slotId, (type as "live" | "async" | "take-home") || "live", candidateId, role);
+    const interview = await bookSlot(tenantId, slotId, (type as "live" | "async" | "take-home") || "live", candidateId, role);
     res.json({ success: true, interview });
   } catch (error) {
-    console.error('Error booking slot:', error);
+    logger.error({ err: error }, 'Error booking slot');
     res.status(500).json({ error: 'Failed to book slot' });
   }
 });
 
 // POST /api/scheduling/reschedule
-router.post('/reschedule', async (req, res) => {
+router.post('/reschedule', requireAuth, async (req, res) => {
   try {
     const { interviewId, newSlotId } = req.body;
-    const interview = rescheduleInterview(interviewId, newSlotId);
+    const interview = await rescheduleInterview(interviewId, newSlotId);
     res.json({ success: true, interview });
   } catch (error) {
-    console.error('Error rescheduling:', error);
+    logger.error({ err: error }, 'Error rescheduling');
     res.status(500).json({ error: 'Failed to reschedule' });
   }
 });
 
 // POST /api/scheduling/cancel
-router.post('/cancel', async (req, res) => {
+router.post('/cancel', requireAuth, async (req, res) => {
   try {
     const { interviewId } = req.body;
-    cancelInterview(interviewId);
+    await cancelInterview(interviewId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Error cancelling:', error);
+    logger.error({ err: error }, 'Error cancelling');
     res.status(500).json({ error: 'Failed to cancel' });
   }
 });
