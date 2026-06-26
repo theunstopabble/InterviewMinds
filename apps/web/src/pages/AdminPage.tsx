@@ -1,8 +1,27 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { complianceService, tenantService } from '../services/enterprise';
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { complianceService, tenantService } from "../services/enterprise";
+import {
+  Shield,
+  FileText,
+  Building2,
+  BarChart3,
+  ArrowLeft,
+  CheckCircle2,
+  AlertTriangle,
+  Download,
+  Users,
+  Activity,
+  Settings,
+  RefreshCw,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
-type Framework = 'SOC2' | 'GDPR' | 'HIPAA' | 'ISO27001';
+type Framework = "SOC2" | "GDPR" | "HIPAA" | "ISO27001";
 
 interface ComplianceReport {
   framework: string;
@@ -13,17 +32,31 @@ interface ComplianceReport {
   nextReview: string;
 }
 
+const tabs = [
+  { id: "compliance", label: "Compliance", icon: Shield },
+  { id: "audit", label: "Audit Logs", icon: FileText },
+  { id: "tenants", label: "Tenants", icon: Building2 },
+  { id: "reports", label: "Reports", icon: BarChart3 },
+];
+
+const frameworks: Framework[] = ["SOC2", "GDPR", "HIPAA", "ISO27001"];
+
+const frameworkLabels: Record<string, string> = {
+  SOC2: "SOC 2",
+  GDPR: "GDPR",
+  HIPAA: "HIPAA",
+  ISO27001: "ISO 27001",
+};
+
 export default function AdminPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('compliance');
+  const [activeTab, setActiveTab] = useState("compliance");
   const [loading, setLoading] = useState(false);
   const [securityControls, setSecurityControls] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
   const [reports, setReports] = useState<ComplianceReport[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
-
-  const frameworks: Framework[] = ['SOC2', 'GDPR', 'HIPAA', 'ISO27001'];
 
   useEffect(() => {
     loadAdminData();
@@ -42,7 +75,7 @@ export default function AdminPage() {
       setAuditLogs(logsData.data || logsData.logs || []);
       setTenants(tenantsData.tenants || []);
     } catch (e) {
-      console.error('Error loading admin data:', e);
+      console.error("Error loading admin data:", e);
     }
     setLoading(false);
   };
@@ -51,81 +84,120 @@ export default function AdminPage() {
     setReportLoading(true);
     try {
       const results = await Promise.all(
-        frameworks.map(fw => 
-          complianceService.getReport(fw).catch(() => ({ framework: fw, status: 'unavailable', lastGenerated: '', controlsPassing: 0, controlsTotal: 0, nextReview: '' }))
+        frameworks.map((fw) =>
+          complianceService.getReport(fw).catch(() => ({
+            framework: fw,
+            status: "unavailable",
+            lastGenerated: "",
+            controlsPassing: 0,
+            controlsTotal: 0,
+            nextReview: "",
+          }))
         )
       );
-      setReports(results.map((r, i) => ({
-        framework: r.framework || frameworks[i],
-        status: r.status || 'unavailable',
-        lastGenerated: r.lastGenerated || new Date().toISOString(),
-        controlsPassing: r.controlsPassing || 0,
-        controlsTotal: r.controlsTotal || 9,
-        nextReview: r.nextReview || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-      })));
+      setReports(
+        results.map((r, i) => ({
+          framework: r.framework || frameworks[i],
+          status: r.status || "unavailable",
+          lastGenerated: r.lastGenerated || new Date().toISOString(),
+          controlsPassing: r.controlsPassing || 0,
+          controlsTotal: r.controlsTotal || 9,
+          nextReview: r.nextReview || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+        }))
+      );
     } catch (e) {
-      console.error('Error loading reports:', e);
+      console.error("Error loading reports:", e);
     }
     setReportLoading(false);
   };
 
   useEffect(() => {
-    if (activeTab === 'reports' && reports.length === 0) {
+    if (activeTab === "reports" && reports.length === 0) {
       loadReports();
     }
   }, [activeTab]);
 
-  const tabs = [
-    { id: 'compliance', label: 'Compliance', icon: '📋' },
-    { id: 'audit', label: 'Audit Logs', icon: '📝' },
-    { id: 'tenants', label: 'Tenants', icon: '🏢' },
-    { id: 'reports', label: 'Reports', icon: '📊' },
-  ];
+  const handleExportAudit = () => {
+    const blob = new Blob([JSON.stringify(auditLogs, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit-logs-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen bg-gray-950 text-white p-4 sm:p-6 md:p-10">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-            <p className="text-gray-400 mt-1">Enterprise control and compliance management</p>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center">
+                <Shield className="w-4 h-4 text-white" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-rose-400">
+                Admin
+              </h1>
+            </div>
+            <p className="text-slate-400 text-sm sm:text-base">
+              Enterprise control, compliance management, and system oversight.
+            </p>
           </div>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition"
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/dashboard")}
+            className="text-slate-400 hover:text-white"
           >
-            ← Back to Dashboard
-          </button>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Dashboard
+          </Button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-4 mb-8 border-b border-gray-700 pb-4">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 shrink-0",
+                  activeTab === tab.id
+                    ? "bg-red-600/20 text-red-300 border border-red-500/30 shadow-sm"
+                    : "bg-slate-900/50 text-slate-400 border border-slate-800 hover:bg-slate-800/80 hover:text-slate-200"
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
+        {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-24 bg-slate-800 rounded-xl" />
+              ))}
+            </div>
+            <Skeleton className="h-48 w-full bg-slate-800 rounded-xl" />
           </div>
         ) : (
           <div>
-            {activeTab === 'compliance' && <CompliancePanel controls={securityControls} />}
-            {activeTab === 'audit' && <AuditPanel logs={auditLogs} />}
-            {activeTab === 'tenants' && <TenantsPanel tenants={tenants} />}
-            {activeTab === 'reports' && <ReportsPanel reports={reports} loading={reportLoading} />}
+            {activeTab === "compliance" && <CompliancePanel controls={securityControls} />}
+            {activeTab === "audit" && (
+              <AuditPanel logs={auditLogs} onExport={handleExportAudit} />
+            )}
+            {activeTab === "tenants" && <TenantsPanel tenants={tenants} />}
+            {activeTab === "reports" && (
+              <ReportsPanel reports={reports} loading={reportLoading} />
+            )}
           </div>
         )}
       </div>
@@ -134,234 +206,419 @@ export default function AdminPage() {
 }
 
 function CompliancePanel({ controls }: { controls: any[] }) {
-  const frameworkMap = ['SOC 2', 'GDPR', 'HIPAA', 'ISO 27001'].reduce((acc, fw) => {
-    acc[fw] = controls.filter(c => c.category === fw || c.name?.includes(fw));
+  const frameworkMap = ["SOC 2", "GDPR", "HIPAA", "ISO 27001"].reduce((acc, fw) => {
+    acc[fw] = controls.filter((c) => c.category === fw || c.name?.includes(fw));
     return acc;
   }, {} as Record<string, any[]>);
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-4 gap-4">
-        {['SOC 2', 'GDPR', 'HIPAA', 'ISO 27001'].map((framework) => {
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {["SOC 2", "GDPR", "HIPAA", "ISO 27001"].map((framework) => {
           const fwControls = frameworkMap[framework] || [];
-          const activeCount = fwControls.filter(c => c.status === 'active').length;
+          const activeCount = fwControls.filter((c) => c.status === "active").length;
           const percentage = Math.round((activeCount / (fwControls.length || 1)) * 100);
           return (
-            <div key={framework} className="bg-gray-800 rounded-xl p-6">
-              <h3 className="font-semibold">{framework}</h3>
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex-1 bg-gray-700 rounded-full h-2">
-                  <div className="bg-green-500 h-2 rounded-full" style={{ width: `${percentage}%` }}></div>
+            <Card key={framework} className="bg-gray-800/80 border-gray-700/50">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-slate-200">{framework}</h3>
+                  <Badge
+                    className={cn(
+                      percentage >= 80
+                        ? "bg-emerald-600/20 text-emerald-400 border-emerald-600/30"
+                        : percentage >= 50
+                          ? "bg-amber-600/20 text-amber-400 border-amber-600/30"
+                          : "bg-red-600/20 text-red-400 border-red-600/30"
+                    )}
+                    variant="outline"
+                  >
+                    {percentage}%
+                  </Badge>
                 </div>
-                <span className="text-sm">{percentage}%</span>
-              </div>
-            </div>
+                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-500",
+                      percentage >= 80
+                        ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                        : percentage >= 50
+                          ? "bg-gradient-to-r from-amber-500 to-amber-400"
+                          : "bg-gradient-to-r from-red-500 to-red-400"
+                    )}
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  {activeCount}/{fwControls.length || 0} controls active
+                </p>
+              </CardContent>
+            </Card>
           );
         })}
       </div>
 
-      <div className="bg-gray-800 rounded-xl p-6">
-        <h2 className="text-xl font-semibold mb-4">Security Controls</h2>
-        <div className="grid grid-cols-3 gap-4">
-          {controls.map((control) => (
-            <div key={control.id} className="bg-gray-700 p-4 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-sm">{control.name}</span>
-                <span className={`px-2 py-1 rounded text-xs ${
-                  control.status === 'active' ? 'bg-green-600' :
-                  control.status === 'pending' ? 'bg-yellow-600' : 'bg-red-600'
-                }`}>
-                  {control.status}
-                </span>
-              </div>
-              <p className="text-gray-400 text-xs">{control.category}</p>
+      <Card className="bg-gray-800/80 border-gray-700/50">
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-blue-400" />
+            Security Controls
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {controls.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {controls.map((control) => (
+                <div
+                  key={control.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-800/50"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-200 truncate">{control.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{control.category}</p>
+                  </div>
+                  <Badge
+                    className={cn(
+                      "ml-2 shrink-0 text-xs",
+                      control.status === "active" &&
+                        "bg-emerald-600/20 text-emerald-400 border-emerald-600/30",
+                      control.status === "pending" &&
+                        "bg-amber-600/20 text-amber-400 border-amber-600/30",
+                      control.status !== "active" &&
+                        control.status !== "pending" &&
+                        "bg-red-600/20 text-red-400 border-red-600/30"
+                    )}
+                    variant="outline"
+                  >
+                    {control.status}
+                  </Badge>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+          ) : (
+            <div className="text-center py-8 text-slate-500 text-sm">No security controls configured</div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function AuditPanel({ logs }: { logs: any[] }) {
+function AuditPanel({ logs, onExport }: { logs: any[]; onExport: () => void }) {
   return (
-    <div className="bg-gray-800 rounded-xl p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Audit Logs</h2>
-        <button className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition">
-          Export Logs
-        </button>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="text-left border-b border-gray-700">
-              <th className="pb-3">Timestamp</th>
-              <th className="pb-3">User</th>
-              <th className="pb-3">Action</th>
-              <th className="pb-3">Resource</th>
-              <th className="pb-3">IP Address</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.length > 0 ? logs.map((log, i) => (
-              <tr key={i} className="border-b border-gray-700">
-                <td className="py-3 text-gray-400">{new Date(log.timestamp).toLocaleString()}</td>
-                <td className="py-3">{log.userId}</td>
-                <td className="py-3">
-                  <span className="px-2 py-1 bg-blue-600 rounded text-sm">{log.action}</span>
-                </td>
-                <td className="py-3 text-gray-400">{log.resource}</td>
-                <td className="py-3 text-gray-400">{log.ipAddress || '-'}</td>
+    <Card className="bg-gray-800/80 border-gray-700/50">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-cyan-400" />
+            Audit Logs
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExport}
+              className="border-slate-700 text-slate-300 hover:text-white"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.reload()}
+              className="border-slate-700 text-slate-300 hover:text-white"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-slate-800">
+                <th className="pb-3 text-slate-400 font-medium">Timestamp</th>
+                <th className="pb-3 text-slate-400 font-medium">User</th>
+                <th className="pb-3 text-slate-400 font-medium">Action</th>
+                <th className="pb-3 text-slate-400 font-medium hidden sm:table-cell">Resource</th>
+                <th className="pb-3 text-slate-400 font-medium hidden md:table-cell">IP</th>
               </tr>
-            )) : (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-gray-400">
-                  No audit logs found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+            </thead>
+            <tbody>
+              {logs.length > 0 ? (
+                logs.map((log, i) => (
+                  <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-900/30 transition-colors">
+                    <td className="py-3 text-slate-300 whitespace-nowrap">
+                      {new Date(log.timestamp).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td className="py-3 text-slate-300">{log.userId?.substring(0, 12)}</td>
+                    <td className="py-3">
+                      <Badge
+                        className={cn(
+                          "text-xs",
+                          log.action === "create" && "bg-emerald-600/20 text-emerald-400 border-emerald-600/30",
+                          log.action === "update" && "bg-blue-600/20 text-blue-400 border-blue-600/30",
+                          log.action === "delete" && "bg-red-600/20 text-red-400 border-red-600/30",
+                          !["create", "update", "delete"].includes(log.action) &&
+                            "bg-slate-700 text-slate-300 border-slate-600"
+                        )}
+                        variant="outline"
+                      >
+                        {log.action}
+                      </Badge>
+                    </td>
+                    <td className="py-3 text-slate-400 text-xs hidden sm:table-cell">{log.resource}</td>
+                    <td className="py-3 text-slate-500 text-xs font-mono hidden md:table-cell">
+                      {log.ipAddress || "-"}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-slate-500 text-sm">
+                    No audit logs found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
-interface TenantsPanelProps {
-  tenants: any[];
-}
-
-function TenantsPanel({ tenants }: TenantsPanelProps) {
-  const plans = ['free', 'starter', 'professional', 'enterprise'];
-  const planCounts = plans.map(plan => ({
+function TenantsPanel({ tenants }: { tenants: any[] }) {
+  const plans = ["free", "starter", "professional", "enterprise"];
+  const planCounts = plans.map((plan) => ({
     plan,
-    count: tenants.filter((t: any) => t.plan === plan).length
+    count: tenants.filter((t: any) => t.plan === plan).length,
   }));
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Tenant Management</h2>
-        <button className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition">
-          + Add Tenant
-        </button>
+        <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+          <Building2 className="w-5 h-5 text-blue-400" />
+          Tenant Management
+        </h2>
+        <Button size="sm" className="bg-blue-600 hover:bg-blue-500">
+          <Users className="w-4 h-4 mr-2" />
+          Add Tenant
+        </Button>
       </div>
 
-      <div className="bg-gray-800 rounded-xl p-6">
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          {planCounts.map(({ plan, count }) => (
-            <div key={plan} className="bg-gray-700 p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold">{count}</div>
-              <div className="text-gray-400 text-sm capitalize">{plan}</div>
-            </div>
-          ))}
-        </div>
-
-        <table className="w-full">
-          <thead>
-            <tr className="text-left border-b border-gray-700">
-              <th className="pb-3">Tenant ID</th>
-              <th className="pb-3">Name</th>
-              <th className="pb-3">Plan</th>
-              <th className="pb-3">Status</th>
-              <th className="pb-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tenants.length > 0 ? tenants.map((tenant: any) => (
-              <tr key={tenant.id} className="border-b border-gray-700">
-                <td className="py-3 text-gray-400">{tenant.id}</td>
-                <td className="py-3">{tenant.name}</td>
-                <td className="py-3">
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    tenant.plan === 'enterprise' ? 'bg-purple-600' :
-                    tenant.plan === 'professional' ? 'bg-blue-600' :
-                    tenant.plan === 'starter' ? 'bg-green-600' : 'bg-gray-600'
-                  }`}>
-                    {tenant.plan}
-                  </span>
-                </td>
-                <td className="py-3">
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    tenant.status === 'active' ? 'bg-green-600' : 'bg-yellow-600'
-                  }`}>
-                    {tenant.status}
-                  </span>
-                </td>
-                <td className="py-3">
-                  <button className="text-blue-400 hover:text-blue-300">Edit</button>
-                </td>
-              </tr>
-            )) : (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-gray-400">
-                  No tenants found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {planCounts.map(({ plan, count }) => (
+          <Card key={plan} className="bg-gray-800/80 border-gray-700/50">
+            <CardContent className="p-5 text-center">
+              <div
+                className={cn(
+                  "text-2xl font-bold",
+                  plan === "free" && "text-slate-400",
+                  plan === "starter" && "text-blue-400",
+                  plan === "professional" && "text-amber-400",
+                  plan === "enterprise" && "text-purple-400"
+                )}
+              >
+                {count}
+              </div>
+              <div className="text-xs text-slate-500 capitalize mt-1">{plan}</div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
+
+      <Card className="bg-gray-800/80 border-gray-700/50">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b border-slate-800">
+                  <th className="p-4 text-slate-400 font-medium">Tenant</th>
+                  <th className="p-4 text-slate-400 font-medium">Plan</th>
+                  <th className="p-4 text-slate-400 font-medium">Status</th>
+                  <th className="p-4 text-slate-400 font-medium hidden sm:table-cell">Domain</th>
+                  <th className="p-4 text-slate-400 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tenants.length > 0 ? (
+                  tenants.map((tenant: any) => (
+                    <tr key={tenant.id} className="border-b border-slate-800/50 hover:bg-slate-900/30 transition-colors">
+                      <td className="p-4">
+                        <div>
+                          <p className="font-medium text-slate-200">{tenant.name}</p>
+                          <p className="text-xs text-slate-500 font-mono mt-0.5">{tenant.id}</p>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <Badge
+                          className={cn(
+                            "capitalize",
+                            tenant.plan === "enterprise" &&
+                              "bg-purple-600/20 text-purple-400 border-purple-600/30",
+                            tenant.plan === "professional" &&
+                              "bg-amber-600/20 text-amber-400 border-amber-600/30",
+                            tenant.plan === "starter" &&
+                              "bg-blue-600/20 text-blue-400 border-blue-600/30",
+                            tenant.plan === "free" &&
+                              "bg-slate-700 text-slate-300 border-slate-600"
+                          )}
+                          variant="outline"
+                        >
+                          {tenant.plan}
+                        </Badge>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={cn(
+                              "w-2 h-2 rounded-full",
+                              tenant.status === "active" ? "bg-emerald-500" : "bg-amber-500"
+                            )}
+                          />
+                          <span className="text-slate-300 capitalize">{tenant.status}</span>
+                        </div>
+                      </td>
+                      <td className="p-4 text-slate-400 text-xs hidden sm:table-cell">
+                        {tenant.domain || "-"}
+                      </td>
+                      <td className="p-4">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-slate-400 hover:text-white"
+                        >
+                          <Settings className="w-4 h-4 mr-1" />
+                          Edit
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-slate-500 text-sm">
+                      No tenants found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-interface ReportsPanelProps {
-  reports: ComplianceReport[];
-  loading: boolean;
-}
-
-const frameworkLabels: Record<string, string> = {
-  SOC2: 'SOC 2',
-  GDPR: 'GDPR',
-  HIPAA: 'HIPAA',
-  ISO27001: 'ISO 27001',
-};
-
-function ReportsPanel({ reports, loading }: ReportsPanelProps) {
+function ReportsPanel({ reports, loading }: { reports: ComplianceReport[]; loading: boolean }) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        {[...Array(4)].map((_, i) => (
+          <Skeleton key={i} className="h-40 bg-slate-800 rounded-xl" />
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
       {reports.map((report) => {
         const label = frameworkLabels[report.framework] || report.framework;
-        const isCompliant = report.status === 'compliant' || report.status === 'active';
-        
+        const isCompliant = report.status === "compliant" || report.status === "active";
+        const passPercent = Math.round((report.controlsPassing / (report.controlsTotal || 1)) * 100);
+
         return (
-          <div key={report.framework} className="bg-gray-800 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">{label} Report</h2>
-              <span className={isCompliant ? 'text-green-500' : 'text-yellow-500'}>
-                {isCompliant ? '✓ Compliant' : '⚠ Pending'}
-              </span>
-            </div>
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Last Generated</span>
-                <span>{report.lastGenerated ? new Date(report.lastGenerated).toLocaleDateString() : 'N/A'}</span>
+          <Card
+            key={report.framework}
+            className={cn(
+              "bg-gray-800/80 transition-all duration-300",
+              isCompliant ? "border-emerald-500/20" : "border-amber-500/20"
+            )}
+          >
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center",
+                      isCompliant ? "bg-emerald-600/20" : "bg-amber-600/20"
+                    )}
+                  >
+                    {isCompliant ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    ) : (
+                      <AlertTriangle className="w-5 h-5 text-amber-400" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-200">{label}</h3>
+                    <Badge
+                      className={cn(
+                        "text-xs mt-0.5",
+                        isCompliant
+                          ? "bg-emerald-600/20 text-emerald-400 border-emerald-600/30"
+                          : "bg-amber-600/20 text-amber-400 border-amber-600/30"
+                      )}
+                      variant="outline"
+                    >
+                      {isCompliant ? "Compliant" : "Pending"}
+                    </Badge>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Controls Passing</span>
-                <span className={isCompliant ? 'text-green-500' : 'text-yellow-500'}>
-                  {report.controlsPassing}/{report.controlsTotal}
-                </span>
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">Controls Passing</span>
+                  <span className={cn("font-medium", isCompliant ? "text-emerald-400" : "text-amber-400")}>
+                    {report.controlsPassing}/{report.controlsTotal} ({passPercent}%)
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-500",
+                      isCompliant ? "bg-emerald-500" : "bg-amber-500"
+                    )}
+                    style={{ width: `${passPercent}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-slate-500 pt-1">
+                  <span>
+                    Generated:{" "}
+                    {report.lastGenerated
+                      ? new Date(report.lastGenerated).toLocaleDateString()
+                      : "N/A"}
+                  </span>
+                  <span>
+                    Review:{" "}
+                    {report.nextReview
+                      ? new Date(report.nextReview).toLocaleDateString()
+                      : "N/A"}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Next Review</span>
-                <span>{report.nextReview ? new Date(report.nextReview).toLocaleDateString() : 'N/A'}</span>
-              </div>
-            </div>
-            <button className="mt-4 w-full py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition">
-              Download Report
-            </button>
-          </div>
+
+              <Button
+                variant="outline"
+                className="w-full border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download Report
+              </Button>
+            </CardContent>
+          </Card>
         );
       })}
     </div>
