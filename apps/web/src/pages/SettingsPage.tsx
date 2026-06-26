@@ -883,7 +883,7 @@ function WebhookSettings({ config: _config }: { config: any }) {
     setLoading(true);
     try {
       const data = await webhookService.getEvents?.();
-      setWebhooks(Array.isArray(data) ? data : data?.webhooks || data?.events || []);
+      setWebhooks(Array.isArray(data) ? data : data?.events || []);
     } catch {
       setWebhooks([]);
     }

@@ -90,7 +90,7 @@ export default function AdminPage() {
         observabilityService.getSystemMetrics?.().catch(() => null) ?? Promise.resolve(null),
       ]);
       setHealthData(health);
-      setAgentList(agents?.agents || agents || []);
+      setAgentList(agents?.agents || []);
       setObservabilityData(obs);
     } catch (e) {
       console.error("Error loading admin data:", e);
