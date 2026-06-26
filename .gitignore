@@ -18,6 +18,7 @@ build
 out
 dev-dist
 .turbo
+coverage
 
 # ML Model Files (large binaries - download separately)
 **/models/face-api/*.bin

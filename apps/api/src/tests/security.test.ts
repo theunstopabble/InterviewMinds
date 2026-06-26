@@ -27,7 +27,7 @@ describe("Security Middleware", () => {
     app.use(requestTimeout(50));
     app.get("/slow", async (_req, res) => {
       await new Promise((r) => setTimeout(r, 200));
-      res.json({ ok: true });
+      if (!res.headersSent) res.json({ ok: true });
     });
 
     const res = await request(app).get("/slow");
