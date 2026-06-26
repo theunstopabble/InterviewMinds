@@ -1,15 +1,47 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-import { biometricService, ssoService, encryptionService, geoFencingService } from '../services/enterprise';
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import {
+  Settings,
+  Shield,
+  Fingerprint,
+  Link2,
+  Globe,
+  Lock,
+  ArrowLeft,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Plus,
+  Key,
+  Eye,
+  Activity,
+  Server,
+  Users,
+  AlertTriangle,
+} from "lucide-react";
+import { biometricService, ssoService, encryptionService, geoFencingService } from "../services/enterprise";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 function getCurrentUserId(): string {
-  return (window as any).Clerk?.user?.id || 'default-user';
+  return (window as any).Clerk?.user?.id || "default-user";
 }
+
+const tabs = [
+  { id: "security", label: "Security", icon: Shield },
+  { id: "biometric", label: "Biometric", icon: Fingerprint },
+  { id: "sso", label: "SSO", icon: Link2 },
+  { id: "geo", label: "Geo-Fencing", icon: Globe },
+  { id: "encryption", label: "Encryption", icon: Lock },
+];
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('security');
+  const [activeTab, setActiveTab] = useState("security");
   const [loading, setLoading] = useState(false);
 
   const [biometricStatus, setBiometricStatus] = useState<any>(null);
@@ -36,64 +68,79 @@ export default function SettingsPage() {
       setEncryptionStatus(enc);
       setGeoConfig(geo);
     } catch (e) {
-      console.error('Error loading settings:', e);
+      console.error("Error loading settings:", e);
     }
     setLoading(false);
   };
 
-  const tabs = [
-    { id: 'security', label: 'Security', icon: '🔒' },
-    { id: 'biometric', label: 'Biometric Auth', icon: '👤' },
-    { id: 'sso', label: 'SSO Integration', icon: '🔗' },
-    { id: 'geo', label: 'Geo-Fencing', icon: '🌍' },
-    { id: 'encryption', label: 'E2E Encryption', icon: '🔐' },
-  ];
-
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+    <div className="min-h-screen bg-gray-950 text-white p-4 sm:p-6 md:p-10">
+      <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Enterprise Settings</h1>
-            <p className="text-gray-400 mt-1">Configure security and enterprise features</p>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center">
+                <Settings className="w-4 h-4 text-white" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-200 to-slate-400">
+                Settings
+              </h1>
+            </div>
+            <p className="text-slate-400 text-sm sm:text-base">Configure security, authentication, and enterprise features.</p>
           </div>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition"
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/dashboard")}
+            className="text-slate-400 hover:text-white"
           >
-            ← Back to Dashboard
-          </button>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Dashboard
+          </Button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-4 mb-8 border-b border-gray-700 pb-4">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 shrink-0",
+                  activeTab === tab.id
+                    ? "bg-blue-600/20 text-blue-300 border border-blue-500/30 shadow-sm"
+                    : "bg-slate-900/50 text-slate-400 border border-slate-800 hover:bg-slate-800/80 hover:text-slate-200"
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
+        {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          <div className="space-y-4">
+            <Skeleton className="h-8 w-48 bg-slate-800 rounded-lg" />
+            <Skeleton className="h-24 w-full bg-slate-800 rounded-xl" />
+            <Skeleton className="h-24 w-full bg-slate-800 rounded-xl" />
+            <Skeleton className="h-24 w-full bg-slate-800 rounded-xl" />
           </div>
         ) : (
-          <div className="bg-gray-800 rounded-xl p-6">
-            {activeTab === 'security' && <SecuritySettings />}
-            {activeTab === 'biometric' && <BiometricSettings status={biometricStatus} userId={getCurrentUserId()} />}
-            {activeTab === 'sso' && <SSOSettings config={ssoConfig} userId={getCurrentUserId()} />}
-            {activeTab === 'geo' && <GeoSettings config={geoConfig} />}
-            {activeTab === 'encryption' && <EncryptionSettings status={encryptionStatus} userId={getCurrentUserId()} />}
+          <div>
+            {activeTab === "security" && <SecuritySettings />}
+            {activeTab === "biometric" && (
+              <BiometricSettings status={biometricStatus} userId={getCurrentUserId()} />
+            )}
+            {activeTab === "sso" && <SSOSettings config={ssoConfig} userId={getCurrentUserId()} />}
+            {activeTab === "geo" && <GeoSettings config={geoConfig} />}
+            {activeTab === "encryption" && (
+              <EncryptionSettings status={encryptionStatus} userId={getCurrentUserId()} />
+            )}
           </div>
         )}
       </div>
@@ -102,35 +149,72 @@ export default function SettingsPage() {
 }
 
 function SecuritySettings() {
+  const features = [
+    {
+      icon: Activity,
+      title: "Rate Limiting",
+      desc: "Configure API rate limits per user",
+      status: "Active",
+      statusColor: "text-emerald-400",
+      detail: "Default: 200 req/15min",
+    },
+    {
+      icon: Users,
+      title: "RBAC (Role-Based Access Control)",
+      desc: "4 roles: admin, manager, interviewer, candidate",
+      status: "Enabled",
+      statusColor: "text-emerald-400",
+    },
+    {
+      icon: Server,
+      title: "Circuit Breakers",
+      desc: "Protect against API failures with automatic fallback",
+      status: "Active",
+      statusColor: "text-emerald-400",
+      detail: "Groq · Gemini · Azure · Piston",
+    },
+    {
+      icon: AlertTriangle,
+      title: "Audit Trail",
+      desc: "Complete audit logging for all resource access",
+      status: "Active",
+      statusColor: "text-emerald-400",
+    },
+  ];
+
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">Security Configuration</h2>
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+        <Shield className="w-5 h-5 text-blue-400" />
+        Security Configuration
+      </h2>
       <div className="grid gap-4">
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Rate Limiting</h3>
-          <p className="text-gray-400 text-sm">Configure API rate limits per user</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-green-500">● Active</span>
-            <span className="text-gray-400">Default: 200 req/15min</span>
-          </div>
-        </div>
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">RBAC (Role-Based Access Control)</h3>
-          <p className="text-gray-400 text-sm">4 roles: admin, manager, interviewer, candidate</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-green-500">● Enabled</span>
-          </div>
-        </div>
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Circuit Breakers</h3>
-          <p className="text-gray-400 text-sm">Protect against API failures</p>
-          <div className="mt-2 flex gap-4 text-sm">
-            <span className="text-green-500">● Groq</span>
-            <span className="text-green-500">● Gemini</span>
-            <span className="text-green-500">● Azure</span>
-            <span className="text-green-500">● Piston</span>
-          </div>
-        </div>
+        {features.map((feat) => {
+          const Icon = feat.icon;
+          return (
+            <Card key={feat.title} className="bg-gray-800/80 border-gray-700/50">
+              <CardContent className="p-5">
+                <div className="flex items-start gap-4">
+                  <div className="p-2 rounded-lg bg-slate-900/50 border border-slate-800 shrink-0">
+                    <Icon className="w-4 h-4 text-slate-300" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-slate-200">{feat.title}</h3>
+                    <p className="text-sm text-slate-400 mt-0.5">{feat.desc}</p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <span className={cn("text-xs font-medium", feat.statusColor)}>
+                        ● {feat.status}
+                      </span>
+                      {feat.detail && (
+                        <span className="text-xs text-slate-500">{feat.detail}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
@@ -138,7 +222,7 @@ function SecuritySettings() {
 
 function BiometricSettings({ status, userId }: { status: any; userId: string }) {
   const [enrolling, setEnrolling] = useState(false);
-  const [selectedType, setSelectedType] = useState<'face' | 'voice' | 'fingerprint'>('face');
+  const [selectedType, setSelectedType] = useState<"face" | "voice" | "fingerprint">("face");
   const [enrollingLoading, setEnrollingLoading] = useState(false);
 
   const handleEnroll = async () => {
@@ -149,96 +233,150 @@ function BiometricSettings({ status, userId }: { status: any; userId: string }) 
         toast.success(`Enrolled ${selectedType} successfully`);
         setEnrolling(false);
       } else {
-        toast.error('Enrollment failed');
+        toast.error("Enrollment failed");
       }
     } catch (e: any) {
-      toast.error(e.message || 'Enrollment failed');
+      toast.error(e.message || "Enrollment failed");
     }
     setEnrollingLoading(false);
   };
 
+  const enrolled = status?.enrolledTypes || [];
+
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">Biometric Authentication</h2>
-      <div className="grid gap-4">
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Status</h3>
-          <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full ${status?.enabled ? 'bg-green-500' : 'bg-gray-500'}`}></span>
-            <span>{status?.enabled ? 'Enabled' : 'Disabled'}</span>
-          </div>
-        </div>
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Enrolled Types</h3>
-          <div className="flex gap-3">
-            {['face', 'voice', 'fingerprint'].map((type) => (
-              <span
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+        <Fingerprint className="w-5 h-5 text-purple-400" />
+        Biometric Authentication
+      </h2>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5 text-center">
+            <div
+              className={cn(
+                "w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center",
+                status?.enabled ? "bg-emerald-500/20" : "bg-slate-800"
+              )}
+            >
+              <div
+                className={cn(
+                  "w-3 h-3 rounded-full",
+                  status?.enabled ? "bg-emerald-500" : "bg-slate-600"
+                )}
+              />
+            </div>
+            <p className="text-sm font-medium text-slate-200">Status</p>
+            <p className={cn("text-xs mt-1", status?.enabled ? "text-emerald-400" : "text-slate-500")}>
+              {status?.enabled ? "Enabled" : "Disabled"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5 text-center">
+            <div className="w-12 h-12 rounded-full mx-auto mb-3 bg-slate-800 flex items-center justify-center">
+              <Eye className="w-5 h-5 text-slate-400" />
+            </div>
+            <p className="text-sm font-medium text-slate-200">Liveness</p>
+            <p className={cn("text-xs mt-1", status?.livenessDetection ? "text-emerald-400" : "text-slate-500")}>
+              {status?.livenessDetection ? "Active" : "Inactive"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5 text-center">
+            <div className="w-12 h-12 rounded-full mx-auto mb-3 bg-slate-800 flex items-center justify-center">
+              <CheckCircle2 className="w-5 h-5 text-slate-400" />
+            </div>
+            <p className="text-sm font-medium text-slate-200">Enrolled</p>
+            <p className="text-xs mt-1 text-slate-400">{enrolled.length} type{enrolled.length !== 1 ? "s" : ""}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="bg-gray-800/80 border-gray-700/50">
+        <CardContent className="p-5">
+          <h3 className="font-medium text-slate-200 mb-3">Enrolled Types</h3>
+          <div className="flex flex-wrap gap-2">
+            {["face", "voice", "fingerprint"].map((type) => (
+              <Badge
                 key={type}
-                className={`px-3 py-1 rounded-full text-sm ${
-                  status?.enrolledTypes?.includes(type)
-                    ? 'bg-green-600'
-                    : 'bg-gray-600'
-                }`}
+                variant={enrolled.includes(type) ? "default" : "outline"}
+                className={cn(
+                  "capitalize px-3 py-1",
+                  enrolled.includes(type)
+                    ? "bg-emerald-600/20 text-emerald-400 border-emerald-600/30"
+                    : "border-slate-700 text-slate-500"
+                )}
               >
+                {enrolled.includes(type) ? "✓ " : ""}
                 {type}
-              </span>
+              </Badge>
             ))}
           </div>
-        </div>
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Liveness Detection</h3>
-          <p className="text-gray-400 text-sm">Prevent spoofing attacks</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-green-500">● {status?.livenessDetection ? 'Active' : 'Inactive'}</span>
-          </div>
-        </div>
-        {enrolling ? (
-          <div className="bg-gray-700 p-4 rounded-lg space-y-3">
-            <h3 className="font-medium">Select biometric type to enroll</h3>
-            <div className="flex gap-3">
-              {(['face', 'voice', 'fingerprint'] as const).map((type) => (
-                <button
+        </CardContent>
+      </Card>
+
+      {enrolling ? (
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5 space-y-4">
+            <h3 className="font-medium text-slate-200">Select biometric type to enroll</h3>
+            <div className="flex flex-wrap gap-2">
+              {(["face", "voice", "fingerprint"] as const).map((type) => (
+                <Button
                   key={type}
+                  variant={selectedType === type ? "default" : "outline"}
+                  size="sm"
                   onClick={() => setSelectedType(type)}
-                  className={`px-4 py-2 rounded-lg capitalize ${
-                    selectedType === type ? 'bg-blue-600' : 'bg-gray-600 hover:bg-gray-500'
-                  }`}
+                  className={cn(
+                    "capitalize",
+                    selectedType === type
+                      ? "bg-blue-600 text-white"
+                      : "border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
+                  )}
                 >
                   {type}
-                </button>
+                </Button>
               ))}
             </div>
             <div className="flex gap-2">
-              <button
+              <Button
                 onClick={handleEnroll}
                 disabled={enrollingLoading}
-                className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition disabled:opacity-50"
+                className="bg-blue-600 hover:bg-blue-500"
               >
-                {enrollingLoading ? 'Enrolling...' : 'Confirm Enrollment'}
-              </button>
-              <button
-                onClick={() => setEnrolling(false)}
-                className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500 transition"
-              >
+                {enrollingLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Enrolling...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Confirm Enrollment
+                  </>
+                )}
+              </Button>
+              <Button variant="outline" onClick={() => setEnrolling(false)} className="border-slate-700 text-slate-400">
                 Cancel
-              </button>
+              </Button>
             </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setEnrolling(true)}
-            className="mt-4 px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition"
-          >
-            + Enroll New Biometric
-          </button>
-        )}
-      </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Button onClick={() => setEnrolling(true)} className="bg-blue-600 hover:bg-blue-500">
+          <Plus className="w-4 h-4 mr-2" />
+          Enroll New Biometric
+        </Button>
+      )}
     </div>
   );
 }
 
 function SSOSettings({ config, userId }: { config: any; userId: string }) {
-  const providers = ['okta', 'azure-ad', 'google-workspace', 'custom'];
+  const providers = ["okta", "azure-ad", "google-workspace", "custom"];
 
   const handleSetup = async (provider: string) => {
     try {
@@ -247,10 +385,10 @@ function SSOSettings({ config, userId }: { config: any; userId: string }) {
         toast.info(`Redirecting to ${provider}...`);
         window.location.href = result.redirectUrl;
       } else {
-        toast.error('Failed to get SSO login URL');
+        toast.error("Failed to get SSO login URL");
       }
     } catch (e: any) {
-      toast.error(e.message || 'SSO setup failed');
+      toast.error(e.message || "SSO setup failed");
     }
   };
 
@@ -260,95 +398,201 @@ function SSOSettings({ config, userId }: { config: any; userId: string }) {
       toast.success(`${provider} disconnected`);
       window.location.reload();
     } catch (e: any) {
-      toast.error(e.message || 'Disconnect failed');
+      toast.error(e.message || "Disconnect failed");
     }
   };
 
+  const providerIcons: Record<string, string> = {
+    okta: "O",
+    "azure-ad": "A",
+    "google-workspace": "G",
+    custom: "⚡",
+  };
+
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">SSO Integration</h2>
-      <div className="grid gap-4">
-        {providers.map((provider) => (
-          <div key={provider} className="bg-gray-700 p-4 rounded-lg flex items-center justify-between">
-            <div>
-              <h3 className="font-medium capitalize">{provider.replace('-', ' ')}</h3>
-              <p className="text-gray-400 text-sm">
-                {config?.provider === provider ? 'Connected' : 'Not configured'}
-              </p>
-            </div>
-            <button
-              onClick={() => config?.provider === provider ? handleDisconnect(provider) : handleSetup(provider)}
-              className={`px-4 py-2 rounded-lg ${
-                config?.provider === provider
-                  ? 'bg-green-600 hover:bg-green-500'
-                  : 'bg-gray-600 hover:bg-gray-500'
-              }`}
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+        <Link2 className="w-5 h-5 text-blue-400" />
+        SSO Integration
+      </h2>
+
+      <div className="grid gap-3">
+        {providers.map((provider) => {
+          const connected = config?.provider === provider;
+          return (
+            <Card
+              key={provider}
+              className={cn(
+                "bg-gray-800/80 transition-all duration-300",
+                connected ? "border-emerald-500/30" : "border-gray-700/50 hover:border-slate-700"
+              )}
             >
-              {config?.provider === provider ? 'Configured' : 'Setup'}
-            </button>
-          </div>
-        ))}
-        <div className="bg-gray-700 p-4 rounded-lg mt-4">
-          <h3 className="font-medium mb-2">Attribute Mapping</h3>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <span>Email: {config?.attributeMapping?.email || 'email'}</span>
-            <span>First Name: {config?.attributeMapping?.firstName || 'given_name'}</span>
-            <span>Last Name: {config?.attributeMapping?.lastName || 'family_name'}</span>
-            <span>Department: {config?.attributeMapping?.department || 'department'}</span>
-          </div>
-        </div>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold",
+                      connected ? "bg-emerald-600/20 text-emerald-400" : "bg-slate-800 text-slate-400"
+                    )}
+                  >
+                    {providerIcons[provider]}
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-slate-200 capitalize">
+                      {provider.replace("-", " ")}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      {connected ? "Connected and active" : "Not configured"}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant={connected ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => (connected ? handleDisconnect(provider) : handleSetup(provider))}
+                  className={cn(
+                    connected
+                      ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                      : "border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+                  )}
+                >
+                  {connected ? "Configured" : "Setup"}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
+
+      <Card className="bg-gray-800/80 border-gray-700/50">
+        <CardContent className="p-5">
+          <h3 className="font-medium text-slate-200 mb-3">Attribute Mapping</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Email", value: config?.attributeMapping?.email || "email" },
+              { label: "First Name", value: config?.attributeMapping?.firstName || "given_name" },
+              { label: "Last Name", value: config?.attributeMapping?.lastName || "family_name" },
+              { label: "Department", value: config?.attributeMapping?.department || "department" },
+            ].map((attr) => (
+              <div key={attr.label} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+                <p className="text-xs text-slate-500">{attr.label}</p>
+                <p className="text-sm font-mono text-slate-300 mt-0.5">{attr.value}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
 function GeoSettings({ config }: { config: any }) {
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">Geo-Fencing Configuration</h2>
-      <div className="grid gap-4">
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Allowed Countries</h3>
-          <div className="flex flex-wrap gap-2">
-            {config?.allowedCountries?.length > 0
-              ? config.allowedCountries.map((c: string) => (
-                  <span key={c} className="px-2 py-1 bg-blue-600 rounded text-sm">{c}</span>
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+        <Globe className="w-5 h-5 text-emerald-400" />
+        Geo-Fencing Configuration
+      </h2>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5">
+            <h3 className="font-medium text-slate-200 mb-3">Allowed Countries</h3>
+            <div className="flex flex-wrap gap-2">
+              {config?.allowedCountries?.length > 0 ? (
+                config.allowedCountries.map((c: string) => (
+                  <Badge key={c} className="bg-emerald-600/20 text-emerald-400 border-emerald-600/30">
+                    {c}
+                  </Badge>
                 ))
-              : <span className="text-gray-400">All countries allowed</span>
-            }
-          </div>
-        </div>
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Blocked Countries</h3>
-          <div className="flex flex-wrap gap-2">
-            {config?.blockedCountries?.length > 0
-              ? config.blockedCountries.map((c: string) => (
-                  <span key={c} className="px-2 py-1 bg-red-600 rounded text-sm">{c}</span>
+              ) : (
+                <span className="text-sm text-slate-500">All countries allowed</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5">
+            <h3 className="font-medium text-slate-200 mb-3">Blocked Countries</h3>
+            <div className="flex flex-wrap gap-2">
+              {config?.blockedCountries?.length > 0 ? (
+                config.blockedCountries.map((c: string) => (
+                  <Badge key={c} className="bg-red-600/20 text-red-400 border-red-600/30">
+                    {c}
+                  </Badge>
                 ))
-              : <span className="text-gray-400">No countries blocked</span>
-            }
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-gray-700 p-4 rounded-lg text-center">
-            <div className={`text-2xl font-bold ${config?.vpnDetection ? 'text-green-500' : 'text-gray-500'}`}>
-              {config?.vpnDetection ? '✓' : '✗'}
+              ) : (
+                <span className="text-sm text-slate-500">No countries blocked</span>
+              )}
             </div>
-            <div className="text-sm text-gray-400">VPN Detection</div>
-          </div>
-          <div className="bg-gray-700 p-4 rounded-lg text-center">
-            <div className={`text-2xl font-bold ${config?.proxyDetection ? 'text-green-500' : 'text-gray-500'}`}>
-              {config?.proxyDetection ? '✓' : '✗'}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5 text-center">
+            <div
+              className={cn(
+                "w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center",
+                config?.vpnDetection ? "bg-emerald-500/20" : "bg-slate-800"
+              )}
+            >
+              {config?.vpnDetection ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              ) : (
+                <XCircle className="w-5 h-5 text-slate-600" />
+              )}
             </div>
-            <div className="text-sm text-gray-400">Proxy Detection</div>
-          </div>
-          <div className="bg-gray-700 p-4 rounded-lg text-center">
-            <div className={`text-2xl font-bold ${config?.datacenterIPBlock ? 'text-green-500' : 'text-gray-500'}`}>
-              {config?.datacenterIPBlock ? '✓' : '✗'}
+            <p className="text-sm font-medium text-slate-200">VPN Detection</p>
+            <p className={cn("text-xs mt-1", config?.vpnDetection ? "text-emerald-400" : "text-slate-500")}>
+              {config?.vpnDetection ? "Active" : "Inactive"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5 text-center">
+            <div
+              className={cn(
+                "w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center",
+                config?.proxyDetection ? "bg-emerald-500/20" : "bg-slate-800"
+              )}
+            >
+              {config?.proxyDetection ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              ) : (
+                <XCircle className="w-5 h-5 text-slate-600" />
+              )}
             </div>
-            <div className="text-sm text-gray-400">Datacenter Block</div>
-          </div>
-        </div>
+            <p className="text-sm font-medium text-slate-200">Proxy Detection</p>
+            <p className={cn("text-xs mt-1", config?.proxyDetection ? "text-emerald-400" : "text-slate-500")}>
+              {config?.proxyDetection ? "Active" : "Inactive"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5 text-center">
+            <div
+              className={cn(
+                "w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center",
+                config?.datacenterIPBlock ? "bg-emerald-500/20" : "bg-slate-800"
+              )}
+            >
+              {config?.datacenterIPBlock ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              ) : (
+                <XCircle className="w-5 h-5 text-slate-600" />
+              )}
+            </div>
+            <p className="text-sm font-medium text-slate-200">Datacenter Block</p>
+            <p className={cn("text-xs mt-1", config?.datacenterIPBlock ? "text-emerald-400" : "text-slate-500")}>
+              {config?.datacenterIPBlock ? "Active" : "Inactive"}
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -356,62 +600,103 @@ function GeoSettings({ config }: { config: any }) {
 
 function EncryptionSettings({ status, userId }: { status: any; userId: string }) {
   const handleGenerateKeys = async () => {
-    const password = prompt('Enter a password for key generation:');
+    const password = prompt("Enter a password for key generation:");
     if (!password) return;
     try {
       await encryptionService.createKeys(userId, password);
-      toast.success('Keys generated successfully');
+      toast.success("Keys generated successfully");
       window.location.reload();
     } catch (e: any) {
-      toast.error(e.message || 'Key generation failed');
+      toast.error(e.message || "Key generation failed");
     }
   };
 
   const handleRotateKeys = async () => {
-    const oldPassword = prompt('Enter current password:');
+    const oldPassword = prompt("Enter current password:");
     if (!oldPassword) return;
-    const newPassword = prompt('Enter new password:');
+    const newPassword = prompt("Enter new password:");
     if (!newPassword) return;
     try {
       await encryptionService.rotateKeys(userId, oldPassword, newPassword);
-      toast.success('Keys rotated successfully');
+      toast.success("Keys rotated successfully");
       window.location.reload();
     } catch (e: any) {
-      toast.error(e.message || 'Key rotation failed');
+      toast.error(e.message || "Key rotation failed");
     }
   };
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">End-to-End Encryption</h2>
-      <div className="grid gap-4">
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Key Pair Status</h3>
-          <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full ${status?.publicKey ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
-            <span>{status?.publicKey ? 'Active' : 'Not Generated'}</span>
-          </div>
-          {status?.fingerprint && (
-            <p className="text-gray-400 text-sm mt-2">Fingerprint: {status.fingerprint}</p>
-          )}
-        </div>
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Encryption Details</h3>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <span>Key Type: RSA 4096-bit</span>
-            <span>Symmetric: AES-256-GCM</span>
-            <span>Key Derivation: PBKDF2</span>
-            <span>Iterations: 100,000</span>
-          </div>
-        </div>
-        <div className="flex gap-4 mt-4">
-          <button onClick={handleGenerateKeys} className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition">
-            Generate New Keys
-          </button>
-          <button onClick={handleRotateKeys} className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500 transition">
-            Rotate Keys
-          </button>
-        </div>
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+        <Lock className="w-5 h-5 text-cyan-400" />
+        End-to-End Encryption
+      </h2>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5">
+            <h3 className="font-medium text-slate-200 mb-3">Key Pair Status</h3>
+            <div className="flex items-center gap-3">
+              <div
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center",
+                  status?.publicKey ? "bg-emerald-500/20" : "bg-amber-500/20"
+                )}
+              >
+                <Key
+                  className={cn(
+                    "w-5 h-5",
+                    status?.publicKey ? "text-emerald-400" : "text-amber-400"
+                  )}
+                />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-200">
+                  {status?.publicKey ? "Active" : "Not Generated"}
+                </p>
+                {status?.fingerprint && (
+                  <p className="text-xs text-slate-500 font-mono mt-0.5">
+                    FP: {status.fingerprint.substring(0, 20)}...
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5">
+            <h3 className="font-medium text-slate-200 mb-3">Encryption Details</h3>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {[
+                { label: "Key Type", value: "RSA 4096-bit" },
+                { label: "Symmetric", value: "AES-256-GCM" },
+                { label: "Key Derivation", value: "PBKDF2" },
+                { label: "Iterations", value: "100,000" },
+              ].map((detail) => (
+                <div key={detail.label} className="bg-slate-900/50 border border-slate-800 rounded-lg p-2">
+                  <p className="text-xs text-slate-500">{detail.label}</p>
+                  <p className="text-sm font-mono text-slate-300">{detail.value}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <Button onClick={handleGenerateKeys} className="bg-blue-600 hover:bg-blue-500">
+          <Key className="w-4 h-4 mr-2" />
+          Generate New Keys
+        </Button>
+        <Button
+          onClick={handleRotateKeys}
+          variant="outline"
+          className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Rotate Keys
+        </Button>
       </div>
     </div>
   );
