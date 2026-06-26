@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { detectFraud, createFingerprint } from '../lib/fraudDetection';
 
 const router = Router();
@@ -76,7 +77,7 @@ router.post('/analyze', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error in fraud detection:', error);
+    logger.error({ err: error }, 'Error in fraud detection:');
     res.status(500).json({ error: 'Failed to analyze fraud risk' });
   }
 });
@@ -96,7 +97,7 @@ router.get('/session/:sessionId', async (req, res) => {
 
     res.json(mockResult);
   } catch (error) {
-    console.error('Error fetching session analysis:', error);
+    logger.error({ err: error }, 'Error fetching session analysis:');
     res.status(500).json({ error: 'Failed to fetch session analysis' });
   }
 });

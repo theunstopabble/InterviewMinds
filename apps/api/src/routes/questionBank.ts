@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { questionBankService } from '../lib/questionBank';
 import type { Difficulty, QuestionType } from '../lib/questionBank';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -35,7 +36,7 @@ router.get('/', (req, res) => {
     
     res.json({ questions, count: (questions as any[]).length });
   } catch (error) {
-    console.error('Error fetching questions:', error);
+    logger.error({ err: error }, 'Error fetching questions:');
     res.status(500).json({ error: 'Failed to fetch questions' });
   }
 });
@@ -46,7 +47,7 @@ router.get('/categories', (_req, res) => {
     const categories = questionBankService.getCategories();
     res.json({ categories });
   } catch (error) {
-    console.error('Error fetching categories:', error);
+    logger.error({ err: error }, 'Error fetching categories:');
     res.status(500).json({ error: 'Failed to fetch categories' });
   }
 });
@@ -57,7 +58,7 @@ router.get('/stats', (_req, res) => {
     const stats = questionBankService.getQuestionStats();
     res.json({ stats });
   } catch (error) {
-    console.error('Error fetching stats:', error);
+    logger.error({ err: error }, 'Error fetching stats:');
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });
@@ -73,7 +74,7 @@ router.get('/:id', (req, res) => {
     }
     res.json({ question });
   } catch (error) {
-    console.error('Error fetching question:', error);
+    logger.error({ err: error }, 'Error fetching question:');
     res.status(500).json({ error: 'Failed to fetch question' });
   }
 });
@@ -85,7 +86,7 @@ router.post('/', (req, res) => {
     const created = questionBankService.createQuestion(question);
     res.status(201).json({ question: created });
   } catch (error) {
-    console.error('Error creating question:', error);
+    logger.error({ err: error }, 'Error creating question:');
     res.status(500).json({ error: 'Failed to create question' });
   }
 });
@@ -102,7 +103,7 @@ router.patch('/:id', (req, res) => {
     }
     res.json({ question: updated });
   } catch (error) {
-    console.error('Error updating question:', error);
+    logger.error({ err: error }, 'Error updating question:');
     res.status(500).json({ error: 'Failed to update question' });
   }
 });
@@ -118,7 +119,7 @@ router.delete('/:id', (req, res) => {
     }
     res.json({ success: true });
   } catch (error) {
-    console.error('Error deleting question:', error);
+    logger.error({ err: error }, 'Error deleting question:');
     res.status(500).json({ error: 'Failed to delete question' });
   }
 });
@@ -134,7 +135,7 @@ router.get('/search', (req, res) => {
     });
     res.json({ questions, count: questions.length });
   } catch (error) {
-    console.error('Error searching questions:', error);
+    logger.error({ err: error }, 'Error searching questions:');
     res.status(500).json({ error: 'Failed to search questions' });
   }
 });

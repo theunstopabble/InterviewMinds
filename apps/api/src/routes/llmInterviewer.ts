@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { createLLMInterviewer, generateInterviewSummary, generateCandidateFeedback, explainCodeInPlainEnglish } from '../lib/llmInterviewer';
 import { requireAuth } from '../middleware/auth';
 
@@ -36,7 +37,7 @@ router.post('/create', requireAuth, async (req, res) => {
       config: config,
     });
   } catch (error) {
-    console.error('Error creating interview:', error);
+    logger.error({ err: error }, 'Error creating interview:');
     res.status(500).json({ error: 'Failed to create interview session' });
   }
 });
@@ -59,7 +60,7 @@ router.post('/chat', requireAuth, async (req, res) => {
       metrics,
     });
   } catch (error) {
-    console.error('Error in chat:', error);
+    logger.error({ err: error }, 'Error in chat:');
     res.status(500).json({ error: 'Failed to generate response' });
   }
 });
@@ -77,7 +78,7 @@ router.post('/followup', requireAuth, async (req, res) => {
     const followUp = await interviewer.generateFollowUp(lastAnswer, topic);
     res.json({ followUp });
   } catch (error) {
-    console.error('Error generating follow-up:', error);
+    logger.error({ err: error }, 'Error generating follow-up:');
     res.status(500).json({ error: 'Failed to generate follow-up' });
   }
 });
@@ -97,7 +98,7 @@ router.post('/summary', requireAuth, async (req, res) => {
 
     res.json({ summary });
   } catch (error) {
-    console.error('Error generating summary:', error);
+    logger.error({ err: error }, 'Error generating summary:');
     res.status(500).json({ error: 'Failed to generate summary' });
   }
 });
@@ -117,7 +118,7 @@ router.post('/feedback', requireAuth, async (req, res) => {
 
     res.json(feedback);
   } catch (error) {
-    console.error('Error generating feedback:', error);
+    logger.error({ err: error }, 'Error generating feedback:');
     res.status(500).json({ error: 'Failed to generate feedback' });
   }
 });
@@ -129,7 +130,7 @@ router.post('/explain-code', requireAuth, async (req, res) => {
     const explanation = await explainCodeInPlainEnglish(code, language || 'javascript');
     res.json({ explanation });
   } catch (error) {
-    console.error('Error explaining code:', error);
+    logger.error({ err: error }, 'Error explaining code:');
     res.status(500).json({ error: 'Failed to explain code' });
   }
 });
@@ -146,7 +147,7 @@ router.get('/metrics/:sessionId', requireAuth, async (req, res) => {
 
     res.json(interviewer.getMetrics());
   } catch (error) {
-    console.error('Error getting metrics:', error);
+    logger.error({ err: error }, 'Error getting metrics:');
     res.status(500).json({ error: 'Failed to get metrics' });
   }
 });
@@ -158,7 +159,7 @@ router.delete('/end/:sessionId', requireAuth, async (req, res) => {
 
     res.json({ success: deleted, message: deleted ? 'Interview ended' : 'Session not found' });
   } catch (error) {
-    console.error('Error ending interview:', error);
+    logger.error({ err: error }, 'Error ending interview:');
     res.status(500).json({ error: 'Failed to end interview' });
   }
 });

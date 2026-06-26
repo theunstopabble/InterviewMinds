@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { 
   configureATS, 
   fetchJobs, 
@@ -47,7 +48,7 @@ router.post('/configure', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error configuring ATS:', error);
+    logger.error({ err: error }, 'Error configuring ATS:');
     res.status(500).json({ error: 'Failed to configure ATS' });
   }
 });
@@ -59,7 +60,7 @@ router.get('/jobs', async (req, res) => {
 
     res.json({ jobs, count: jobs.length });
   } catch (error) {
-    console.error('Error fetching jobs:', error);
+    logger.error({ err: error }, 'Error fetching jobs:');
     res.status(500).json({ error: 'Failed to fetch jobs' });
   }
 });
@@ -72,7 +73,7 @@ router.get('/jobs/:jobId/candidates', async (req, res) => {
 
     res.json({ candidates, count: candidates.length });
   } catch (error) {
-    console.error('Error fetching candidates:', error);
+    logger.error({ err: error }, 'Error fetching candidates:');
     res.status(500).json({ error: 'Failed to fetch candidates' });
   }
 });
@@ -97,7 +98,7 @@ router.post('/results', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error pushing results:', error);
+    logger.error({ err: error }, 'Error pushing results:');
     res.status(500).json({ error: 'Failed to push results' });
   }
 });
@@ -116,7 +117,7 @@ router.post('/sync', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error syncing candidate:', error);
+    logger.error({ err: error }, 'Error syncing candidate:');
     res.status(500).json({ error: 'Failed to sync candidate' });
   }
 });
@@ -128,7 +129,7 @@ router.get('/webhooks', async (req, res) => {
 
     res.json(webhooks);
   } catch (error) {
-    console.error('Error fetching webhooks:', error);
+    logger.error({ err: error }, 'Error fetching webhooks:');
     res.status(500).json({ error: 'Failed to fetch webhooks' });
   }
 });
@@ -147,7 +148,7 @@ router.post('/webhooks', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error creating webhook:', error);
+    logger.error({ err: error }, 'Error creating webhook:');
     res.status(500).json({ error: 'Failed to create webhook' });
   }
 });

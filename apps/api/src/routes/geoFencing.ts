@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { validateIP, getSecurityConfig } from '../lib/geoFencing';
 
 const router = Router();
@@ -29,7 +30,7 @@ router.post('/validate', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error validating IP:', error);
+    logger.error({ err: error }, 'Error validating IP:');
     res.status(500).json({ error: 'Failed to validate IP address' });
   }
 });
@@ -45,7 +46,7 @@ router.get('/config', async (req, res) => {
       datacenterIPBlock: config.datacenterIPBlock
     });
   } catch (error) {
-    console.error('Error fetching security config:', error);
+    logger.error({ err: error }, 'Error fetching security config:');
     res.status(500).json({ error: 'Failed to fetch security config' });
   }
 });
@@ -59,7 +60,7 @@ router.get('/my-ip', async (req, res) => {
       ...result
     });
   } catch (error) {
-    console.error('Error getting IP info:', error);
+    logger.error({ err: error }, 'Error getting IP info:');
     res.status(500).json({ error: 'Failed to get IP information' });
   }
 });

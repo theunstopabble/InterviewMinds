@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { logger } from "../lib/logger";
 import {
   registerDevice,
   unregisterDevice,
@@ -50,39 +51,69 @@ import { PracticeInterviewModel } from "../models/PracticeInterview";
 const router = Router();
 
 router.post("/device/register", requireAuth, async (req, res) => {
-  const { userId, deviceId, platform, pushToken, notificationEnabled } = req.body;
-  const result = await registerDevice({ userId, deviceId, platform, pushToken, notificationEnabled, lastActive: new Date() });
-  res.json(formatMobileResponse(result));
+  try {
+    const { userId, deviceId, platform, pushToken, notificationEnabled } = req.body;
+    const result = await registerDevice({ userId, deviceId, platform, pushToken, notificationEnabled, lastActive: new Date() });
+    res.json(formatMobileResponse(result));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.post("/device/unregister", requireAuth, async (req, res) => {
-  const { deviceId } = req.body;
-  const result = await unregisterDevice(deviceId);
-  res.json(formatMobileResponse({ unregistered: result }));
+  try {
+    const { deviceId } = req.body;
+    const result = await unregisterDevice(deviceId);
+    res.json(formatMobileResponse({ unregistered: result }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.get("/device/list", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const devices = await getUserDevices(userId);
-  res.json(formatMobileResponse({ devices }));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const devices = await getUserDevices(userId);
+    res.json(formatMobileResponse({ devices }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.put("/device/settings", requireAuth, async (req, res) => {
-  const { deviceId, settings } = req.body;
-  const result = await updateDeviceSettings(deviceId, settings);
-  res.json(formatMobileResponse({ updated: result }));
+  try {
+    const { deviceId, settings } = req.body;
+    const result = await updateDeviceSettings(deviceId, settings);
+    res.json(formatMobileResponse({ updated: result }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.post("/notification/send", requireAuth, async (req, res) => {
-  const { userId, notification } = req.body;
-  const result = await sendPushNotification(userId, notification);
-  res.json(formatMobileResponse(result));
+  try {
+    const { userId, notification } = req.body;
+    const result = await sendPushNotification(userId, notification);
+    res.json(formatMobileResponse(result));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.post("/notification/batch", requireAuth, async (req, res) => {
-  const { notifications } = req.body;
-  const result = await sendBatchNotifications(notifications);
-  res.json(formatMobileResponse(result));
+  try {
+    const { notifications } = req.body;
+    const result = await sendBatchNotifications(notifications);
+    res.json(formatMobileResponse(result));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.get("/notification/templates", requireAuth, (req, res) => {
@@ -98,9 +129,14 @@ router.post("/notification/template/render", requireAuth, (req, res) => {
 });
 
 router.post("/notification/schedule", requireAuth, async (req, res) => {
-  const { userId, templateId, data, scheduledTime } = req.body;
-  const result = await scheduleNotification(userId, templateId, data, new Date(scheduledTime));
-  res.json(formatMobileResponse(result));
+  try {
+    const { userId, templateId, data, scheduledTime } = req.body;
+    const result = await scheduleNotification(userId, templateId, data, new Date(scheduledTime));
+    res.json(formatMobileResponse(result));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.get("/notification/stats", requireAuth, (req, res) => {
@@ -110,57 +146,97 @@ router.get("/notification/stats", requireAuth, (req, res) => {
 });
 
 router.post("/offline/action", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const { action, payload } = req.body;
-  const result = await queueOfflineAction(userId, action, payload);
-  res.json(formatMobileResponse({ queued: true, actionId: result.id }));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const { action, payload } = req.body;
+    const result = await queueOfflineAction(userId, action, payload);
+    res.json(formatMobileResponse({ queued: true, actionId: result.id }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.get("/offline/pending", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const actions = await getPendingActions(userId);
-  const prioritized = calculateSyncPriority(actions);
-  res.json(formatMobileResponse({ actions: prioritized }));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const actions = await getPendingActions(userId);
+    const prioritized = calculateSyncPriority(actions);
+    res.json(formatMobileResponse({ actions: prioritized }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.post("/offline/sync", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const result = await syncOfflineActions(userId);
-  res.json(formatMobileResponse(result));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const result = await syncOfflineActions(userId);
+    res.json(formatMobileResponse(result));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.post("/offline/data", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const { dataType, data, id } = req.body;
-  await saveOfflineData(userId, dataType, data, id);
-  res.json(formatMobileResponse({ saved: true }));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const { dataType, data, id } = req.body;
+    await saveOfflineData(userId, dataType, data, id);
+    res.json(formatMobileResponse({ saved: true }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.get("/offline/data/:dataType", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const { dataType } = req.params;
-  const data = await getOfflineData(userId, dataType as any);
-  res.json(formatMobileResponse({ data }));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const { dataType } = req.params;
+    const data = await getOfflineData(userId, dataType as any);
+    res.json(formatMobileResponse({ data }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.delete("/offline/data/:dataType/:id", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const { dataType, id } = req.params;
-  const result = await deleteOfflineData(userId, dataType as any, id);
-  res.json(formatMobileResponse({ deleted: result }));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const { dataType, id } = req.params;
+    const result = await deleteOfflineData(userId, dataType as any, id);
+    res.json(formatMobileResponse({ deleted: result }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.delete("/offline/clear", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  await clearOfflineData(userId);
-  res.json(formatMobileResponse({ cleared: true }));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    await clearOfflineData(userId);
+    res.json(formatMobileResponse({ cleared: true }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.post("/offline/resolve", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const { dataType } = req.body;
-  const result = await resolveConflicts(userId, dataType as any);
-  res.json(formatMobileResponse(result));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const { dataType } = req.body;
+    const result = await resolveConflicts(userId, dataType as any);
+    res.json(formatMobileResponse(result));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.get("/offline/storage", requireAuth, (req, res) => {
@@ -188,10 +264,15 @@ router.put("/features", requireAuth, (req, res) => {
 });
 
 router.post("/feedback", requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const { rating, category, message, deviceInfo, appVersion } = req.body;
-  const result = await submitFeedback({ userId, rating, category, message, deviceInfo, appVersion });
-  res.json(formatMobileResponse(result));
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const { rating, category, message, deviceInfo, appVersion } = req.body;
+    const result = await submitFeedback({ userId, rating, category, message, deviceInfo, appVersion });
+    res.json(formatMobileResponse(result));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.get("/localization/languages", (req, res) => {

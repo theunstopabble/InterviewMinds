@@ -320,11 +320,6 @@ app.use(
 );
 
 app.use(
-  "/api/compliance",
-  complianceRoutes,
-);
-
-app.use(
   "/api/job-matching",
   jobMatchingRoutes,
 );

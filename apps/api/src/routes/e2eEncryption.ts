@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { createUserKeys, rotateUserKeys, encryptForUser, decryptFromUser, verifyKeyPair, getKeyFingerprint, generateSecureToken } from '../lib/e2eEncryption';
 
 const router = Router();
@@ -47,7 +48,7 @@ router.post('/keys/create', async (req, res) => {
       fingerprint: getKeyFingerprint(keys.publicKey)
     });
   } catch (error) {
-    console.error('Error creating keys:', error);
+    logger.error({ err: error }, 'Error creating keys:');
     res.status(500).json({ error: 'Failed to create keys' });
   }
 });
@@ -82,7 +83,7 @@ router.post('/keys/rotate', async (req, res) => {
       fingerprint: getKeyFingerprint(newKeys.publicKey)
     });
   } catch (error) {
-    console.error('Error rotating keys:', error);
+    logger.error({ err: error }, 'Error rotating keys:');
     res.status(500).json({ error: 'Failed to rotate keys' });
   }
 });
@@ -104,7 +105,7 @@ router.get('/keys/:userId', async (req, res) => {
       createdAt: keys.createdAt
     });
   } catch (error) {
-    console.error('Error fetching keys:', error);
+    logger.error({ err: error }, 'Error fetching keys:');
     res.status(500).json({ error: 'Failed to fetch keys' });
   }
 });
@@ -127,7 +128,7 @@ router.post('/encrypt', async (req, res) => {
 
     res.json(encrypted);
   } catch (error) {
-    console.error('Error encrypting:', error);
+    logger.error({ err: error }, 'Error encrypting:');
     res.status(500).json({ error: 'Failed to encrypt message' });
   }
 });
@@ -155,7 +156,7 @@ router.post('/decrypt', async (req, res) => {
 
     res.json({ message: decrypted });
   } catch (error) {
-    console.error('Error decrypting:', error);
+    logger.error({ err: error }, 'Error decrypting:');
     res.status(500).json({ error: 'Failed to decrypt message' });
   }
 });
@@ -173,7 +174,7 @@ router.post('/verify', async (req, res) => {
 
     res.json({ valid: isValid });
   } catch (error) {
-    console.error('Error verifying keys:', error);
+    logger.error({ err: error }, 'Error verifying keys:');
     res.status(500).json({ error: 'Failed to verify keys' });
   }
 });
@@ -183,7 +184,7 @@ router.get('/token/generate', async (req, res) => {
     const token = generateSecureToken(32);
     res.json({ token, expiresIn: 3600 });
   } catch (error) {
-    console.error('Error generating token:', error);
+    logger.error({ err: error }, 'Error generating token:');
     res.status(500).json({ error: 'Failed to generate token' });
   }
 });

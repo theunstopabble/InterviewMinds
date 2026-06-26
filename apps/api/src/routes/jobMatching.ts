@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { matchResumeToJob, extractResumeEntities } from '../lib/jobMatching';
 
 const router = Router();
@@ -37,7 +38,7 @@ router.post('/extract', async (req, res) => {
 
     res.json({ entities });
   } catch (error) {
-    console.error('Error extracting resume entities:', error);
+    logger.error({ err: error }, 'Error extracting resume entities:');
     res.status(500).json({ error: 'Failed to extract entities' });
   }
 });
@@ -56,7 +57,7 @@ router.post('/match', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error matching resume to job:', error);
+    logger.error({ err: error }, 'Error matching resume to job:');
     res.status(500).json({ error: 'Failed to match resume' });
   }
 });
@@ -78,7 +79,7 @@ router.post('/extract-and-match', async (req, res) => {
       matchResult: result
     });
   } catch (error) {
-    console.error('Error in extract and match:', error);
+    logger.error({ err: error }, 'Error in extract and match:');
     res.status(500).json({ error: 'Failed to process request' });
   }
 });

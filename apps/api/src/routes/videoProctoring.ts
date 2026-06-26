@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { processVideoFrame, processAudioFrame, checkScreenState, evaluateProctoringSession } from '../lib/videoProctoring';
 
 const router = Router();
@@ -78,7 +79,7 @@ router.post('/video/analyze', async (req, res) => {
     const metrics = await processVideoFrame(body.frameData, body.previousPositions);
     res.json(metrics);
   } catch (error) {
-    console.error('Error analyzing video frame:', error);
+    logger.error({ err: error }, 'Error analyzing video frame:');
     res.status(500).json({ error: 'Failed to analyze video frame' });
   }
 });
@@ -96,7 +97,7 @@ router.post('/audio/analyze', async (req, res) => {
     const metrics = await processAudioFrame(audioBuffer);
     res.json(metrics);
   } catch (error) {
-    console.error('Error analyzing audio frame:', error);
+    logger.error({ err: error }, 'Error analyzing audio frame:');
     res.status(500).json({ error: 'Failed to analyze audio frame' });
   }
 });
@@ -115,7 +116,7 @@ router.post('/screen/check', async (req, res) => {
     const metrics = await checkScreenState(clientReport);
     res.json(metrics);
   } catch (error) {
-    console.error('Error checking screen state:', error);
+    logger.error({ err: error }, 'Error checking screen state:');
     res.status(500).json({ error: 'Failed to check screen state' });
   }
 });
@@ -138,7 +139,7 @@ router.post('/session/evaluate', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error evaluating proctoring session:', error);
+    logger.error({ err: error }, 'Error evaluating proctoring session:');
     res.status(500).json({ error: 'Failed to evaluate session' });
   }
 });
@@ -162,7 +163,7 @@ router.get('/interview/:interviewId/results', async (req, res) => {
 
     res.json(mockResult);
   } catch (error) {
-    console.error('Error fetching proctoring results:', error);
+    logger.error({ err: error }, 'Error fetching proctoring results:');
     res.status(500).json({ error: 'Failed to fetch proctoring results' });
   }
 });

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { analyzeCode, getLanguageFromFilename, calculateComplexity } from '../lib/codeAnalysis';
 
 const router = Router();
@@ -33,7 +34,7 @@ router.post('/analyze', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error analyzing code:', error);
+    logger.error({ err: error }, 'Error analyzing code:');
     res.status(500).json({ error: 'Failed to analyze code' });
   }
 });
@@ -58,7 +59,7 @@ router.post('/security-scan', async (req, res) => {
       score: result.security
     });
   } catch (error) {
-    console.error('Error scanning code:', error);
+    logger.error({ err: error }, 'Error scanning code:');
     res.status(500).json({ error: 'Failed to scan code' });
   }
 });
@@ -76,7 +77,7 @@ router.post('/complexity', async (req, res) => {
 
     res.json(complexity);
   } catch (error) {
-    console.error('Error calculating complexity:', error);
+    logger.error({ err: error }, 'Error calculating complexity:');
     res.status(500).json({ error: 'Failed to calculate complexity' });
   }
 });

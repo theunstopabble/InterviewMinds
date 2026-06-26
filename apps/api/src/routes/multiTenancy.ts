@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { createTenant, validateTenantSettings, checkFeatureAccess, checkRateLimit, checkStorageLimit, getTenantContext, hasPermission, validateTenantStatus, getPlanInfo } from '../lib/multiTenancy';
 
 const router = Router();
@@ -44,7 +45,7 @@ router.get('/', async (_req, res) => {
     }));
     res.json({ tenants: allTenants, count: allTenants.length });
   } catch (error) {
-    console.error('Error fetching tenants:', error);
+    logger.error({ err: error }, 'Error fetching tenants:');
     res.status(500).json({ error: 'Failed to fetch tenants' });
   }
 });
@@ -78,7 +79,7 @@ router.post('/', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error creating tenant:', error);
+    logger.error({ err: error }, 'Error creating tenant:');
     res.status(500).json({ error: 'Failed to create tenant' });
   }
 });
@@ -103,7 +104,7 @@ router.get('/:tenantId', async (req, res) => {
       createdAt: tenant.createdAt
     });
   } catch (error) {
-    console.error('Error fetching tenant:', error);
+    logger.error({ err: error }, 'Error fetching tenant:');
     res.status(500).json({ error: 'Failed to fetch tenant' });
   }
 });
@@ -132,7 +133,7 @@ router.put('/:tenantId/settings', async (req, res) => {
       settings: tenant.settings
     });
   } catch (error) {
-    console.error('Error updating tenant settings:', error);
+    logger.error({ err: error }, 'Error updating tenant settings:');
     res.status(500).json({ error: 'Failed to update settings' });
   }
 });
@@ -152,7 +153,7 @@ router.post('/:tenantId/check-feature', async (req, res) => {
 
     res.json({ feature, hasAccess });
   } catch (error) {
-    console.error('Error checking feature access:', error);
+    logger.error({ err: error }, 'Error checking feature access:');
     res.status(500).json({ error: 'Failed to check feature access' });
   }
 });
@@ -175,7 +176,7 @@ router.get('/:tenantId/plan', async (req, res) => {
       limits: planInfo.limits
     });
   } catch (error) {
-    console.error('Error fetching plan info:', error);
+    logger.error({ err: error }, 'Error fetching plan info:');
     res.status(500).json({ error: 'Failed to fetch plan info' });
   }
 });
@@ -194,7 +195,7 @@ router.post('/validate-status', async (req, res) => {
 
     res.json({ tenantId, valid: isValid, status: tenant.status });
   } catch (error) {
-    console.error('Error validating tenant status:', error);
+    logger.error({ err: error }, 'Error validating tenant status:');
     res.status(500).json({ error: 'Failed to validate status' });
   }
 });

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { evaluateAnswer, batchEvaluateAnswers } from '../lib/answerValidation';
 
 interface AnswerEvaluation {
@@ -59,7 +60,7 @@ router.post('/evaluate', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error evaluating answer:', error);
+    logger.error({ err: error }, 'Error evaluating answer:');
     res.status(500).json({ error: 'Failed to evaluate answer' });
   }
 });
@@ -85,7 +86,7 @@ router.post('/batch-evaluate', async (req, res) => {
 
     res.json({ results });
   } catch (error) {
-    console.error('Error in batch evaluation:', error);
+    logger.error({ err: error }, 'Error in batch evaluation:');
     res.status(500).json({ error: 'Failed to evaluate answers' });
   }
 });
@@ -116,7 +117,7 @@ router.get('/:evaluationId', async (req, res) => {
 
     res.json(mockEvaluation);
   } catch (error) {
-    console.error('Error fetching evaluation:', error);
+    logger.error({ err: error }, 'Error fetching evaluation:');
     res.status(500).json({ error: 'Failed to fetch evaluation' });
   }
 });
