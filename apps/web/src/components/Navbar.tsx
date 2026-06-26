@@ -260,11 +260,25 @@ export default function Navbar() {
               </div>
             </>
           ) : (
-            <Link to="/sign-in">
-              <Button className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/20 transition-all">
-                Sign In
-              </Button>
-            </Link>
+            <>
+              <Link to="/pricing">
+                <Button
+                  variant="ghost"
+                  className={`gap-2 hover:bg-white/5 transition-colors ${
+                    isActive("/pricing")
+                      ? "text-white bg-white/10"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <span className="hidden lg:inline">Pricing</span>
+                </Button>
+              </Link>
+              <Link to="/sign-in">
+                <Button className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-900/20 transition-all">
+                  Sign In
+                </Button>
+              </Link>
+            </>
           )}
         </div>
 
@@ -375,9 +389,16 @@ export default function Navbar() {
               </div>
             </>
           ) : (
-            <Link to="/sign-in">
-              <Button className="w-full bg-blue-600 hover:bg-blue-500 text-white">Sign In</Button>
-            </Link>
+            <>
+              <Link to="/pricing" onClick={() => setIsMobileMenuOpen(false)}>
+                <Button variant="ghost" className={`w-full justify-start gap-2 ${isActive("/pricing") ? "bg-white/10 text-white" : "text-slate-300 hover:text-white hover:bg-white/5"}`}>
+                  Pricing
+                </Button>
+              </Link>
+              <Link to="/sign-in">
+                <Button className="w-full bg-blue-600 hover:bg-blue-500 text-white">Sign In</Button>
+              </Link>
+            </>
           )}
         </div>
       )}

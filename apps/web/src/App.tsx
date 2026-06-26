@@ -31,6 +31,7 @@ import QuestionBankPage from "./pages/QuestionBankPage";
 import ReportsPage from "./pages/ReportsPage";
 import PreparationPage from "./pages/PreparationPage";
 import PipelinePage from "./pages/PipelinePage";
+import PricingPage from "./pages/PricingPage";
 
 // 🏠 Home Component (Smart Resume Handling)
 function Home() {
@@ -176,8 +177,9 @@ function App() {
       >
         <AxiosInterceptor>
           <Routes>
-            {/* 🔓 Public Route: Sign In */}
+            {/* 🔓 Public Routes */}
             <Route path="/sign-in" element={<SignInPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
 
             {/* 🔒 Protected Routes */}
             <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
