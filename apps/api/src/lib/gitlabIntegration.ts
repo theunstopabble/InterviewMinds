@@ -110,7 +110,7 @@ export async function getCommits(
 }
 
 export function validateGitLabUrl(url: string): { valid: boolean; projectId?: string } {
-  const match = url.match(/gitlab\.com\/([^\/]+)\/([^\/]+)/);
+  const match = url.match(/gitlab\.com\/([^/]+)\/([^/]+)/);
   if (match) {
     return { valid: true, projectId: `${match[1]}/${match[2]}` };
   }

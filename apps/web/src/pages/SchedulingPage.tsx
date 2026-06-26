@@ -14,7 +14,7 @@ interface Interview {
 }
 
 function getCurrentTenantId(): string {
-  // @ts-ignore - Clerk organization hook
+  // @ts-expect-error - Clerk organization hook
   return window.Clerk?.organization?.id || 'default';
 }
 
@@ -83,7 +83,7 @@ export default function SchedulingPage() {
     try {
       const data = await schedulingService.getUpcoming();
       setUpcomingInterviews(data?.interviews || []);
-    } catch {}
+    } catch { /* silently fail - UI shows empty state */ }
   };
 
   const bookSlot = async (slotId: string, type: 'live' | 'async' | 'take-home') => {

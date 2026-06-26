@@ -47,15 +47,15 @@ export default function ProctoringMonitor({ interviewId, isActive }: Props) {
       }
     }, 10000);
 
-    // @ts-ignore
+    // @ts-expect-error - window.proctoringInterval is not in TS types
     window.proctoringInterval = pollInterval;
   };
 
   const stopMonitoring = () => {
     setMonitoring(false);
-    // @ts-ignore
+    // @ts-expect-error - window.proctoringInterval is not in TS types
     if (window.proctoringInterval) {
-      // @ts-ignore
+      // @ts-expect-error - window.proctoringInterval is not in TS types
       clearInterval(window.proctoringInterval);
     }
   };

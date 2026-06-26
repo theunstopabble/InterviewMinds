@@ -24,7 +24,7 @@ const piiPatterns: Record<string, RegExp> = {
   phone: /(\+1[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}/g,
   ssn: /\d{3}[-\s]?\d{2}[-\s]?\d{4}/g,
   credit_card: /\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}/g,
-  dob: /\b(0[1-9]|1[0-2])[\/\-](0[1-9]|[12]\d|3[01])[\/\-](19|20)\d{2}\b/g,
+  dob: /\b(0[1-9]|1[0-2])[/-](0[1-9]|[12]\d|3[01])[/-](19|20)\d{2}\b/g,
   address: /\d+\s+[A-Za-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln)\b/gi,
 };
 
@@ -58,19 +58,21 @@ export function maskValue(value: string, config: Partial<MaskingConfig> = {}): s
     case "full":
       return merged.char.repeat(value.length);
 
-    case "partial":
+    case "partial": {
       if (value.length <= 4) return merged.char.repeat(value.length);
       const visible = value.slice(-4);
       const masked = merged.char.repeat(value.length - 4);
       return merged.preserveLength ? masked + visible : masked;
+    }
 
-    case "hash":
+    case "hash": {
       let hash = 0;
       for (let i = 0; i < value.length; i++) {
         hash = ((hash << 5) - hash) + value.charCodeAt(i);
         hash |= 0;
       }
       return `hash_${Math.abs(hash).toString(16)}`;
+    }
 
     case "redact":
       return "[REDACTED]";

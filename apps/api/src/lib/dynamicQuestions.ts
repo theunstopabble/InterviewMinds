@@ -55,7 +55,7 @@ function detectMissingDetailTrigger(answer: string, questionType: string): boole
 function detectContradictionTrigger(answer: string, resumeEntities?: FollowUpContext['resumeEntities']): boolean {
   const contradictionIndicators = [
     /\b(no|never|not)\b.*\b(experience|worked|used)\b/i,
-    /\b(not familiar|don\'t know|can\'t remember)\b.*\b(previous|before|last)\b/i
+    /\b(not familiar|don't know|can't remember)\b.*\b(previous|before|last)\b/i
   ];
   
   if (contradictionIndicators.some(p => p.test(answer))) {

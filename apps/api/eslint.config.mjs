@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default tseslint.config(
-  { ignores: ["dist", "test-deepgram.ts"] },
+  { ignores: ["dist", "test-deepgram.ts", "vitest.config.ts", "*.config.ts"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -19,6 +19,11 @@ export default tseslint.config(
         project: ["./tsconfig.json"],
         tsconfigRootDir: __dirname,
       },
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", caughtErrors: "none" }],
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
 );

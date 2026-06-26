@@ -188,7 +188,7 @@ export async function getCommits(
 }
 
 export function validateGitHubUrl(url: string): { valid: boolean; owner?: string; repo?: string } {
-  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
   if (match) {
     return { valid: true, owner: match[1], repo: match[2].replace(/\.git$/, "") };
   }

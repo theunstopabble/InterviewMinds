@@ -38,7 +38,7 @@ RUN npm ci --omit=dev --legacy-peer-deps && \
 
 # Copy built artifacts
 COPY --from=base /app/apps/api/dist ./dist
-COPY --from=base /app/apps/node_modules ./node_modules
+COPY --from=base /app/node_modules ./node_modules
 COPY --from=base /app/packages/shared ./packages/shared
 
 # Create non-root user for security

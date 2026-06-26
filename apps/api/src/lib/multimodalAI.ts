@@ -298,7 +298,7 @@ function analyzeFacialExpressions(expressions: Record<string, number>): FacialAn
 function analyzeGestures(frameData: number[]): GestureResult {
   const gestures: string[] = [];
   let fidgeting = 20;
-  let confidenceSignals = 60;
+  const confidenceSignals = 60;
 
   if (frameData.length > 0) {
     const movement = Math.abs(frameData.reduce((a, b) => a + b, 0));

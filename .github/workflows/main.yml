@@ -7,48 +7,87 @@ on:
     branches: [ main ]
 
 jobs:
-  quality-check:
+  lint:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         node-version: [20.x]
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
+      - run: npm install --legacy-peer-deps
+      - name: Lint Shared
+        working-directory: ./packages/shared
+        run: npm run lint
+      - name: Lint API
+        working-directory: ./apps/api
+        run: npm run lint
+      - name: Lint Web
+        working-directory: ./apps/web
+        run: npm run lint
 
-      - name: Install Dependencies
-        run: npm install --legacy-peer-deps
-
-      # Backend Quality Checks
-      - name: Check Backend Typecheck
+  typecheck:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - run: npm install --legacy-peer-deps
+      - name: Typecheck Shared
+        working-directory: ./packages/shared
+        run: npm run typecheck
+      - name: Typecheck API
         working-directory: ./apps/api
         run: npm run typecheck
-
-      - name: Run Backend Tests
-        working-directory: ./apps/api
-        run: npm run test
-
-      - name: Check Backend Build
-        working-directory: ./apps/api
-        run: npm run build --if-present
-
-      # Frontend Quality Checks
-      - name: Check Frontend Typecheck
+      - name: Typecheck Web
         working-directory: ./apps/web
         run: npm run typecheck
 
-      - name: Run Frontend Tests
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - run: npm install --legacy-peer-deps
+      - name: Test API
+        working-directory: ./apps/api
+        run: npm run test -- --coverage
+      - name: Test Web
         working-directory: ./apps/web
-        run: npm run test
+        run: npm run test -- --coverage
 
-      - name: Check Frontend Build
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - run: npm install --legacy-peer-deps
+      - name: Build Shared
+        working-directory: ./packages/shared
+        run: npm run build
+      - name: Build API
+        working-directory: ./apps/api
+        run: npm run build
+      - name: Build Web
         working-directory: ./apps/web
         run: npm run build

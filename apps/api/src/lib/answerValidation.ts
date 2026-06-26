@@ -226,8 +226,8 @@ function detectConfidenceLevel(text: string): RedFlag | null {
   }
 
   const underConfidentPatterns = [
-    /\b(not sure|I don\'t know|might be|probably maybe)\b/gi,
-    /\b(I\'m not (good|experienced|qualified))\b/i
+    /\b(not sure|I don't know|might be|probably maybe)\b/gi,
+    /\b(I'm not (good|experienced|qualified))\b/i
   ];
 
   let uncertainCount = 0;
@@ -308,7 +308,7 @@ function calculateOverallScore(evaluation: AnswerEvaluation['evaluation'], redFl
     evaluation.starMethod.result
   ) / 400;
 
-  let baseScore =
+  const baseScore =
     evaluation.contentScore * contentWeight +
     evaluation.technicalAccuracy * technicalWeight +
     evaluation.clarity * clarityWeight +

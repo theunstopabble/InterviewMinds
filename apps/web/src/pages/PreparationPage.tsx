@@ -49,7 +49,7 @@ export default function PreparationPage() {
       stream.getTracks().forEach(t => t.stop());
       setSystemCheck(result);
       setStep('questions');
-    } catch (e: any) {
+    } catch {
       setSystemCheck({
         camera: false,
         microphone: false,

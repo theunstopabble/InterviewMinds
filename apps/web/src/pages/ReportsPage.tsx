@@ -13,7 +13,7 @@ interface Report {
 }
 
 function getCurrentUserId(): string {
-  // @ts-ignore - Clerk global
+  // @ts-expect-error - Clerk global
   return window.Clerk?.user?.id || 'default-user';
 }
 
