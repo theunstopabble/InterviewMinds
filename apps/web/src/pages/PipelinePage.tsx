@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { analyticsService } from '../services/enterprise';
+import { toast } from 'sonner';
 
 interface Candidate {
   id: string;
@@ -32,6 +33,8 @@ export default function PipelinePage() {
   const [dragCandidate, setDragCandidate] = useState<Candidate | null>(null);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [filterRole, setFilterRole] = useState<string>('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ name: '', email: '', role: '' });
 
   useEffect(() => {
     loadCandidates();
@@ -88,6 +91,28 @@ export default function PipelinePage() {
     if (score >= 80) return 'text-green-400';
     if (score >= 60) return 'text-yellow-400';
     return 'text-red-400';
+  };
+
+  const handleAddCandidate = async () => {
+    try {
+      await analyticsService.addCandidate({ name: addForm.name, email: addForm.email, role: addForm.role });
+      toast.success('Candidate added');
+      setShowAddModal(false);
+      setAddForm({ name: '', email: '', role: '' });
+      loadCandidates();
+    } catch {
+      toast.error('Failed to add candidate');
+    }
+  };
+
+  const handleDeleteCandidate = async (id: string) => {
+    try {
+      await analyticsService.deleteCandidate(id);
+      toast.success('Candidate deleted');
+      loadCandidates();
+    } catch {
+      toast.error('Failed to delete candidate');
+    }
   };
 
   if (loading) {
@@ -167,7 +192,7 @@ export default function PipelinePage() {
                       key={candidate.id}
                       draggable
                       onDragStart={() => handleDragStart(candidate)}
-                      className="bg-gray-700 rounded-lg p-4 cursor-grab hover:bg-gray-600 transition"
+                      className="bg-gray-700 rounded-lg p-4 cursor-grab hover:bg-gray-600 transition relative group"
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-semibold">{candidate.name}</span>
@@ -184,6 +209,13 @@ export default function PipelinePage() {
                         ))}
                       </div>
                       <div className="text-xs text-gray-500">{candidate.lastActivity}</div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteCandidate(candidate.id); }}
+                        className="absolute top-2 right-2 w-6 h-6 bg-red-600/60 rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 hover:bg-red-600 transition"
+                        title="Delete candidate"
+                      >
+                        ✕
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -234,21 +266,49 @@ export default function PipelinePage() {
           </div>
         )}
 
-        {/* Candidate Tags Modal (Quick Add) */}
+        {/* Quick Actions */}
         <div className="mt-8 p-4 bg-gray-800 rounded-xl">
           <h3 className="font-semibold mb-4">Quick Actions</h3>
           <div className="flex gap-4">
-            <button className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500">
+            <button onClick={() => setShowAddModal(true)} className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500">
               + Add Candidate
             </button>
             <button className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">
               Send Bulk Email
             </button>
-            <button className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">
+            <button onClick={() => {
+              const csv = 'Name,Email,Role,Score,Stage\n' + candidates.map(c => `${c.name},${c.email},${c.role},${c.score},${c.stage}`).join('\n');
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'pipeline-export.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+            }} className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">
               Export to CSV
             </button>
           </div>
         </div>
+
+        {/* Add Candidate Modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md space-y-4">
+              <h3 className="text-lg font-bold">Add Candidate</h3>
+              <input placeholder="Name" value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg" />
+              <input placeholder="Email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg" />
+              <input placeholder="Role" value={addForm.role} onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg" />
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setShowAddModal(false)} className="px-4 py-2 bg-gray-600 rounded-lg">Cancel</button>
+                <button onClick={handleAddCandidate} className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500">Add</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

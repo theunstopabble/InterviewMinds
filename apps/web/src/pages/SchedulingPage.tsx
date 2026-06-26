@@ -217,12 +217,41 @@ export default function SchedulingPage() {
                           {interview.status}
                         </span>
                         {interview.status === 'scheduled' && (
-                          <button
-                            onClick={() => navigate(`/interview?id=${interview.id}`)}
-                            className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition"
-                          >
-                            Join
-                          </button>
+                          <div className="flex gap-2 items-center">
+                            <button
+                              onClick={() => navigate(`/interview?id=${interview.id}`)}
+                              className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500 transition text-sm"
+                            >
+                              Join
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const newSlotId = prompt('Enter new slot ID to reschedule:');
+                                if (!newSlotId) return;
+                                try {
+                                  await schedulingService.reschedule(interview.id, newSlotId);
+                                  toast.success('Rescheduled successfully');
+                                  loadUpcoming();
+                                } catch { toast.error('Reschedule failed'); }
+                              }}
+                              className="px-3 py-2 bg-amber-600/80 rounded-lg hover:bg-amber-600 transition text-sm"
+                            >
+                              Reschedule
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Cancel this interview?')) return;
+                                try {
+                                  await schedulingService.cancel(interview.id);
+                                  toast.success('Cancelled');
+                                  loadUpcoming();
+                                } catch { toast.error('Cancel failed'); }
+                              }}
+                              className="px-3 py-2 bg-red-600/80 rounded-lg hover:bg-red-600 transition text-sm"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>

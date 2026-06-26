@@ -79,8 +79,6 @@ export const llmInterviewerService = {
       method: 'POST',
       body: JSON.stringify({ sessionId, lastAnswer }),
     }),
-  getSummary: (sessionId: string) =>
-    fetchAPI<any>(`/llm-interviewer/summary/${sessionId}`),
   getFeedback: (sessionId: string) =>
     fetchAPI<any>(`/llm-interviewer/feedback/${sessionId}`),
   explainCode: (sessionId: string, code: string) =>
@@ -322,18 +320,6 @@ export const proctoringService = {
     }),
 };
 
-// ============== Resume Verification ==============
-export const resumeVerificationService = {
-  verify: (resumeId: string, targetRole?: string) =>
-    fetchAPI<any>('/resume-verification/verify', {
-      method: 'POST',
-      body: JSON.stringify({ resumeId, targetRole }),
-    }),
-
-  getResults: (verificationId: string) =>
-    fetchAPI<any>(`/resume-verification/${verificationId}`),
-};
-
 // ============== Answer Validation ==============
 export const answerValidationService = {
   evaluate: (question: string, transcript: string, resumeEntities?: any, questionType?: string, expectedCompetencies?: string[]) =>
@@ -476,12 +462,6 @@ export const tenantService = {
 
 // ============== Compliance ==============
 export const complianceService = {
-  logAudit: (userId: string, action: string, resource: string, details?: any) =>
-    fetchAPI<any>('/compliance/audit', {
-      method: 'POST',
-      body: JSON.stringify({ userId, action, resource, details }),
-    }),
-
   queryAudit: (filters: any) => {
     const params = new URLSearchParams(filters).toString();
     return fetchAPI<{ data: any[] }>(`/compliance/audit/logs?${params}`, {
@@ -498,12 +478,6 @@ export const complianceService = {
   getConsents: (userId: string) =>
     fetchAPI<{ userId: string; consents: any[] }>(`/compliance/consent/${userId}`),
 
-  checkConsent: (userId: string, consentType: string) =>
-    fetchAPI<{ userId: string; consentType: string; hasConsent: boolean }>('/compliance/consent/check', {
-      method: 'POST',
-      body: JSON.stringify({ userId, consentType }),
-    }),
-
   createDataRequest: (userId: string, type: 'access' | 'deletion' | 'rectification' | 'portability') =>
     fetchAPI<{ success: boolean; request: any }>('/compliance/data-request', {
       method: 'POST',
@@ -512,13 +486,6 @@ export const complianceService = {
 
   getDataRequests: (userId: string) =>
     fetchAPI<{ userId: string; requests: any[] }>(`/compliance/data-request/${userId}`),
-
-  exportData: (userId: string) => fetchAPI<any>(`/compliance/export/${userId}`),
-
-  deleteData: (userId: string) =>
-    fetchAPI<{ deleted: boolean; removedData: string[] }>(`/compliance/delete/${userId}`, {
-      method: 'DELETE',
-    }),
 
   getSecurityControls: () => fetchAPI<{ controls: any[]; count: number }>('/compliance/security-controls'),
 
@@ -538,12 +505,6 @@ export const analyticsService = {
   getTopPerformers: (limit?: number) =>
     fetchAPI<{ performers: any[] }>(`/analytics/top-performers${limit ? `?limit=${limit}` : ''}`),
 
-  predict: (candidateId: string, interviewId: string) =>
-    fetchAPI<any>('/analytics/predict', {
-      method: 'POST',
-      body: JSON.stringify({ candidateId, interviewId }),
-    }),
-
   getPipeline: (tenantId?: string) => fetchAPI<{ candidates: any[]; count: number }>(`/analytics/pipeline${tenantId ? `?tenantId=${tenantId}` : ''}`),
 
   updateCandidateStage: (candidateId: string, stage: string) =>
@@ -560,12 +521,6 @@ export const analyticsService = {
 
   deleteCandidate: (candidateId: string) =>
     fetchAPI<any>(`/analytics/pipeline/candidate/${candidateId}`, { method: 'DELETE' }),
-
-  getTrainingRecommendations: (candidateId: string) =>
-    fetchAPI<{ candidateId: string; recommendations: any[] }>(`/analytics/training/${candidateId}`),
-
-  getReport: (type: 'summary' | 'detailed' | 'export') =>
-    fetchAPI<any>(`/analytics/report/${type}`),
 };
 
 // ============== Scheduling ==============
@@ -596,9 +551,6 @@ export const schedulingService = {
     }),
 
   getUpcoming: () => fetchAPI<{ interviews: any[] }>('/scheduling/upcoming'),
-
-  getSchedule: (interviewerId: string) =>
-    fetchAPI<{ interviews: any[] }>(`/scheduling/schedule/${interviewerId}`),
 };
 
 // ============== Question Bank ==============
@@ -649,45 +601,6 @@ export const questionBankService = {
 };
 
 // ============== Scorecard ==============
-export const scorecardService = {
-  getTemplates: (role?: string) =>
-    fetchAPI<{ templates: any[] }>(`/scorecard/templates${role ? `?role=${role}` : ''}`),
-
-  getTemplate: (id: string) => fetchAPI<any>(`/scorecard/templates/${id}`),
-
-  createTemplate: (data: any) =>
-    fetchAPI<any>('/scorecard/templates', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  createScorecard: (interviewId: string, templateId: string) =>
-    fetchAPI<any>('/scorecard', {
-      method: 'POST',
-      body: JSON.stringify({ interviewId, templateId }),
-    }),
-
-  getScorecard: (id: string) => fetchAPI<any>(`/scorecard/${id}`),
-
-  updateScore: (scorecardId: string, criterionId: string, score: number, comments: string) =>
-    fetchAPI<any>(`/scorecard/${scorecardId}/score`, {
-      method: 'POST',
-      body: JSON.stringify({ criterionId, score, comments }),
-    }),
-
-  addNote: (scorecardId: string, content: string, timestamp: number, category: string) =>
-    fetchAPI<any>(`/scorecard/${scorecardId}/note`, {
-      method: 'POST',
-      body: JSON.stringify({ content, timestamp, category }),
-    }),
-
-  submit: (id: string) =>
-    fetchAPI<any>(`/scorecard/${id}/submit`, { method: 'POST' }),
-
-  getInterviewScorecards: (interviewId: string) =>
-    fetchAPI<{ scorecards: any[] }>(`/scorecard/interview/${interviewId}`),
-};
-
 // ============== Reports ==============
 export const reportService = {
   generate: (candidateId: string, interviewIds: string[]) =>
@@ -760,293 +673,6 @@ export const reportService = {
   },
 };
 
-// ============== Async Video ==============
-export const asyncVideoService = {
-  create: (data: any) =>
-    fetchAPI<any>('/async-video/create', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  send: (interviewId: string) =>
-    fetchAPI<any>(`/async-video/${interviewId}/send`, { method: 'POST' }),
-
-  start: (interviewId: string) =>
-    fetchAPI<any>(`/async-video/${interviewId}/start`, { method: 'POST' }),
-
-  saveAnswer: (interviewId: string, questionId: string, answer: any) =>
-    fetchAPI<any>(`/async-video/${interviewId}/answer`, {
-      method: 'POST',
-      body: JSON.stringify({ questionId, answer }),
-    }),
-
-  complete: (interviewId: string) =>
-    fetchAPI<any>(`/async-video/${interviewId}/complete`, { method: 'POST' }),
-
-  getInterview: (id: string) => fetchAPI<any>(`/async-video/${id}`),
-
-  getPending: () => fetchAPI<{ interviews: any[] }>('/async-video/pending'),
-
-  getCompleted: () => fetchAPI<{ interviews: any[] }>('/async-video/completed'),
-
-  getProgress: (interviewId: string) =>
-    fetchAPI<{ answered: number; total: number; percentage: number }>(`/async-video/${interviewId}/progress`),
-};
-
-// ============== Take-home Challenges ==============
-export const takeHomeService = {
-  create: (data: any) =>
-    fetchAPI<any>('/take-home/create', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  invite: (challengeId: string, candidateEmail: string) =>
-    fetchAPI<any>(`/take-home/${challengeId}/invite`, {
-      method: 'POST',
-      body: JSON.stringify({ candidateEmail }),
-    }),
-
-  bulkInvite: (challengeId: string, candidates: { id: string; email: string }[]) =>
-    fetchAPI<any>(`/take-home/${challengeId}/bulk-invite`, {
-      method: 'POST',
-      body: JSON.stringify({ candidates }),
-    }),
-
-  start: (inviteId: string) =>
-    fetchAPI<any>(`/take-home/${inviteId}/start`, { method: 'POST' }),
-
-  submit: (challengeId: string, answers: any[]) =>
-    fetchAPI<any>(`/take-home/${challengeId}/submit`, {
-      method: 'POST',
-      body: JSON.stringify({ answers }),
-    }),
-
-  getChallenge: (id: string) => fetchAPI<any>(`/take-home/${id}`),
-
-  getPending: () => fetchAPI<{ challenges: any[] }>('/take-home/pending'),
-
-  getSubmitted: () => fetchAPI<{ challenges: any[] }>('/take-home/submitted'),
-
-  getStats: (challengeId: string) =>
-    fetchAPI<{ stats: any }>(`/take-home/${challengeId}/stats`),
-};
-
-// ============== Preparation Mode ==============
-export const preparationService = {
-  checkSystem: () => fetchAPI<any>('/preparation/system-check'),
-
-  startSession: (role: string) =>
-    fetchAPI<any>('/preparation/start', {
-      method: 'POST',
-      body: JSON.stringify({ role }),
-    }),
-
-  getSession: (sessionId: string) => fetchAPI<any>(`/preparation/session/${sessionId}`),
-
-  completeSession: (sessionId: string) =>
-    fetchAPI<any>(`/preparation/session/${sessionId}/complete`, { method: 'POST' }),
-
-  getBreakTimer: (interviewId: string) => fetchAPI<any>(`/preparation/break-timer/${interviewId}`),
-
-  startBreakTimer: (interviewId: string, totalDuration: number, breakDuration: number) =>
-    fetchAPI<any>('/preparation/break-timer/start', {
-      method: 'POST',
-      body: JSON.stringify({ interviewId, totalDuration, breakDuration }),
-    }),
-
-  takeBreak: (interviewId: string) =>
-    fetchAPI<any>(`/preparation/break-timer/${interviewId}/take-break`, { method: 'POST' }),
-};
-
-// ============== Waiting Room ==============
-export const waitingRoomService = {
-  joinRoom: (interviewId: string) =>
-    fetchAPI<any>('/waiting-room/join', {
-      method: 'POST',
-      body: JSON.stringify({ interviewId }),
-    }),
-
-  leaveRoom: () =>
-    fetchAPI<any>('/waiting-room/leave', { method: 'POST' }),
-
-  getStatus: () =>
-    fetchAPI<any>('/waiting-room/status'),
-
-  checkTech: () =>
-    fetchAPI<any>('/waiting-room/tech-check', { method: 'POST' }),
-
-  getEstimatedTime: () =>
-    fetchAPI<any>('/waiting-room/estimated-time'),
-
-  notifyReady: () =>
-    fetchAPI<any>('/waiting-room/ready', { method: 'POST' }),
-
-  getAnnouncements: () =>
-    fetchAPI<any>('/waiting-room/announcements'),
-};
-
-// ============== Mock Interview ==============
-export const mockInterviewService = {
-  create: (role: string, difficulty: string, questionCount: number) =>
-    fetchAPI<any>('/mock-interview/create', {
-      method: 'POST',
-      body: JSON.stringify({ role, difficulty, questionCount }),
-    }),
-
-  start: (mockId: string) =>
-    fetchAPI<any>(`/mock-interview/${mockId}/start`, { method: 'POST' }),
-
-  submitAnswer: (mockId: string, questionId: string, answer: string, code?: string) =>
-    fetchAPI<any>(`/mock-interview/${mockId}/answer`, {
-      method: 'POST',
-      body: JSON.stringify({ questionId, answer, code }),
-    }),
-
-  complete: (mockId: string) =>
-    fetchAPI<any>(`/mock-interview/${mockId}/complete`, { method: 'POST' }),
-
-  getFeedback: (mockId: string) => fetchAPI<any>(`/mock-interview/${mockId}/feedback`),
-
-  getMyMocks: () => fetchAPI<{ mocks: any[] }>('/mock-interview/my-mocks'),
-};
-
-// ============== Panel Interview ==============
-export const panelInterviewService = {
-  create: (data: any) =>
-    fetchAPI<any>('/panel-interview/create', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  get: (panelId: string) => fetchAPI<any>(`/panel-interview/${panelId}`),
-
-  addPanelist: (panelId: string, panelist: any) =>
-    fetchAPI<any>(`/panel-interview/${panelId}/panelist`, {
-      method: 'POST',
-      body: JSON.stringify(panelist),
-    }),
-
-  join: (panelId: string, panelistId: string) =>
-    fetchAPI<any>(`/panel-interview/${panelId}/join`, {
-      method: 'POST',
-      body: JSON.stringify({ panelistId }),
-    }),
-
-  sendMessage: (panelId: string, content: string, isPrivate: boolean) =>
-    fetchAPI<any>(`/panel-interview/${panelId}/message`, {
-      method: 'POST',
-      body: JSON.stringify({ content, isPrivate }),
-    }),
-
-  submitScore: (panelId: string, score: number, feedback: string) =>
-    fetchAPI<any>(`/panel-interview/${panelId}/score`, {
-      method: 'POST',
-      body: JSON.stringify({ score, feedback }),
-    }),
-
-  complete: (panelId: string) =>
-    fetchAPI<any>(`/panel-interview/${panelId}/complete`, { method: 'POST' }),
-};
-
-// ============== AI Analysis ==============
-export const aiAnalysisService = {
-  getConfidence: (evaluationId: string) => fetchAPI<any>(`/ai-analysis/confidence/${evaluationId}`),
-
-  getComparative: (candidateId: string, role: string) =>
-    fetchAPI<any>(`/ai-analysis/comparative`, {
-      method: 'POST',
-      body: JSON.stringify({ candidateId, role }),
-    }),
-
-  getSkillRadar: (candidateId: string) => fetchAPI<any>(`/ai-analysis/skill-radar/${candidateId}`),
-
-  analyzeSentiment: (text: string) =>
-    fetchAPI<any>('/ai-analysis/sentiment', {
-      method: 'POST',
-      body: JSON.stringify({ text }),
-    }),
-};
-
-// ============== Notifications ==============
-export const notificationService = {
-  send: (userId: string, type: string, channel: string, title: string, message: string, data?: any) =>
-    fetchAPI<any>('/notifications/send', {
-      method: 'POST',
-      body: JSON.stringify({ userId, type, channel, title, message, data }),
-    }),
-
-  sendTemplated: (templateId: string, variables: any) =>
-    fetchAPI<any>('/notifications/send-template', {
-      method: 'POST',
-      body: JSON.stringify({ templateId, variables }),
-    }),
-
-  getTemplates: () => fetchAPI<{ templates: any[] }>('/notifications/templates'),
-
-  getUserNotifications: (unreadOnly: boolean) =>
-    fetchAPI<{ notifications: any[] }>(`/notifications/my${unreadOnly ? '?unread=true' : ''}`),
-
-  markAsRead: (notificationId: string) =>
-    fetchAPI<any>(`/notifications/${notificationId}/read`, { method: 'POST' }),
-
-  getUnreadCount: () => fetchAPI<{ count: number }>('/notifications/unread-count'),
-};
-
-// ============== Resume Screener ==============
-export const resumeScreenerService = {
-  screen: (resumeId: string, targetRole: string, resumeText: string) =>
-    fetchAPI<any>('/resume-screener/screen', {
-      method: 'POST',
-      body: JSON.stringify({ resumeId, targetRole, resumeText }),
-    }),
-
-  getResult: (resultId: string) => fetchAPI<any>(`/resume-screener/result/${resultId}`),
-
-  getCandidateResults: (candidateId: string) =>
-    fetchAPI<{ results: any[] }>(`/resume-screener/candidate/${candidateId}`),
-};
-
-// ============== SQL Challenges ==============
-export const sqlChallengeService = {
-  getChallenges: (filters?: { difficulty?: string; category?: string }) => {
-    const params = new URLSearchParams();
-    if (filters?.difficulty) params.set('difficulty', filters.difficulty);
-    if (filters?.category) params.set('category', filters.category);
-    return fetchAPI<{ challenges: any[] }>(`/sql-challenges?${params}`);
-  },
-
-  getChallenge: (id: string) => fetchAPI<any>(`/sql-challenges/${id}`),
-
-  submitQuery: (challengeId: string, query: string) =>
-    fetchAPI<any>(`/sql-challenges/${challengeId}/submit`, {
-      method: 'POST',
-      body: JSON.stringify({ query }),
-    }),
-
-  getStats: (challengeId: string) => fetchAPI<any>(`/sql-challenges/${challengeId}/stats`),
-};
-
-// ============== Git Integration ==============
-export const gitIntegrationService = {
-  connect: (accessToken: string) =>
-    fetchAPI<any>('/git/connect', {
-      method: 'POST',
-      body: JSON.stringify({ accessToken }),
-    }),
-
-  disconnect: () => fetchAPI<any>('/git/disconnect', { method: 'POST' }),
-
-  getRepositories: () => fetchAPI<{ repositories: any[] }>('/git/repositories'),
-
-  analyzeRepository: (repoId: number) =>
-    fetchAPI<any>(`/git/repositories/${repoId}/analyze`, { method: 'POST' }),
-
-  getAnalysis: (repoId: number) => fetchAPI<any>(`/git/repositories/${repoId}/analysis`),
-
-  getReport: () => fetchAPI<any>('/git/report'),
-};
-
 // ==================== Phase 18: AI Agent & Automation ====================
 
 export const agentService = {
@@ -1072,42 +698,25 @@ export const agentService = {
   getTasks: (agentId?: string) =>
     fetchAPI<{ tasks: any[] }>(`/agent/tasks${agentId ? `?agentId=${agentId}` : ''}`),
   getTask: (taskId: string) => fetchAPI<any>(`/agent/tasks/${taskId}`),
-};
-
-export const automationService = {
   getAutomations: () => fetchAPI<{ automations: any[] }>('/agent/automations'),
   getAutomation: (id: string) => fetchAPI<any>(`/agent/automations/${id}`),
   createAutomation: (config: any) =>
-    fetchAPI<any>('/agent/automations', {
-      method: 'POST',
-      body: JSON.stringify(config),
-    }),
+    fetchAPI<any>('/agent/automations', { method: 'POST', body: JSON.stringify(config) }),
   updateAutomation: (id: string, updates: any) =>
-    fetchAPI<any>(`/agent/automations/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
+    fetchAPI<any>(`/agent/automations/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
   deleteAutomation: (id: string) =>
     fetchAPI<{ success: boolean }>(`/agent/automations/${id}`, { method: 'DELETE' }),
   runAutomation: (id: string, context?: any) =>
-    fetchAPI<any>(`/agent/automations/${id}/run`, {
-      method: 'POST',
-      body: JSON.stringify({ context }),
-    }),
+    fetchAPI<any>(`/agent/automations/${id}/run`, { method: 'POST', body: JSON.stringify({ context }) }),
   testAutomation: (id: string, testContext?: any) =>
-    fetchAPI<any>(`/agent/automations/${id}/test`, {
-      method: 'POST',
-      body: JSON.stringify({ testContext }),
-    }),
+    fetchAPI<any>(`/agent/automations/${id}/test`, { method: 'POST', body: JSON.stringify({ testContext }) }),
   getRuns: (automationId?: string) =>
     fetchAPI<{ runs: any[] }>(`/agent/runs${automationId ? `?automationId=${automationId}` : ''}`),
   getRun: (runId: string) => fetchAPI<any>(`/agent/runs/${runId}`),
   trigger: (event: string, context?: any) =>
-    fetchAPI<any>('/agent/trigger', {
-      method: 'POST',
-      body: JSON.stringify({ event, context }),
-    }),
+    fetchAPI<any>('/agent/trigger', { method: 'POST', body: JSON.stringify({ event, context }) }),
 };
+
 
 // ============== Phase 10: Infrastructure ==============
 
@@ -1200,60 +809,6 @@ export const collaborationService = {
     fetchAPI<any>(`/collaboration/chat/${sessionId}`),
 };
 
-// ============== Phase 12: Analytics ==============
-
-export const analyticsServiceNew = {
-  // Predictions
-  predictAttrition: (data: any) =>
-    fetchAPI<any>('/analytics/predict/attrition', { method: 'POST', body: JSON.stringify(data) }),
-  predictPerformance: (candidate: any) =>
-    fetchAPI<any>('/analytics/predict/performance', { method: 'POST', body: JSON.stringify(candidate) }),
-  optimizeInterviewDuration: (data: any) =>
-    fetchAPI<any>('/analytics/optimize/interview-duration', { method: 'POST', body: JSON.stringify(data) }),
-  matchInterviewer: (candidate: any, interviewers: any[]) =>
-    fetchAPI<any>('/analytics/match/interviewer', { method: 'POST', body: JSON.stringify({ candidate, interviewers }) }),
-
-  // Sentiment
-  analyzeSentiment: (text: string) =>
-    fetchAPI<any>('/analytics/sentiment/analyze', { method: 'POST', body: JSON.stringify({ text }) }),
-  analyzeConversation: (responses: any[]) =>
-    fetchAPI<any>('/analytics/sentiment/conversation', { method: 'POST', body: JSON.stringify({ responses }) }),
-  compareSentiment: (candidateResponses: any[], idealResponses: string[]) =>
-    fetchAPI<any>('/analytics/sentiment/compare', { method: 'POST', body: JSON.stringify({ candidateResponses, idealResponses }) }),
-
-  // Reports
-  generateReport: (config: any) =>
-    fetchAPI<any>('/analytics/report/generate', { method: 'POST', body: JSON.stringify(config) }),
-  getDashboard: (userId: string, role: string) =>
-    fetchAPI<any>(`/analytics/dashboard/${userId}?role=${role}`),
-  exportReport: (reportId: string, format: string) =>
-    fetchAPI<any>('/analytics/report/export', { method: 'POST', body: JSON.stringify({ reportId, format }) }),
-  scheduleReport: (config: any, frequency: string) =>
-    fetchAPI<any>('/analytics/report/schedule', { method: 'POST', body: JSON.stringify({ config, frequency }) }),
-
-  // Metrics
-  aggregateMetrics: (values: any[]) =>
-    fetchAPI<any>('/analytics/metrics/aggregate', { method: 'POST', body: JSON.stringify({ values }) }),
-  aggregateTimeSeries: (data: any[], interval: string) =>
-    fetchAPI<any>('/analytics/metrics/timeseries', { method: 'POST', body: JSON.stringify({ data, interval }) }),
-  calculatePercentile: (values: number[], percentile: number) =>
-    fetchAPI<any>('/analytics/metrics/percentile', { method: 'POST', body: JSON.stringify({ values, percentile }) }),
-  calculateMovingAverage: (data: any[], windowSize: number) =>
-    fetchAPI<any>('/analytics/metrics/moving-average', { method: 'POST', body: JSON.stringify({ data, windowSize }) }),
-  computeCorrelation: (x: number[], y: number[]) =>
-    fetchAPI<any>('/analytics/metrics/correlation', { method: 'POST', body: JSON.stringify({ x, y }) }),
-
-  // Anomaly Detection
-  detectAnomalies: (values: number[], method?: string) =>
-    fetchAPI<any>('/analytics/anomaly/detect', { method: 'POST', body: JSON.stringify({ values, method }) }),
-  checkThreshold: (value: number, config: any) =>
-    fetchAPI<any>('/analytics/anomaly/threshold', { method: 'POST', body: JSON.stringify({ value, config }) }),
-  detectSessionAnomalies: (sessionData: any, baseline: any) =>
-    fetchAPI<any>('/analytics/anomaly/session', { method: 'POST', body: JSON.stringify({ sessionData, baseline }) }),
-  predictAnomaly: (historicalData: number[], horizon?: number) =>
-    fetchAPI<any>('/analytics/anomaly/predict', { method: 'POST', body: JSON.stringify({ historicalData, horizon }) }),
-};
-
 // ============== Phase 13: Developer ==============
 
 export const developerService = {
@@ -1318,67 +873,6 @@ export const developerService = {
     fetchAPI<any>('/developer/sandbox/validate', { method: 'POST', body: JSON.stringify({ code, language }) }),
   estimateExecutionTime: (codeSize: number, complexity: number, language: string) =>
     fetchAPI<any>('/developer/sandbox/estimate', { method: 'POST', body: JSON.stringify({ codeSize, complexity, language }) }),
-};
-
-// ============== Phase 14: Compliance ==============
-
-export const complianceServiceNew = {
-  // Retention
-  getRetentionPolicies: () => fetchAPI<any>('/compliance/retention/policies'),
-  getRetentionPolicy: (id: string) => fetchAPI<any>(`/compliance/retention/policies/${id}`),
-  createRetentionPolicy: (policy: any) =>
-    fetchAPI<any>('/compliance/retention/policies', { method: 'POST', body: JSON.stringify(policy) }),
-  updateRetentionPolicy: (id: string, updates: any) =>
-    fetchAPI<any>(`/compliance/retention/policies/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
-  deleteRetentionPolicy: (id: string) =>
-    fetchAPI<any>(`/compliance/retention/policies/${id}`, { method: 'DELETE' }),
-  runRetentionJob: (policyId: string) =>
-    fetchAPI<any>(`/compliance/retention/run/${policyId}`, { method: 'POST' }),
-  getRetentionStats: () => fetchAPI<any>('/compliance/retention/stats'),
-
-  // PII
-  detectPII: (text: string) =>
-    fetchAPI<any>('/compliance/pii/detect', { method: 'POST', body: JSON.stringify({ text }) }),
-  maskValue: (value: string, mode?: string, char?: string) =>
-    fetchAPI<any>('/compliance/pii/mask', { method: 'POST', body: JSON.stringify({ value, mode, char }) }),
-  maskObject: (object: any, fields: string[], config?: any) =>
-    fetchAPI<any>('/compliance/pii/mask-object', { method: 'POST', body: JSON.stringify({ object, fields, config }) }),
-  anonymizeCandidate: (candidate: any) =>
-    fetchAPI<any>('/compliance/pii/anonymize', { method: 'POST', body: JSON.stringify({ candidate }) }),
-  sanitizeForExport: (data: any) =>
-    fetchAPI<any>('/compliance/pii/sanitize-export', { method: 'POST', body: JSON.stringify({ data }) }),
-  maskLogData: (data: any) =>
-    fetchAPI<any>('/compliance/pii/mask-log', { method: 'POST', body: JSON.stringify({ data }) }),
-
-  // Access Control
-  createAccessRequest: (request: any) =>
-    fetchAPI<any>('/compliance/access/request', { method: 'POST', body: JSON.stringify(request) }),
-  getMyRequests: () => fetchAPI<any>('/compliance/access/my-requests'),
-  getPendingApprovals: () => fetchAPI<any>('/compliance/access/pending'),
-  approveRequest: (requestId: string, comment?: string) =>
-    fetchAPI<any>(`/compliance/access/approve/${requestId}`, { method: 'POST', body: JSON.stringify({ comment }) }),
-  rejectRequest: (requestId: string, comment: string) =>
-    fetchAPI<any>(`/compliance/access/reject/${requestId}`, { method: 'POST', body: JSON.stringify({ comment }) }),
-  getPermissionGroups: () => fetchAPI<any>('/compliance/access/groups'),
-  createPermissionGroup: (group: any) =>
-    fetchAPI<any>('/compliance/access/groups', { method: 'POST', body: JSON.stringify(group) }),
-  addUserToGroup: (groupId: string, userId: string) =>
-    fetchAPI<any>(`/compliance/access/groups/${groupId}/user`, { method: 'POST', body: JSON.stringify({ userId }) }),
-  removeUserFromGroup: (groupId: string, userId: string) =>
-    fetchAPI<any>(`/compliance/access/groups/${groupId}/user`, { method: 'DELETE', body: JSON.stringify({ userId }) }),
-  getUserPermissions: () => fetchAPI<any>('/compliance/access/permissions'),
-
-  // Audit
-  getAuditLogs: (filters?: any) =>
-    fetchAPI<any>(`/compliance/audit/logs?${new URLSearchParams(filters || {}).toString()}`),
-  exportAuditTrail: (options: any) =>
-    fetchAPI<any>('/compliance/audit/export', { method: 'POST', body: JSON.stringify(options) }),
-  getAuditStats: (startDate: string, endDate: string) =>
-    fetchAPI<any>(`/compliance/audit/stats?startDate=${startDate}&endDate=${endDate}`),
-  searchAuditLogs: (query: string) =>
-    fetchAPI<any>(`/compliance/audit/search?q=${encodeURIComponent(query)}`),
-  logAuditEntry: (entry: any) =>
-    fetchAPI<any>('/compliance/audit/log', { method: 'POST', body: JSON.stringify(entry) }),
 };
 
 // ============== Phase 15: Integration ==============

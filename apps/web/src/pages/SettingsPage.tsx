@@ -20,7 +20,7 @@ import {
   Users,
   AlertTriangle,
 } from "lucide-react";
-import { biometricService, ssoService, encryptionService, geoFencingService } from "../services/enterprise";
+import { biometricService, ssoService, encryptionService, geoFencingService, webhookService, atsService, integrationService } from "../services/enterprise";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,9 @@ const tabs = [
   { id: "sso", label: "SSO", icon: Link2 },
   { id: "geo", label: "Geo-Fencing", icon: Globe },
   { id: "encryption", label: "Encryption", icon: Lock },
+  { id: "integrations", label: "Integrations", icon: Link2 },
+  { id: "ats", label: "ATS", icon: Users },
+  { id: "webhooks", label: "Webhooks", icon: Activity },
 ];
 
 export default function SettingsPage() {
@@ -48,6 +51,7 @@ export default function SettingsPage() {
   const [ssoConfig, setSsoConfig] = useState<any>(null);
   const [encryptionStatus, setEncryptionStatus] = useState<any>(null);
   const [geoConfig, setGeoConfig] = useState<any>(null);
+  const [webhookConfig, setWebhookConfig] = useState<any>(null);
 
   useEffect(() => {
     const uid = (window as any).Clerk?.user?.id || getCurrentUserId();
@@ -57,16 +61,18 @@ export default function SettingsPage() {
   const loadSettings = async (uid: string) => {
     setLoading(true);
     try {
-      const [bio, sso, enc, geo] = await Promise.all([
+      const [bio, sso, enc, geo, webhooks] = await Promise.all([
         biometricService.getSettings().catch(() => null),
         ssoService.getConfig().catch(() => null),
         encryptionService.getKeys(uid).catch(() => null),
         geoFencingService.getConfig().catch(() => null),
+        webhookService.getEvents().catch(() => null),
       ]);
       setBiometricStatus(bio);
       setSsoConfig(sso);
       setEncryptionStatus(enc);
       setGeoConfig(geo);
+      setWebhookConfig(webhooks);
     } catch (e) {
       console.error("Error loading settings:", e);
     }
@@ -141,6 +147,9 @@ export default function SettingsPage() {
             {activeTab === "encryption" && (
               <EncryptionSettings status={encryptionStatus} userId={getCurrentUserId()} />
             )}
+            {activeTab === "integrations" && <IntegrationSettings config={integrationStatus} />}
+            {activeTab === "ats" && <ATSSettings config={null} />}
+            {activeTab === "webhooks" && <WebhookSettings config={webhookConfig} />}
           </div>
         )}
       </div>
@@ -698,6 +707,237 @@ function EncryptionSettings({ status, userId }: { status: any; userId: string })
           Rotate Keys
         </Button>
       </div>
+    </div>
+  );
+}
+
+function IntegrationSettings({ config: _config }: { config: any }) {
+  const [hrisStatus, setHrisStatus] = useState<string>('not_configured');
+  const [slackStatus, setSlackStatus] = useState<string>('not_configured');
+  const [teamsStatus, setTeamsStatus] = useState<string>('not_configured');
+  const [zoomStatus, setZoomStatus] = useState<string>('not_configured');
+
+  useEffect(() => {
+    Promise.all([
+      integrationService.getHRISStatus?.().catch(() => null) ?? Promise.resolve(null),
+      integrationService.getSlackStatus?.().catch(() => null) ?? Promise.resolve(null),
+      integrationService.getTeamsStatus?.().catch(() => null) ?? Promise.resolve(null),
+      integrationService.getZoomStatus?.().catch(() => null) ?? Promise.resolve(null),
+    ]).then(([hris, slack, teams, zoom]) => {
+      if (hris?.configured) setHrisStatus('connected');
+      if (slack?.configured) setSlackStatus('connected');
+      if (teams?.configured) setTeamsStatus('connected');
+      if (zoom?.configured) setZoomStatus('connected');
+    }).catch(() => {});
+  }, []);
+
+  const handleConnect = async (integration: string) => {
+    try {
+      const result = await (integration === 'hris'
+        ? integrationService.validateHRIS?.({}).catch(() => null)
+        : integration === 'slack'
+        ? integrationService.sendSlackMessage?.({ channel: '#general', message: 'Connected!' }).catch(() => null)
+        : Promise.resolve(null));
+      if (result) {
+        toast.success(`${integration} connected successfully`);
+        window.location.reload();
+      }
+    } catch {
+      toast.error(`Failed to connect ${integration}`);
+    }
+  };
+
+  const integrations = [
+    { id: 'hris', label: 'HRIS (Workday/BambooHR)', icon: Users, status: hrisStatus },
+    { id: 'slack', label: 'Slack', icon: MessageSquare, status: slackStatus },
+    { id: 'teams', label: 'Microsoft Teams', icon: Users, status: teamsStatus },
+    { id: 'zoom', label: 'Zoom', icon: Video, status: zoomStatus },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+        <Link2 className="w-5 h-5 text-blue-400" />
+        Third-Party Integrations
+      </h2>
+      <div className="grid gap-3">
+        {integrations.map((int) => {
+          const Icon = int.icon;
+          const connected = int.status === 'connected';
+          return (
+            <Card key={int.id} className={cn("bg-gray-800/80 border", connected ? "border-emerald-500/30" : "border-gray-700/50")}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", connected ? "bg-emerald-600/20" : "bg-slate-800")}>
+                    <Icon className={cn("w-5 h-5", connected ? "text-emerald-400" : "text-slate-400")} />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-slate-200">{int.label}</h3>
+                    <p className="text-xs text-slate-500">{connected ? 'Connected' : 'Not configured'}</p>
+                  </div>
+                </div>
+                <Button
+                  variant={connected ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleConnect(int.id)}
+                  className={connected ? "bg-emerald-600 hover:bg-emerald-500" : "border-slate-700 text-slate-300"}
+                >
+                  {connected ? 'Configured' : 'Connect'}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ATSSettings({ config }: { config: any }) {
+  const [selectedATS, setSelectedATS] = useState<string>('greenhouse');
+  const [syncing, setSyncing] = useState(false);
+
+  const handleConnect = async () => {
+    try {
+      const result = await atsService.configure?.({ provider: selectedATS, apiKey: 'prompt', enabled: true });
+      if (result?.success) {
+        toast.success(`${selectedATS} configured successfully`);
+      }
+    } catch {
+      toast.error('Failed to configure ATS');
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await atsService.sync?.();
+      toast.success('ATS sync completed');
+    } catch {
+      toast.error('ATS sync failed');
+    }
+    setSyncing(false);
+  };
+
+  const providers = [
+    { id: 'greenhouse', label: 'Greenhouse' },
+    { id: 'lever', label: 'Lever' },
+    { id: 'workday', label: 'Workday' },
+    { id: 'bamboohr', label: 'BambooHR' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+        <Users className="w-5 h-5 text-blue-400" />
+        ATS Integration
+      </h2>
+      <div className="grid gap-3">
+        {providers.map((p) => (
+          <Card key={p.id} className={cn("bg-gray-800/80 border", selectedATS === p.id ? "border-blue-500/30" : "border-gray-700/50")}>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-sm font-bold text-slate-400">
+                  {p.label[0]}
+                </div>
+                <div>
+                  <h3 className="font-medium text-slate-200">{p.label}</h3>
+                  <p className="text-xs text-slate-500">{config?.provider === p.id ? 'Connected' : 'Available'}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant={selectedATS === p.id ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedATS(p.id)}
+                  className={selectedATS === p.id ? 'bg-blue-600' : 'border-slate-700 text-slate-300'}
+                >
+                  {selectedATS === p.id ? 'Selected' : 'Select'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Button onClick={handleConnect} className="bg-blue-600 hover:bg-blue-500">
+          <Link2 className="w-4 h-4 mr-2" />
+          Configure {providers.find(p => p.id === selectedATS)?.label}
+        </Button>
+        <Button variant="outline" onClick={handleSync} disabled={syncing} className="border-slate-700 text-slate-300">
+          <RefreshCw className={cn("w-4 h-4 mr-2", syncing && "animate-spin")} />
+          Sync Now
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function WebhookSettings({ config: _config }: { config: any }) {
+  const [webhooks, setWebhooks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadWebhooks = async () => {
+    setLoading(true);
+    try {
+      const data = await webhookService.getWebhooks?.() ?? await webhookService.getEvents?.();
+      setWebhooks(Array.isArray(data) ? data : data?.webhooks || data?.events || []);
+    } catch {
+      setWebhooks([]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadWebhooks(); }, []);
+
+  const handleRegister = async () => {
+    const url = prompt('Enter webhook URL:');
+    if (!url) return;
+    try {
+      await webhookService.register?.({ url, events: ['interview.completed', 'candidate.created'] });
+      toast.success('Webhook registered');
+      loadWebhooks();
+    } catch {
+      toast.error('Failed to register webhook');
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+        <Activity className="w-5 h-5 text-cyan-400" />
+        Webhooks
+      </h2>
+      <Button onClick={handleRegister} className="bg-blue-600 hover:bg-blue-500">
+        <Plus className="w-4 h-4 mr-2" />
+        Register Webhook
+      </Button>
+      <Card className="bg-gray-800/80 border-gray-700/50">
+        <CardContent className="p-5">
+          {loading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-full bg-slate-800 rounded" />
+              <Skeleton className="h-8 w-full bg-slate-800 rounded" />
+            </div>
+          ) : webhooks.length > 0 ? (
+            <div className="space-y-2">
+              {webhooks.map((wh: any, i: number) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-800/50">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-mono text-slate-300 truncate">{wh.url || wh.endpoint}</p>
+                    <p className="text-xs text-slate-500">{wh.events?.join(', ') || wh.event || 'all events'}</p>
+                  </div>
+                  <Badge className={cn("ml-2 shrink-0", wh.active !== false ? "bg-emerald-600/20 text-emerald-400" : "bg-slate-700 text-slate-400")}>
+                    {wh.active !== false ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 text-center py-4">No webhooks registered</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

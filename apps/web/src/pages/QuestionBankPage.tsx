@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { questionBankService } from '@/services/enterprise';
 import { toast } from 'sonner';
+import { api } from '@/lib/api';
 
 interface Question {
   id: string;
@@ -34,6 +35,8 @@ export default function QuestionBankPage() {
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [generating, setGenerating] = useState(false);
   const [formData, setFormData] = useState({
     title: '', description: '', type: 'coding', difficulty: 'medium',
     timeLimit: 30, points: 100,
@@ -56,6 +59,7 @@ export default function QuestionBankPage() {
       }
     };
     loadCategories();
+    loadStats();
   }, []);
 
   useEffect(() => {
@@ -83,6 +87,32 @@ export default function QuestionBankPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadStats = async () => {
+    try {
+      const res = await questionBankService.getStats?.() ?? await api.get('/question-bank/stats').then(r => r.data);
+      setStats(res);
+    } catch {
+      // stats are optional
+    }
+  };
+
+  const handleGenerateQuestions = async () => {
+    setGenerating(true);
+    try {
+      const res = await api.post('/questions/generate', { category: selectedCategory === 'all' ? undefined : selectedCategory, count: 5 });
+      if (res.data?.questions) {
+        toast.success(`Generated ${res.data.questions.length} questions`);
+        loadData();
+      } else {
+        toast.success('Questions generated');
+        loadData();
+      }
+    } catch {
+      toast.error('Failed to generate questions');
+    }
+    setGenerating(false);
   };
 
   const handleSearch = () => {
@@ -175,6 +205,23 @@ export default function QuestionBankPage() {
               + Add Question
             </button>
           </div>
+        </div>
+
+        {/* Stats + Generate */}
+        <div className="flex items-center gap-4 mb-6">
+          {stats && (
+            <div className="flex gap-4 text-sm text-gray-400">
+              <span>📊 Total: <strong className="text-white">{stats.total || stats.questionCount || questions.length}</strong></span>
+              <span>📝 Categories: <strong className="text-white">{categories.length}</strong></span>
+            </div>
+          )}
+          <button
+            onClick={handleGenerateQuestions}
+            disabled={generating}
+            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:from-purple-500 hover:to-pink-500 transition text-sm ml-auto"
+          >
+            {generating ? '⏳ Generating...' : '🤖 Generate Questions'}
+          </button>
         </div>
 
         {/* Categories */}

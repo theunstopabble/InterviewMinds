@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { complianceService, tenantService } from "../services/enterprise";
+import { complianceService, tenantService, infrastructureService, agentService, observabilityService } from "../services/enterprise";
 import {
   Shield,
   FileText,
@@ -37,6 +37,9 @@ const tabs = [
   { id: "audit", label: "Audit Logs", icon: FileText },
   { id: "tenants", label: "Tenants", icon: Building2 },
   { id: "reports", label: "Reports", icon: BarChart3 },
+  { id: "infrastructure", label: "Infrastructure", icon: Server },
+  { id: "observability", label: "Observability", icon: Activity },
+  { id: "agents", label: "Agents", icon: Zap },
 ];
 
 const frameworks: Framework[] = ["SOC2", "GDPR", "HIPAA", "ISO27001"];
@@ -57,6 +60,9 @@ export default function AdminPage() {
   const [tenants, setTenants] = useState<any[]>([]);
   const [reports, setReports] = useState<ComplianceReport[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
+  const [healthData, setHealthData] = useState<any>(null);
+  const [agentList, setAgentList] = useState<any[]>([]);
+  const [observabilityData, setObservabilityData] = useState<any>(null);
 
   useEffect(() => {
     loadAdminData();
@@ -74,6 +80,15 @@ export default function AdminPage() {
       const logsData = auditResponse as { data?: any[]; logs?: any[] };
       setAuditLogs(logsData.data || logsData.logs || []);
       setTenants(tenantsData.tenants || []);
+
+      const [health, agents, obs] = await Promise.all([
+        infrastructureService.getHealth?.().catch(() => null) ?? Promise.resolve(null),
+        agentService.getAgents?.().catch(() => null) ?? Promise.resolve(null),
+        observabilityService.getMetrics?.().catch(() => null) ?? Promise.resolve(null),
+      ]);
+      setHealthData(health);
+      setAgentList(agents?.agents || agents || []);
+      setObservabilityData(obs);
     } catch (e) {
       console.error("Error loading admin data:", e);
     }
@@ -198,6 +213,9 @@ export default function AdminPage() {
             {activeTab === "reports" && (
               <ReportsPanel reports={reports} loading={reportLoading} />
             )}
+            {activeTab === "infrastructure" && <InfrastructurePanel data={healthData} />}
+            {activeTab === "observability" && <ObservabilityPanel data={observabilityData} />}
+            {activeTab === "agents" && <AgentsPanel agents={agentList} />}
           </div>
         )}
       </div>
@@ -621,6 +639,249 @@ function ReportsPanel({ reports, loading }: { reports: ComplianceReport[]; loadi
           </Card>
         );
       })}
+    </div>
+  );
+}
+
+function InfrastructurePanel({ data }: { data: any }) {
+  const [health, setHealth] = useState<any>(data || null);
+  const [systemInfo, setSystemInfo] = useState<any>(null);
+
+  useEffect(() => {
+    Promise.all([
+      infrastructureService.getHealth?.().catch(() => null) ?? Promise.resolve(null),
+      infrastructureService.getSystemInfo?.().catch(() => null) ?? Promise.resolve(null),
+    ]).then(([h, sys]) => {
+      if (h) setHealth(h);
+      if (sys) setSystemInfo(sys);
+    }).catch(() => {});
+  }, []);
+
+  const handleClearCache = async () => {
+    try {
+      await infrastructureService.clearCache?.();
+      toast.success('Cache cleared');
+    } catch {
+      toast.error('Failed to clear cache');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+          <Server className="w-5 h-5 text-blue-400" />
+          Infrastructure Health
+        </h2>
+        <Button variant="outline" size="sm" onClick={handleClearCache} className="border-slate-700 text-slate-300">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Clear Cache
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Status', value: health?.status || health?.healthy ? 'Healthy' : 'Unknown', color: health?.healthy ? 'text-emerald-400' : 'text-amber-400' },
+          { label: 'Uptime', value: health?.uptime ? `${Math.floor(health.uptime / 3600)}h` : '-', color: 'text-blue-400' },
+          { label: 'Memory', value: health?.memory ? `${health.memory.usage || health.memory}%` : '-', color: 'text-cyan-400' },
+          { label: 'CPU', value: health?.cpu ? `${health.cpu}%` : '-', color: 'text-purple-400' },
+        ].map((item) => (
+          <Card key={item.label} className="bg-gray-800/80 border-gray-700/50">
+            <CardContent className="p-5 text-center">
+              <p className={cn("text-2xl font-bold", item.color)}>{item.value}</p>
+              <p className="text-xs text-slate-500 mt-1">{item.label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {systemInfo && (
+        <Card className="bg-gray-800/80 border-gray-700/50">
+          <CardContent className="p-5">
+            <h3 className="font-medium text-slate-200 mb-3">System Info</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {Object.entries(systemInfo).map(([key, val]) => (
+                <div key={key} className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
+                  <p className="text-xs text-slate-500 capitalize">{key.replace(/_/g, ' ')}</p>
+                  <p className="text-sm font-mono text-slate-300 mt-0.5">{String(val)}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function ObservabilityPanel({ data }: { data: any }) {
+  const [metrics, setMetrics] = useState<any>(data || null);
+  const [alerts, setAlerts] = useState<any[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      observabilityService.getMetrics?.().catch(() => null) ?? Promise.resolve(null),
+      observabilityService.getAlerts?.().catch(() => null) ?? Promise.resolve(null),
+    ]).then(([m, a]) => {
+      if (m) setMetrics(m);
+      if (a?.alerts) setAlerts(a.alerts);
+    }).catch(() => {});
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+        <Activity className="w-5 h-5 text-cyan-400" />
+        Observability
+      </h2>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Requests/min', value: metrics?.requestsPerMinute ?? metrics?.rpm ?? '-' },
+          { label: 'Error Rate', value: metrics?.errorRate ? `${metrics.errorRate}%` : '-' },
+          { label: 'Avg Latency', value: metrics?.avgLatency ? `${metrics.avgLatency}ms` : '-' },
+          { label: 'Active Traces', value: metrics?.activeTraces ?? '-' },
+        ].map((item) => (
+          <Card key={item.label} className="bg-gray-800/80 border-gray-700/50">
+            <CardContent className="p-5 text-center">
+              <p className="text-2xl font-bold text-slate-200">{item.value}</p>
+              <p className="text-xs text-slate-500 mt-1">{item.label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="bg-gray-800/80 border-gray-700/50">
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            Active Alerts
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {alerts.length > 0 ? (
+            <div className="space-y-2">
+              {alerts.map((alert, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-800/50">
+                  <div>
+                    <p className="text-sm text-slate-200">{alert.message || alert.name}</p>
+                    <p className="text-xs text-slate-500">{alert.severity || alert.level}</p>
+                  </div>
+                  <Badge className={cn(
+                    alert.severity === 'critical' ? 'bg-red-600/20 text-red-400' : 'bg-amber-600/20 text-amber-400'
+                  )}>
+                    {alert.severity || 'info'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 text-center py-4">No active alerts</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AgentsPanel({ agents }: { agents: any[] }) {
+  const [list, setList] = useState<any[]>(agents || []);
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    if (agents?.length) setList(agents);
+    else {
+      agentService.getAgents?.().then((data: any) => {
+        setList(data?.agents || data || []);
+      }).catch(() => {});
+    }
+  }, [agents]);
+
+  const handleRunAgent = async (name: string) => {
+    setRunning(true);
+    try {
+      await agentService.runAgent?.({ name });
+      toast.success(`Agent ${name} triggered`);
+    } catch {
+      toast.error(`Failed to run agent ${name}`);
+    }
+    setRunning(false);
+  };
+
+  const handleRunAutomation = async (id: string) => {
+    try {
+      await agentService.runAutomation?.(id);
+      toast.success('Automation triggered');
+    } catch {
+      toast.error('Failed to run automation');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+        <Zap className="w-5 h-5 text-purple-400" />
+        Agent Management
+      </h2>
+
+      <Card className="bg-gray-800/80 border-gray-700/50">
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold text-slate-200">Available Agents</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {list.length > 0 ? (
+            <div className="space-y-2">
+              {list.map((agent: any, i: number) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-900/50 border border-slate-800/50">
+                  <div>
+                    <p className="text-sm font-medium text-slate-200">{agent.name || agent.id}</p>
+                    <p className="text-xs text-slate-500">{agent.description || agent.type || 'AI Agent'}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Badge className={cn(
+                      agent.status === 'active' || agent.status === 'ready'
+                        ? 'bg-emerald-600/20 text-emerald-400'
+                        : 'bg-slate-700 text-slate-400'
+                    )}>
+                      {agent.status || 'ready'}
+                    </Badge>
+                    <Button size="sm" variant="outline" className="border-slate-700 text-slate-300"
+                      onClick={() => handleRunAgent(agent.name || agent.id)}
+                      disabled={running}
+                    >
+                      <Zap className="w-3 h-3 mr-1" />
+                      Run
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 text-center py-4">No agents available</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="bg-gray-800/80 border-gray-700/50">
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold text-slate-200">Automations</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" className="border-slate-700 text-slate-300" onClick={() => {
+            agentService.getAutomations?.().then((data: any) => {
+              const automations = data?.automations || data || [];
+              if (automations.length > 0) {
+                handleRunAutomation(automations[0]?.id || automations[0]?.name);
+              } else {
+                toast.info('No automations configured');
+              }
+            }).catch(() => toast.error('Failed to fetch automations'));
+          }}>
+            <Zap className="w-4 h-4 mr-2" />
+            Run All Automations
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import CodeEditor from "@/components/CodeEditor";
 import { OutputConsole } from "@/components/OutputConsole";
 import { executeCode } from "@/services/compiler";
-import { codeEvaluationService } from '@/services/enterprise';
+import { codeEvaluationService, codeAnalysisService, llmInterviewerService, developerService } from '@/services/enterprise';
 import { useSpeech } from "@/hooks/useSpeech";
 import WebcamAnalysis from "@/components/WebcamAnalysis";
 import { useAudioAnalysis } from "@/hooks/useAudioAnalysis";
@@ -83,7 +83,12 @@ export default function InterviewPage() {
   const [isCompiling, setIsCompiling] = useState(false);
   const [evalResult, setEvalResult] = useState<any>(null);
   const [evalLoading, setEvalLoading] = useState(false);
-  const [showEval, setShowEval] = useState(false);
+  const [analysisTab, setAnalysisTab] = useState<'console' | 'eval' | 'security' | 'complexity' | 'llm'>('console');
+  const [securityResult, setSecurityResult] = useState<any>(null);
+  const [complexityResult, setComplexityResult] = useState<any>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [llmFeedback, setLlmFeedback] = useState<any>(null);
+  const [llmLoading, setLlmLoading] = useState(false);
 
   const getCurrentGender = () => PERSONA_DETAILS[persona]?.gender || "female";
   const getCurrentPersonaName = () =>
@@ -264,7 +269,7 @@ export default function InterviewPage() {
       });
       setEvalResult(result.evaluation);
       toast.success("Code evaluated!");
-    } catch (err: unknown) {
+    } catch {
       toast.error("Evaluation failed");
       setEvalResult(null);
     } finally {
@@ -499,22 +504,15 @@ export default function InterviewPage() {
           />
         </div>
         <div className="h-[35%] min-h-[200px] border-t border-slate-700 bg-[#1e1e1e] flex flex-col">
-          <div className="flex items-center gap-2 px-4 py-1 bg-[#252526] border-b border-slate-700">
-            <button
-              onClick={() => setShowEval(false)}
-              className={`px-3 py-1 text-xs rounded ${!showEval ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              Console
-            </button>
-            <button
-              onClick={() => setShowEval(true)}
-              className={`px-3 py-1 text-xs rounded ${showEval ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              AI Evaluation
-            </button>
+          <div className="flex items-center gap-2 px-4 py-1 bg-[#252526] border-b border-slate-700 overflow-x-auto">
+            <button onClick={() => setAnalysisTab('console')} className={`px-3 py-1 text-xs rounded whitespace-nowrap ${analysisTab === 'console' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Console</button>
+            <button onClick={() => setAnalysisTab('eval')} className={`px-3 py-1 text-xs rounded whitespace-nowrap ${analysisTab === 'eval' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>AI Evaluation</button>
+            <button onClick={() => setAnalysisTab('security')} className={`px-3 py-1 text-xs rounded whitespace-nowrap ${analysisTab === 'security' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Security</button>
+            <button onClick={() => setAnalysisTab('complexity')} className={`px-3 py-1 text-xs rounded whitespace-nowrap ${analysisTab === 'complexity' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Complexity</button>
+            <button onClick={() => setAnalysisTab('llm')} className={`px-3 py-1 text-xs rounded whitespace-nowrap ${analysisTab === 'llm' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>LLM Chat</button>
           </div>
 
-          {showEval ? (
+          {analysisTab === 'eval' ? (
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {evalLoading ? (
                 <div className="flex items-center justify-center h-full">
@@ -526,9 +524,7 @@ export default function InterviewPage() {
                   <div className="grid grid-cols-5 gap-2">
                     {Object.entries(evalResult.scores || {}).map(([key, val]: [string, any]) => (
                       <div key={key} className="bg-slate-800 rounded-lg p-3 text-center">
-                        <div className="text-lg font-bold" style={{ color: val >= 70 ? '#22c55e' : val >= 40 ? '#eab308' : '#ef4444' }}>
-                          {val}/100
-                        </div>
+                        <div className="text-lg font-bold" style={{ color: val >= 70 ? '#22c55e' : val >= 40 ? '#eab308' : '#ef4444' }}>{val}/100</div>
                         <div className="text-xs text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1')}</div>
                       </div>
                     ))}
@@ -540,9 +536,7 @@ export default function InterviewPage() {
                         <h4 className="text-green-400 text-xs font-bold mb-2 uppercase tracking-wide">Strengths</h4>
                         <ul className="space-y-1">
                           {evalResult.feedback.strengths.map((s: string, i: number) => (
-                            <li key={i} className="text-xs text-slate-300 flex gap-2">
-                              <span className="text-green-500 shrink-0">+</span> {s}
-                            </li>
+                            <li key={i} className="text-xs text-slate-300 flex gap-2"><span className="text-green-500 shrink-0">+</span> {s}</li>
                           ))}
                         </ul>
                       </div>
@@ -552,9 +546,7 @@ export default function InterviewPage() {
                         <h4 className="text-red-400 text-xs font-bold mb-2 uppercase tracking-wide">Improve</h4>
                         <ul className="space-y-1">
                           {evalResult.feedback.improvements.map((s: string, i: number) => (
-                            <li key={i} className="text-xs text-slate-300 flex gap-2">
-                              <span className="text-red-500 shrink-0">-</span> {s}
-                            </li>
+                            <li key={i} className="text-xs text-slate-300 flex gap-2"><span className="text-red-500 shrink-0">-</span> {s}</li>
                           ))}
                         </ul>
                       </div>
@@ -572,17 +564,121 @@ export default function InterviewPage() {
                   )}
                 </>
               ) : (
-                <div className="flex items-center justify-center h-full text-slate-500 text-sm">
-                  Click "Evaluate Code" to analyze your solution
-                </div>
+                <div className="flex items-center justify-center h-full text-slate-500 text-sm">Click "Evaluate Code" to analyze your solution</div>
               )}
-              <button
-                onClick={handleEvaluateCode}
-                disabled={evalLoading || !code}
-                className="w-full py-2 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg text-sm font-bold hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 transition"
-              >
+              <button onClick={handleEvaluateCode} disabled={evalLoading || !code} className="w-full py-2 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg text-sm font-bold hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 transition">
                 {evalLoading ? 'Evaluating...' : '🚀 Evaluate My Code'}
               </button>
+            </div>
+          ) : analysisTab === 'security' ? (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {analysisLoading ? (
+                <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /><span className="ml-2 text-slate-400 text-sm">Scanning code...</span></div>
+              ) : securityResult ? (
+                <div className="space-y-2">
+                  <div className="bg-slate-800 rounded-lg p-3">
+                    <p className="text-xs text-slate-400">Issues Found: {securityResult.issues?.length || 0}</p>
+                    {securityResult.issues?.map((iss: any, i: number) => (
+                      <div key={i} className="mt-2 p-2 bg-red-950/20 border border-red-900/30 rounded text-xs text-slate-300">
+                        <span className="text-red-400 font-bold">{iss.severity}: </span>{iss.message}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-sm text-slate-300 bg-slate-800 rounded-lg p-3">{securityResult.summary}</p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-slate-500 text-sm">Scan your code for security issues</div>
+              )}
+              <button onClick={async () => {
+                if (!code) return;
+                setAnalysisLoading(true);
+                try {
+                  const r = await codeAnalysisService.securityScan?.({ code, language }) ?? await codeAnalysisService.analyze?.({ code, language });
+                  setSecurityResult(r);
+                  toast.success('Security scan complete');
+                } catch { toast.error('Security scan failed'); }
+                setAnalysisLoading(false);
+              }} disabled={analysisLoading || !code} className="w-full py-2 bg-gradient-to-r from-red-600 to-orange-600 rounded-lg text-sm font-bold hover:from-red-500 hover:to-orange-500 disabled:opacity-50 transition">
+                {analysisLoading ? 'Scanning...' : '🔒 Security Scan'}
+              </button>
+            </div>
+          ) : analysisTab === 'complexity' ? (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {analysisLoading ? (
+                <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /><span className="ml-2 text-slate-400 text-sm">Analyzing...</span></div>
+              ) : complexityResult ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-slate-800 rounded-lg p-3 text-center">
+                      <p className="text-xs text-slate-400">Time</p>
+                      <p className="text-lg font-bold text-blue-400 font-mono">{complexityResult.time || complexityResult.timeComplexity || '-'}</p>
+                    </div>
+                    <div className="bg-slate-800 rounded-lg p-3 text-center">
+                      <p className="text-xs text-slate-400">Space</p>
+                      <p className="text-lg font-bold text-purple-400 font-mono">{complexityResult.space || complexityResult.spaceComplexity || '-'}</p>
+                    </div>
+                  </div>
+                  {complexityResult.explanation && <p className="text-sm text-slate-300 bg-slate-800 rounded-lg p-3">{complexityResult.explanation}</p>}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-slate-500 text-sm">Analyze code complexity</div>
+              )}
+              <button onClick={async () => {
+                if (!code) return;
+                setAnalysisLoading(true);
+                try {
+                  const r = await codeAnalysisService.analyzeComplexity?.({ code, language }) ?? developerService.reviewCode?.(code, language) ?? await codeAnalysisService.analyze?.({ code, language });
+                  setComplexityResult(r);
+                  toast.success('Complexity analysis complete');
+                } catch { toast.error('Analysis failed'); }
+                setAnalysisLoading(false);
+              }} disabled={analysisLoading || !code} className="w-full py-2 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-lg text-sm font-bold hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 transition">
+                {analysisLoading ? 'Analyzing...' : '📊 Analyze Complexity'}
+              </button>
+            </div>
+          ) : analysisTab === 'llm' ? (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {llmLoading ? (
+                <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /><span className="ml-2 text-slate-400 text-sm">Getting AI feedback...</span></div>
+              ) : llmFeedback ? (
+                <div className="space-y-3">
+                  <div className="bg-slate-800 rounded-lg p-3">
+                    <h4 className="text-xs font-bold text-slate-400 mb-2 uppercase">LLM Interviewer Feedback</h4>
+                    <p className="text-sm text-slate-200">{typeof llmFeedback === 'string' ? llmFeedback : llmFeedback.feedback || llmFeedback.reply || llmFeedback.summary}</p>
+                  </div>
+                  {llmFeedback.suggestions?.map((s: string, i: number) => (
+                    <div key={i} className="bg-blue-950/20 border border-blue-900/30 rounded-lg p-3 text-xs text-slate-300">{s}</div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-slate-500 text-sm">Get LLM feedback on your code</div>
+              )}
+              <div className="flex gap-2">
+                <button onClick={async () => {
+                  if (!code) return;
+                  setLlmLoading(true);
+                  try {
+                    const r = await llmInterviewerService.explainCode?.({ code, language }) ?? llmInterviewerService.getFeedback?.({ code, language });
+                    setLlmFeedback(r);
+                    toast.success('LLM feedback ready');
+                  } catch { toast.error('LLM request failed'); }
+                  setLlmLoading(false);
+                }} disabled={llmLoading || !code} className="flex-1 py-2 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg text-sm font-bold hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 transition">
+                  {llmLoading ? 'Loading...' : '🤖 Explain Code'}
+                </button>
+                <button onClick={async () => {
+                  if (!code) return;
+                  setLlmLoading(true);
+                  try {
+                    const r = await llmInterviewerService.getMetrics?.('current') ?? await llmInterviewerService.getFeedback?.({ code, language, type: 'metrics' });
+                    setLlmFeedback(r);
+                    toast.success('Metrics retrieved');
+                  } catch { toast.error('Metrics request failed'); }
+                  setLlmLoading(false);
+                }} disabled={llmLoading || !code} className="flex-1 py-2 bg-slate-700 rounded-lg text-sm font-bold hover:bg-slate-600 disabled:opacity-50 transition">
+                  📈 Session Metrics
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex-1 overflow-hidden">
