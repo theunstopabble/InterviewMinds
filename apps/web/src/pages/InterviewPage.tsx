@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import CodeEditor from "@/components/CodeEditor";
 import { OutputConsole } from "@/components/OutputConsole";
 import { executeCode } from "@/services/compiler";
+import { codeEvaluationService } from '@/services/enterprise';
 import { useSpeech } from "@/hooks/useSpeech";
 import WebcamAnalysis from "@/components/WebcamAnalysis";
 import { useAudioAnalysis } from "@/hooks/useAudioAnalysis";
@@ -80,6 +81,9 @@ export default function InterviewPage() {
   const [output, setOutput] = useState<string | null>(null);
   const [execError, setExecError] = useState<string | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
+  const [evalResult, setEvalResult] = useState<any>(null);
+  const [evalLoading, setEvalLoading] = useState(false);
+  const [showEval, setShowEval] = useState(false);
 
   const getCurrentGender = () => PERSONA_DETAILS[persona]?.gender || "female";
   const getCurrentPersonaName = () =>
@@ -243,6 +247,28 @@ export default function InterviewPage() {
       toast.error("Execution failed");
     } finally {
       setIsCompiling(false);
+    }
+  };
+
+  const handleEvaluateCode = async () => {
+    if (!code) return;
+    setEvalLoading(true);
+    setEvalResult(null);
+    setShowEval(true);
+    try {
+      const result = await codeEvaluationService.evaluateCode({
+        code,
+        language,
+        problemStatement: "Evaluate the candidate's code submission",
+        candidateName: "Candidate",
+      });
+      setEvalResult(result.evaluation);
+      toast.success("Code evaluated!");
+    } catch (err: unknown) {
+      toast.error("Evaluation failed");
+      setEvalResult(null);
+    } finally {
+      setEvalLoading(false);
     }
   };
 
@@ -472,13 +498,102 @@ export default function InterviewPage() {
             setLanguage={setLanguage}
           />
         </div>
-        <div className="h-[35%] min-h-[200px] border-t border-slate-700 bg-[#1e1e1e]">
-          <OutputConsole
-            output={output}
-            error={execError}
-            isLoading={isCompiling}
-            onRun={handleRunCode}
-          />
+        <div className="h-[35%] min-h-[200px] border-t border-slate-700 bg-[#1e1e1e] flex flex-col">
+          <div className="flex items-center gap-2 px-4 py-1 bg-[#252526] border-b border-slate-700">
+            <button
+              onClick={() => setShowEval(false)}
+              className={`px-3 py-1 text-xs rounded ${!showEval ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Console
+            </button>
+            <button
+              onClick={() => setShowEval(true)}
+              className={`px-3 py-1 text-xs rounded ${showEval ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              AI Evaluation
+            </button>
+          </div>
+
+          {showEval ? (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {evalLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                  <span className="ml-2 text-slate-400 text-sm">Evaluating code...</span>
+                </div>
+              ) : evalResult ? (
+                <>
+                  <div className="grid grid-cols-5 gap-2">
+                    {Object.entries(evalResult.scores || {}).map(([key, val]: [string, any]) => (
+                      <div key={key} className="bg-slate-800 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold" style={{ color: val >= 70 ? '#22c55e' : val >= 40 ? '#eab308' : '#ef4444' }}>
+                          {val}/100
+                        </div>
+                        <div className="text-xs text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1')}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-sm text-slate-300 bg-slate-800 rounded-lg p-3">{evalResult.summary}</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    {evalResult.feedback?.strengths?.length > 0 && (
+                      <div className="bg-green-950/20 border border-green-900/30 rounded-lg p-3">
+                        <h4 className="text-green-400 text-xs font-bold mb-2 uppercase tracking-wide">Strengths</h4>
+                        <ul className="space-y-1">
+                          {evalResult.feedback.strengths.map((s: string, i: number) => (
+                            <li key={i} className="text-xs text-slate-300 flex gap-2">
+                              <span className="text-green-500 shrink-0">+</span> {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {evalResult.feedback?.improvements?.length > 0 && (
+                      <div className="bg-red-950/20 border border-red-900/30 rounded-lg p-3">
+                        <h4 className="text-red-400 text-xs font-bold mb-2 uppercase tracking-wide">Improve</h4>
+                        <ul className="space-y-1">
+                          {evalResult.feedback.improvements.map((s: string, i: number) => (
+                            <li key={i} className="text-xs text-slate-300 flex gap-2">
+                              <span className="text-red-500 shrink-0">-</span> {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  {evalResult.complexity && (
+                    <div className="bg-slate-800 rounded-lg p-3">
+                      <h4 className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Complexity</h4>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div><span className="text-slate-500">Time:</span> <span className="text-blue-400 font-mono">{evalResult.complexity.time}</span></div>
+                        <div><span className="text-slate-500">Space:</span> <span className="text-blue-400 font-mono">{evalResult.complexity.space}</span></div>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-2">{evalResult.complexity.explanation}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                  Click "Evaluate Code" to analyze your solution
+                </div>
+              )}
+              <button
+                onClick={handleEvaluateCode}
+                disabled={evalLoading || !code}
+                className="w-full py-2 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg text-sm font-bold hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 transition"
+              >
+                {evalLoading ? 'Evaluating...' : '🚀 Evaluate My Code'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-hidden">
+              <OutputConsole
+                output={output}
+                error={execError}
+                isLoading={isCompiling}
+                onRun={handleRunCode}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

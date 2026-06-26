@@ -33,6 +33,33 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
   return response.json();
 }
 
+export interface FeedbackResult {
+  summary: string;
+  overallScore: number;
+  categoryScores: {
+    technicalSkills: number;
+    communication: number;
+    problemSolving: number;
+    culturalFit: number;
+  };
+  strengths: string[];
+  areasForImprovement: string[];
+  detailedAnalysis: {
+    questionId: number;
+    question: string;
+    score: number;
+    feedback: string;
+    keyPoints: string[];
+  }[];
+  recommendations: {
+    hiring: 'strong_yes' | 'yes' | 'maybe' | 'no';
+    nextSteps: string[];
+    suggestedRoles?: string[];
+  };
+  redFlags: string[];
+  keyInsights: string[];
+}
+
 // ============== Phase 9: AI & LLM ==============
 
 // LLM Interviewer Service
@@ -1524,4 +1551,37 @@ export const observabilityService = {
   healthCheck: () => fetchAPI<any>('/observability/health'),
   readinessCheck: () => fetchAPI<any>('/observability/health/ready'),
   livenessCheck: () => fetchAPI<any>('/observability/health/live'),
+};
+
+// ============== AI Feedback Service ==============
+export const feedbackService = {
+  generateFeedback: (data: {
+    candidateName: string;
+    role: string;
+    interviewDate: string;
+    messages: { role: string; content: string; timestamp?: string }[];
+    questions: { question: string; type: string; difficulty?: string }[];
+    scores?: { technical?: number; communication?: number; problemSolving?: number; overall?: number };
+    interviewerPersona?: string;
+    language?: string;
+  }) =>
+    fetchAPI<any>('/feedback/generate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};
+
+// ============== Code Evaluation Service ==============
+export const codeEvaluationService = {
+  evaluateCode: (data: {
+    code: string;
+    language: string;
+    problemStatement: string;
+    testCases?: { input: string; expectedOutput: string }[];
+    candidateName?: string;
+  }) =>
+    fetchAPI<any>('/code-evaluation/evaluate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
