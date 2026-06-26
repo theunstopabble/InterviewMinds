@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import CodeEditor from "@/components/CodeEditor";
 import { OutputConsole } from "@/components/OutputConsole";
 import { executeCode } from "@/services/compiler";
-import { codeEvaluationService, codeAnalysisService, llmInterviewerService, developerService } from '@/services/enterprise';
+import { codeEvaluationService, codeAnalysisService, llmInterviewerService } from '@/services/enterprise';
 import { useSpeech } from "@/hooks/useSpeech";
 import WebcamAnalysis from "@/components/WebcamAnalysis";
 import { useAudioAnalysis } from "@/hooks/useAudioAnalysis";
@@ -259,7 +259,6 @@ export default function InterviewPage() {
     if (!code) return;
     setEvalLoading(true);
     setEvalResult(null);
-    setShowEval(true);
     try {
       const result = await codeEvaluationService.evaluateCode({
         code,
@@ -593,7 +592,7 @@ export default function InterviewPage() {
                 if (!code) return;
                 setAnalysisLoading(true);
                 try {
-                  const r = await codeAnalysisService.securityScan?.({ code, language }) ?? await codeAnalysisService.analyze?.({ code, language });
+                  const r = await codeAnalysisService.securityScan?.(code, language) ?? await codeAnalysisService.analyze?.(code, language);
                   setSecurityResult(r);
                   toast.success('Security scan complete');
                 } catch { toast.error('Security scan failed'); }
@@ -627,7 +626,7 @@ export default function InterviewPage() {
                 if (!code) return;
                 setAnalysisLoading(true);
                 try {
-                  const r = await codeAnalysisService.analyzeComplexity?.({ code, language }) ?? developerService.reviewCode?.(code, language) ?? await codeAnalysisService.analyze?.({ code, language });
+                  const r = await codeAnalysisService.analyze?.(code, language);
                   setComplexityResult(r);
                   toast.success('Complexity analysis complete');
                 } catch { toast.error('Analysis failed'); }
@@ -658,7 +657,7 @@ export default function InterviewPage() {
                   if (!code) return;
                   setLlmLoading(true);
                   try {
-                    const r = await llmInterviewerService.explainCode?.({ code, language }) ?? llmInterviewerService.getFeedback?.({ code, language });
+                    const r = await llmInterviewerService.explainCode?.('default', code) ?? await llmInterviewerService.getFeedback?.('default');
                     setLlmFeedback(r);
                     toast.success('LLM feedback ready');
                   } catch { toast.error('LLM request failed'); }
@@ -670,7 +669,7 @@ export default function InterviewPage() {
                   if (!code) return;
                   setLlmLoading(true);
                   try {
-                    const r = await llmInterviewerService.getMetrics?.('current') ?? await llmInterviewerService.getFeedback?.({ code, language, type: 'metrics' });
+                    const r = await llmInterviewerService.getMetrics?.('default');
                     setLlmFeedback(r);
                     toast.success('Metrics retrieved');
                   } catch { toast.error('Metrics request failed'); }

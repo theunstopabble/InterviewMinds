@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { complianceService, tenantService, infrastructureService, agentService, observabilityService } from "../services/enterprise";
 import {
   Shield,
@@ -14,6 +15,8 @@ import {
   Activity,
   Settings,
   RefreshCw,
+  Server,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,9 +85,9 @@ export default function AdminPage() {
       setTenants(tenantsData.tenants || []);
 
       const [health, agents, obs] = await Promise.all([
-        infrastructureService.getHealth?.().catch(() => null) ?? Promise.resolve(null),
+        infrastructureService.getPoolStats?.().catch(() => null) ?? Promise.resolve(null),
         agentService.getAgents?.().catch(() => null) ?? Promise.resolve(null),
-        observabilityService.getMetrics?.().catch(() => null) ?? Promise.resolve(null),
+        observabilityService.getSystemMetrics?.().catch(() => null) ?? Promise.resolve(null),
       ]);
       setHealthData(health);
       setAgentList(agents?.agents || agents || []);
@@ -649,8 +652,8 @@ function InfrastructurePanel({ data }: { data: any }) {
 
   useEffect(() => {
     Promise.all([
-      infrastructureService.getHealth?.().catch(() => null) ?? Promise.resolve(null),
-      infrastructureService.getSystemInfo?.().catch(() => null) ?? Promise.resolve(null),
+      infrastructureService.getPoolStats?.().catch(() => null) ?? Promise.resolve(null),
+      infrastructureService.getSystemMetrics?.().catch(() => null) ?? Promise.resolve(null),
     ]).then(([h, sys]) => {
       if (h) setHealth(h);
       if (sys) setSystemInfo(sys);
@@ -720,8 +723,8 @@ function ObservabilityPanel({ data }: { data: any }) {
 
   useEffect(() => {
     Promise.all([
-      observabilityService.getMetrics?.().catch(() => null) ?? Promise.resolve(null),
-      observabilityService.getAlerts?.().catch(() => null) ?? Promise.resolve(null),
+      observabilityService.getSystemMetrics?.().catch(() => null) ?? Promise.resolve(null),
+      observabilityService.getActiveAlerts?.().catch(() => null) ?? Promise.resolve(null),
     ]).then(([m, a]) => {
       if (m) setMetrics(m);
       if (a?.alerts) setAlerts(a.alerts);
@@ -800,7 +803,7 @@ function AgentsPanel({ agents }: { agents: any[] }) {
   const handleRunAgent = async (name: string) => {
     setRunning(true);
     try {
-      await agentService.runAgent?.({ name });
+      await agentService.runAgent?.(name, {});
       toast.success(`Agent ${name} triggered`);
     } catch {
       toast.error(`Failed to run agent ${name}`);

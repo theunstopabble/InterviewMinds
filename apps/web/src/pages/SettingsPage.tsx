@@ -19,6 +19,8 @@ import {
   Server,
   Users,
   AlertTriangle,
+  MessageSquare,
+  Video,
 } from "lucide-react";
 import { biometricService, ssoService, encryptionService, geoFencingService, webhookService, atsService, integrationService } from "../services/enterprise";
 import { Button } from "@/components/ui/button";
@@ -147,7 +149,7 @@ export default function SettingsPage() {
             {activeTab === "encryption" && (
               <EncryptionSettings status={encryptionStatus} userId={getCurrentUserId()} />
             )}
-            {activeTab === "integrations" && <IntegrationSettings config={integrationStatus} />}
+            {activeTab === "integrations" && <IntegrationSettings config={null} />}
             {activeTab === "ats" && <ATSSettings config={null} />}
             {activeTab === "webhooks" && <WebhookSettings config={webhookConfig} />}
           </div>
@@ -719,24 +721,24 @@ function IntegrationSettings({ config: _config }: { config: any }) {
 
   useEffect(() => {
     Promise.all([
-      integrationService.getHRISStatus?.().catch(() => null) ?? Promise.resolve(null),
-      integrationService.getSlackStatus?.().catch(() => null) ?? Promise.resolve(null),
-      integrationService.getTeamsStatus?.().catch(() => null) ?? Promise.resolve(null),
-      integrationService.getZoomStatus?.().catch(() => null) ?? Promise.resolve(null),
+      integrationService.validateHRIS?.({}).catch(() => null) ?? Promise.resolve(null),
+      integrationService.sendSlackNotification?.('', {}).catch(() => null) ?? Promise.resolve(null),
+      integrationService.sendTeamsMessage?.('', {}).catch(() => null) ?? Promise.resolve(null),
+      integrationService.getZoomMeeting?.('').catch(() => null) ?? Promise.resolve(null),
     ]).then(([hris, slack, teams, zoom]) => {
-      if (hris?.configured) setHrisStatus('connected');
-      if (slack?.configured) setSlackStatus('connected');
-      if (teams?.configured) setTeamsStatus('connected');
-      if (zoom?.configured) setZoomStatus('connected');
+      if (hris) setHrisStatus('connected');
+      if (slack) setSlackStatus('connected');
+      if (teams) setTeamsStatus('connected');
+      if (zoom) setZoomStatus('connected');
     }).catch(() => {});
   }, []);
 
   const handleConnect = async (integration: string) => {
     try {
       const result = await (integration === 'hris'
-        ? integrationService.validateHRIS?.({}).catch(() => null)
+        ? integrationService.validateHRIS?.({})
         : integration === 'slack'
-        ? integrationService.sendSlackMessage?.({ channel: '#general', message: 'Connected!' }).catch(() => null)
+        ? integrationService.sendSlackNotification?.('https://hooks.slack.com/test', { text: 'Connected!' })
         : Promise.resolve(null));
       if (result) {
         toast.success(`${integration} connected successfully`);
@@ -811,7 +813,7 @@ function ATSSettings({ config }: { config: any }) {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await atsService.sync?.();
+      await atsService.sync?.({});
       toast.success('ATS sync completed');
     } catch {
       toast.error('ATS sync failed');
@@ -880,7 +882,7 @@ function WebhookSettings({ config: _config }: { config: any }) {
   const loadWebhooks = async () => {
     setLoading(true);
     try {
-      const data = await webhookService.getWebhooks?.() ?? await webhookService.getEvents?.();
+      const data = await webhookService.getEvents?.();
       setWebhooks(Array.isArray(data) ? data : data?.webhooks || data?.events || []);
     } catch {
       setWebhooks([]);
@@ -894,7 +896,7 @@ function WebhookSettings({ config: _config }: { config: any }) {
     const url = prompt('Enter webhook URL:');
     if (!url) return;
     try {
-      await webhookService.register?.({ url, events: ['interview.completed', 'candidate.created'] });
+      await webhookService.register?.(url, ['interview.completed', 'candidate.created']);
       toast.success('Webhook registered');
       loadWebhooks();
     } catch {
