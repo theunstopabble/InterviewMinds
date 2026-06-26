@@ -268,7 +268,7 @@ Generate feedback in this JSON format:
       return JSON.parse(jsonMatch[0]);
     }
   } catch (e) {
-    console.error("Failed to parse feedback JSON:", e);
+    logger.error({ err: e }, "Failed to parse feedback JSON:");
   }
 
   return {

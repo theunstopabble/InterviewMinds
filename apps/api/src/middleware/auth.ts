@@ -5,16 +5,6 @@ import { logger } from "../lib/logger";
 
 dotenv.config();
 
-// Debugging Logs (Optional)
-// console.log("Checking Clerk Keys...");
-// console.log(
-//   "Publishable Key:",
-//   process.env.CLERK_PUBLISHABLE_KEY ? "✅ Found" : "❌ Missing",
-// );
-// console.log(
-//   "Secret Key:",
-//   process.env.CLERK_SECRET_KEY ? "✅ Found" : "❌ Missing",
-// );
 
 export const requireAuth = (
   req: Request,

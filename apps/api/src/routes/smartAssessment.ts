@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { 
   generateQuestionsFromJobDescription,
   calculateCompetencyGap,
@@ -24,7 +25,7 @@ router.post('/generate-questions', requireAuth, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error generating questions:', error);
+    logger.error({ err: error }, 'Error generating questions:');
     res.status(500).json({ error: 'Failed to generate questions' });
   }
 });
@@ -37,7 +38,7 @@ router.post('/competency-gap', requireAuth, async (req, res) => {
 
     res.json({ gaps });
   } catch (error) {
-    console.error('Error calculating gap:', error);
+    logger.error({ err: error }, 'Error calculating gap:');
     res.status(500).json({ error: 'Failed to calculate competency gap' });
   }
 });
@@ -50,7 +51,7 @@ router.post('/resume-match', requireAuth, async (req, res) => {
 
     res.json(matchResult);
   } catch (error) {
-    console.error('Error calculating match:', error);
+    logger.error({ err: error }, 'Error calculating match:');
     res.status(500).json({ error: 'Failed to calculate resume-job match' });
   }
 });
@@ -63,7 +64,7 @@ router.post('/difficulty-adjust', requireAuth, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error adjusting difficulty:', error);
+    logger.error({ err: error }, 'Error adjusting difficulty:');
     res.status(500).json({ error: 'Failed to adjust difficulty' });
   }
 });
@@ -76,7 +77,7 @@ router.post('/predict-success', requireAuth, async (req, res) => {
 
     res.json(prediction);
   } catch (error) {
-    console.error('Error predicting success:', error);
+    logger.error({ err: error }, 'Error predicting success:');
     res.status(500).json({ error: 'Failed to predict success' });
   }
 });
@@ -89,7 +90,7 @@ router.post('/technical-depth', requireAuth, async (req, res) => {
 
     res.json(analysis);
   } catch (error) {
-    console.error('Error analyzing depth:', error);
+    logger.error({ err: error }, 'Error analyzing depth:');
     res.status(500).json({ error: 'Failed to analyze technical depth' });
   }
 });
@@ -129,7 +130,7 @@ router.get('/job-requirements/templates', requireAuth, async (req, res) => {
 
     res.json({ templates });
   } catch (error) {
-    console.error('Error fetching templates:', error);
+    logger.error({ err: error }, 'Error fetching templates:');
     res.status(500).json({ error: 'Failed to fetch templates' });
   }
 });

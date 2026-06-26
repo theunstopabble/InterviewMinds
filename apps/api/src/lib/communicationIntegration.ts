@@ -38,7 +38,7 @@ export async function sendSlackMessage(webhookUrl: string, message: SlackMessage
 export async function createSlackChannel(name: string, topic?: string): Promise<{ channelId: string; name: string }> {
   const token = process.env.SLACK_BOT_TOKEN;
   if (!token) {
-    logger.warn("SLACK_BOT_TOKEN not configured; returning mock channel ID");
+    logger.info("SLACK_BOT_TOKEN not configured; returning placeholder channel ID");
     return { channelId: `C${Date.now()}`, name };
   }
   try {
@@ -235,7 +235,7 @@ export async function createZoomMeeting(options: ZoomCreateOptions): Promise<Zoo
   logger.info({ topic: options.topic }, "Creating Zoom meeting");
   const jwtToken = process.env.ZOOM_JWT_TOKEN;
   if (!jwtToken) {
-    logger.warn("ZOOM_JWT_TOKEN not configured; returning mock meeting");
+    logger.info("ZOOM_JWT_TOKEN not configured; returning placeholder meeting");
     return {
       id: `zoom_${Date.now()}`,
       topic: options.topic,
@@ -354,7 +354,7 @@ export async function createGoogleMeetEvent(config: GoogleMeetConfig, event: Goo
   logger.info({ summary: event.summary }, "Creating Google Meet event");
   const accessToken = await refreshGoogleAccessToken(config);
   if (!accessToken) {
-    logger.warn("No Google access token; returning mock Meet link");
+    logger.info("No Google access token; returning placeholder Meet link");
     return { meetLink: `https://meet.google.com/abc-${Date.now()}`, eventId: `gcal_${Date.now()}` };
   }
   try {

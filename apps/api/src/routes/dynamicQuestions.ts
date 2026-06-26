@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { generateFollowUp, generateSequenceFollowUps } from '../lib/dynamicQuestions';
 
 const router = Router();
@@ -42,7 +43,7 @@ router.post('/generate', async (req, res) => {
 
     res.json(followUp);
   } catch (error) {
-    console.error('Error generating follow-up:', error);
+    logger.error({ err: error }, 'Error generating follow-up:');
     res.status(500).json({ error: 'Failed to generate follow-up question' });
   }
 });
@@ -63,7 +64,7 @@ router.post('/generate-sequence', async (req, res) => {
 
     res.json({ followUps });
   } catch (error) {
-    console.error('Error generating follow-up sequence:', error);
+    logger.error({ err: error }, 'Error generating follow-up sequence:');
     res.status(500).json({ error: 'Failed to generate follow-up sequence' });
   }
 });

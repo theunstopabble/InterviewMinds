@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
+import { WebhookModel } from '../models/Webhook';
 import { 
-  createWebhookConfig, 
+  createWebhookConfig,
   sendWebhook, 
   sendBatchWebhooks,
   verifyWebhookSignature,
@@ -13,6 +15,7 @@ interface CreateWebhookRequest {
   url: string;
   events: string[];
   secret?: string;
+  userId?: string;
 }
 
 interface SendWebhookRequest {
@@ -27,14 +30,16 @@ interface VerifySignatureRequest {
   secret: string;
 }
 
-const webhookConfigs: Map<string, ReturnType<typeof createWebhookConfig>> = new Map();
+const validEvents = ['interview.started', 'interview.completed', 'interview.terminated', 
+  'candidate.registered', 'candidate.completed', 'candidate.failed', 
+  'verification.completed', 'fraud.detected'];
 
-router.get('/events', async (req, res) => {
+router.get('/events', async (_req, res) => {
   try {
     const events = getEventTypes();
     res.json({ events });
   } catch (error) {
-    console.error('Error fetching event types:', error);
+    logger.error({ err: error }, 'Error fetching event types:');
     res.status(500).json({ error: 'Failed to fetch event types' });
   }
 });
@@ -48,31 +53,33 @@ router.post('/register', async (req, res) => {
       return;
     }
 
-    const validEvents = ['interview.started', 'interview.completed', 'interview.terminated', 
-      'candidate.registered', 'candidate.completed', 'candidate.failed', 
-      'verification.completed', 'fraud.detected'];
-    
     const invalidEvents = body.events.filter(e => !validEvents.includes(e));
     if (invalidEvents.length > 0) {
       res.status(400).json({ error: `Invalid events: ${invalidEvents.join(', ')}` });
       return;
     }
 
-    const webhook = createWebhookConfig(body.url, body.events as any, body.secret);
-    webhookConfigs.set(webhook.id, webhook);
+    const config = createWebhookConfig(body.url, body.events as any, body.secret);
+    const doc = await new WebhookModel({
+      userId: body.userId || 'anonymous',
+      url: body.url,
+      events: body.events,
+      secret: config.secret,
+      active: true,
+    }).save();
 
     res.json({
       success: true,
       webhook: {
-        id: webhook.id,
-        url: webhook.url,
-        events: webhook.events,
-        enabled: webhook.enabled,
-        secret: webhook.secret
+        id: doc._id.toString(),
+        url: doc.url,
+        events: doc.events,
+        enabled: doc.active,
+        secret: doc.secret
       }
     });
   } catch (error) {
-    console.error('Error registering webhook:', error);
+    logger.error({ err: error }, 'Error registering webhook:');
     res.status(500).json({ error: 'Failed to register webhook' });
   }
 });
@@ -80,22 +87,26 @@ router.post('/register', async (req, res) => {
 router.get('/:webhookId', async (req, res) => {
   try {
     const { webhookId } = req.params;
-    const webhook = webhookConfigs.get(webhookId);
+    const doc = await WebhookModel.findById(webhookId);
 
-    if (!webhook) {
+    if (!doc) {
       res.status(404).json({ error: 'Webhook not found' });
       return;
     }
 
     res.json({
-      id: webhook.id,
-      url: webhook.url,
-      events: webhook.events,
-      enabled: webhook.enabled,
-      retryPolicy: webhook.retryPolicy
+      id: doc._id.toString(),
+      url: doc.url,
+      events: doc.events,
+      enabled: doc.active,
+      retryPolicy: {
+        maxRetries: 3,
+        retryInterval: 1000,
+        backoffMultiplier: 2
+      }
     });
   } catch (error) {
-    console.error('Error fetching webhook:', error);
+    logger.error({ err: error }, 'Error fetching webhook:');
     res.status(500).json({ error: 'Failed to fetch webhook' });
   }
 });
@@ -103,31 +114,40 @@ router.get('/:webhookId', async (req, res) => {
 router.put('/:webhookId', async (req, res) => {
   try {
     const { webhookId } = req.params;
-    const webhook = webhookConfigs.get(webhookId);
+    const doc = await WebhookModel.findById(webhookId);
 
-    if (!webhook) {
+    if (!doc) {
       res.status(404).json({ error: 'Webhook not found' });
       return;
     }
 
     const { url, events, enabled, secret } = req.body;
 
-    if (url) webhook.url = url;
-    if (events) webhook.events = events as any;
-    if (typeof enabled === 'boolean') webhook.enabled = enabled;
-    if (secret) webhook.secret = secret;
+    if (url) doc.url = url;
+    if (events) {
+      const invalidEvents = events.filter((e: string) => !validEvents.includes(e));
+      if (invalidEvents.length > 0) {
+        res.status(400).json({ error: `Invalid events: ${invalidEvents.join(', ')}` });
+        return;
+      }
+      doc.events = events;
+    }
+    if (typeof enabled === 'boolean') doc.active = enabled;
+    if (secret) doc.secret = secret;
+
+    await doc.save();
 
     res.json({
       success: true,
       webhook: {
-        id: webhook.id,
-        url: webhook.url,
-        events: webhook.events,
-        enabled: webhook.enabled
+        id: doc._id.toString(),
+        url: doc.url,
+        events: doc.events,
+        enabled: doc.active
       }
     });
   } catch (error) {
-    console.error('Error updating webhook:', error);
+    logger.error({ err: error }, 'Error updating webhook:');
     res.status(500).json({ error: 'Failed to update webhook' });
   }
 });
@@ -135,17 +155,16 @@ router.put('/:webhookId', async (req, res) => {
 router.delete('/:webhookId', async (req, res) => {
   try {
     const { webhookId } = req.params;
-    
-    if (!webhookConfigs.has(webhookId)) {
+    const doc = await WebhookModel.findByIdAndDelete(webhookId);
+
+    if (!doc) {
       res.status(404).json({ error: 'Webhook not found' });
       return;
     }
 
-    webhookConfigs.delete(webhookId);
-
     res.json({ success: true, message: 'Webhook deleted' });
   } catch (error) {
-    console.error('Error deleting webhook:', error);
+    logger.error({ err: error }, 'Error deleting webhook:');
     res.status(500).json({ error: 'Failed to delete webhook' });
   }
 });
@@ -159,15 +178,26 @@ router.post('/trigger', async (req, res) => {
       return;
     }
 
-    let webhooks: ReturnType<typeof createWebhookConfig>[] = [];
-    
+    let docs;
+
     if (body.webhookIds && body.webhookIds.length > 0) {
-      webhooks = body.webhookIds
-        .map(id => webhookConfigs.get(id))
-        .filter((w): w is ReturnType<typeof createWebhookConfig> => !!w);
+      docs = await WebhookModel.find({ _id: { $in: body.webhookIds }, active: true });
     } else {
-      webhooks = Array.from(webhookConfigs.values());
+      docs = await WebhookModel.find({ active: true, events: body.event });
     }
+
+    const webhooks = docs.map(doc => ({
+      id: doc._id.toString(),
+      url: doc.url,
+      events: doc.events as any,
+      secret: doc.secret || '',
+      enabled: doc.active,
+      retryPolicy: {
+        maxRetries: 3,
+        retryInterval: 1000,
+        backoffMultiplier: 2
+      }
+    }));
 
     const deliveries = await sendBatchWebhooks(
       webhooks,
@@ -184,7 +214,7 @@ router.post('/trigger', async (req, res) => {
       }))
     });
   } catch (error) {
-    console.error('Error triggering webhook:', error);
+    logger.error({ err: error }, 'Error triggering webhook:');
     res.status(500).json({ error: 'Failed to trigger webhook' });
   }
 });
@@ -202,7 +232,7 @@ router.post('/verify', async (req, res) => {
 
     res.json({ valid: isValid });
   } catch (error) {
-    console.error('Error verifying signature:', error);
+    logger.error({ err: error }, 'Error verifying signature:');
     res.status(500).json({ error: 'Failed to verify signature' });
   }
 });

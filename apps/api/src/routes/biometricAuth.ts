@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { 
   enrollFace, 
   enrollVoice, 
@@ -32,7 +33,7 @@ router.get('/settings', async (req, res) => {
     const settings = getDefaultSettings();
     res.json(settings);
   } catch (error) {
-    console.error('Error fetching settings:', error);
+    logger.error({ err: error }, 'Error fetching settings:');
     res.status(500).json({ error: 'Failed to fetch settings' });
   }
 });
@@ -67,7 +68,7 @@ router.post('/enroll', async (req, res) => {
 
     res.json({ success: true, template });
   } catch (error) {
-    console.error('Error enrolling biometric:', error);
+    logger.error({ err: error }, 'Error enrolling biometric:');
     res.status(500).json({ error: 'Failed to enroll biometric' });
   }
 });
@@ -101,7 +102,7 @@ router.post('/verify', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error verifying biometric:', error);
+    logger.error({ err: error }, 'Error verifying biometric:');
     res.status(500).json({ error: 'Failed to verify biometric' });
   }
 });
@@ -127,7 +128,7 @@ router.get('/status/:userId', async (req, res) => {
       ].filter(Boolean)
     });
   } catch (error) {
-    console.error('Error fetching enrollment status:', error);
+    logger.error({ err: error }, 'Error fetching enrollment status:');
     res.status(500).json({ error: 'Failed to fetch status' });
   }
 });
@@ -151,7 +152,7 @@ router.delete('/enrollment/:userId', async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error removing enrollment:', error);
+    logger.error({ err: error }, 'Error removing enrollment:');
     res.status(500).json({ error: 'Failed to remove enrollment' });
   }
 });

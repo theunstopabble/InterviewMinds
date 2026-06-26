@@ -1,10 +1,9 @@
 import { Router } from 'express';
 import { logger } from '../lib/logger';
 import { createUserKeys, rotateUserKeys, encryptForUser, decryptFromUser, verifyKeyPair, getKeyFingerprint, generateSecureToken } from '../lib/e2eEncryption';
+import { EncryptionKeyModel } from '../models/EncryptionKey';
 
 const router = Router();
-
-const keyStore: Map<string, Awaited<ReturnType<typeof createUserKeys>>> = new Map();
 
 interface CreateKeysRequest {
   userId: string;
@@ -39,8 +38,14 @@ router.post('/keys/create', async (req, res) => {
       return;
     }
 
-    const keys: Awaited<ReturnType<typeof createUserKeys>> = await createUserKeys(body.userId, body.password);
-    keyStore.set(body.userId, keys);
+    const keys = await createUserKeys(body.userId, body.password);
+    await new EncryptionKeyModel({
+      userId: body.userId,
+      publicKey: keys.publicKey,
+      privateKey: keys.encryptedPrivateKey,
+      algorithm: 'aes-256-gcm',
+      isActive: true,
+    }).save();
 
     res.json({
       success: true,
@@ -62,20 +67,30 @@ router.post('/keys/rotate', async (req, res) => {
       return;
     }
 
-    const currentKeys = keyStore.get(body.userId);
-    if (!currentKeys) {
+    const currentRecord = await EncryptionKeyModel.findOne({ userId: body.userId, isActive: true });
+    if (!currentRecord) {
       res.status(404).json({ error: 'User keys not found' });
       return;
     }
 
-    const newKeys = await rotateUserKeys(body.userId, body.newPassword, currentKeys.encryptedPrivateKey, body.oldPassword);
-    
+    const newKeys = await rotateUserKeys(body.userId, body.newPassword, currentRecord.privateKey, body.oldPassword);
+
     if (!newKeys) {
       res.status(401).json({ error: 'Invalid old password' });
       return;
     }
 
-    keyStore.set(body.userId, newKeys);
+    currentRecord.isActive = false;
+    currentRecord.rotatedAt = new Date();
+    await currentRecord.save();
+
+    await new EncryptionKeyModel({
+      userId: body.userId,
+      publicKey: newKeys.publicKey,
+      privateKey: newKeys.encryptedPrivateKey,
+      algorithm: 'aes-256-gcm',
+      isActive: true,
+    }).save();
 
     res.json({
       success: true,
@@ -91,18 +106,18 @@ router.post('/keys/rotate', async (req, res) => {
 router.get('/keys/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const keys = keyStore.get(userId);
+    const record = await EncryptionKeyModel.findOne({ userId, isActive: true });
 
-    if (!keys) {
+    if (!record) {
       res.status(404).json({ error: 'User keys not found' });
       return;
     }
 
     res.json({
-      userId: keys.userId,
-      publicKey: keys.publicKey,
-      fingerprint: getKeyFingerprint(keys.publicKey),
-      createdAt: keys.createdAt
+      userId: record.userId,
+      publicKey: record.publicKey,
+      fingerprint: getKeyFingerprint(record.publicKey),
+      createdAt: record.createdAt
     });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching keys:');

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { generateQuestions, getQuestionById, getCompetencyQuestions, getAllCompetencies } from '../lib/questionGeneration';
 
 const router = Router();
@@ -15,7 +16,7 @@ router.get('/competencies', async (req, res) => {
     const competencies = getAllCompetencies();
     res.json({ competencies });
   } catch (error) {
-    console.error('Error fetching competencies:', error);
+    logger.error({ err: error }, 'Error fetching competencies:');
     res.status(500).json({ error: 'Failed to fetch competencies' });
   }
 });
@@ -45,7 +46,7 @@ router.post('/generate', async (req, res) => {
 
     res.json({ questions, count: questions.length });
   } catch (error) {
-    console.error('Error generating questions:', error);
+    logger.error({ err: error }, 'Error generating questions:');
     res.status(500).json({ error: 'Failed to generate questions' });
   }
 });
@@ -62,7 +63,7 @@ router.get('/:questionId', async (req, res) => {
 
     res.json({ question });
   } catch (error) {
-    console.error('Error fetching question:', error);
+    logger.error({ err: error }, 'Error fetching question:');
     res.status(500).json({ error: 'Failed to fetch question' });
   }
 });
@@ -74,7 +75,7 @@ router.get('/competency/:competency/:difficulty', async (req, res) => {
 
     res.json({ competency, difficulty, questions, count: questions.length });
   } catch (error) {
-    console.error('Error fetching competency questions:', error);
+    logger.error({ err: error }, 'Error fetching competency questions:');
     res.status(500).json({ error: 'Failed to fetch questions' });
   }
 });
@@ -108,7 +109,7 @@ router.get('/practice/random', async (req, res) => {
     
     res.json({ questions: formatted, count: formatted.length });
   } catch (error) {
-    console.error('Error fetching practice questions:', error);
+    logger.error({ err: error }, 'Error fetching practice questions:');
     res.status(500).json({ error: 'Failed to fetch practice questions' });
   }
 });

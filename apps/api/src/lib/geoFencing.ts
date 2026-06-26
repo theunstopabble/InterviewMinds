@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { logger } from './logger';
 
 interface SecurityConfig {
   allowedIPs: string[];
@@ -99,7 +100,7 @@ async function getGeoLocation(ip: string): Promise<GeoLocation | null> {
       };
     }
   } catch (error) {
-    console.error('GeoIP lookup failed:', error);
+    logger.error({ err: error }, 'GeoIP lookup failed:');
   }
   
   return null;

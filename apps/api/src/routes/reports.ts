@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../lib/logger';
 import { reportGeneratorService, CandidateInfo, InterviewSummary } from '../lib/reportGenerator';
 import { requireAuth } from '../middleware/auth';
 
@@ -11,7 +12,7 @@ router.get('/candidate/:candidateId', requireAuth, (req, res) => {
     const reports = reportGeneratorService.getReportsByCandidate(candidateId);
     res.json({ reports, count: reports.length });
   } catch (error) {
-    console.error('Error fetching reports:', error);
+    logger.error({ err: error }, 'Error fetching reports:');
     res.status(500).json({ error: 'Failed to fetch reports' });
   }
 });
@@ -27,7 +28,7 @@ router.get('/:reportId', requireAuth, (req, res) => {
     }
     res.json({ report });
   } catch (error) {
-    console.error('Error fetching report:', error);
+    logger.error({ err: error }, 'Error fetching report:');
     res.status(500).json({ error: 'Failed to fetch report' });
   }
 });
@@ -64,7 +65,7 @@ router.post('/generate', requireAuth, (req, res) => {
     const report = reportGeneratorService.createReport(candidate, interviews, detailedScores);
     res.json({ success: true, report });
   } catch (error) {
-    console.error('Error generating report:', error);
+    logger.error({ err: error }, 'Error generating report:');
     res.status(500).json({ error: 'Failed to generate report' });
   }
 });
@@ -84,7 +85,7 @@ router.get('/:reportId/pdf', requireAuth, (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="report-${reportId}.txt"`);
     res.send(pdfContent);
   } catch (error) {
-    console.error('Error generating PDF:', error);
+    logger.error({ err: error }, 'Error generating PDF:');
     res.status(500).json({ error: 'Failed to generate PDF' });
   }
 });
@@ -101,7 +102,7 @@ router.post('/export/csv', requireAuth, (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="reports-export.csv"`);
     res.send(csvContent);
   } catch (error) {
-    console.error('Error exporting CSV:', error);
+    logger.error({ err: error }, 'Error exporting CSV:');
     res.status(500).json({ error: 'Failed to export CSV' });
   }
 });
@@ -118,7 +119,7 @@ router.post('/export/json', requireAuth, (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="reports-export.json"`);
     res.send(jsonContent);
   } catch (error) {
-    console.error('Error exporting JSON:', error);
+    logger.error({ err: error }, 'Error exporting JSON:');
     res.status(500).json({ error: 'Failed to export JSON' });
   }
 });
@@ -129,7 +130,7 @@ router.get('/templates', (_req, res) => {
     const templates = reportGeneratorService.getTemplates();
     res.json({ templates });
   } catch (error) {
-    console.error('Error fetching templates:', error);
+    logger.error({ err: error }, 'Error fetching templates:');
     res.status(500).json({ error: 'Failed to fetch templates' });
   }
 });

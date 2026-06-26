@@ -217,7 +217,7 @@ function estimateTestCoverage(code: string): number {
   if (hasIt) coverage += 30;
 
   const functionCount = (code.match(/function\s+\w+|const\s+\w+\s*=\s*(async\s*)?\(|=>\s*{/g) || []).length;
-  const mockCount = (code.match(/mock\(|jest\.mock|/g) || []).length;
+  const mockCount = (code.match(/mock\(|jest\.mock/g) || []).length;
 
   if (functionCount > 0) {
     coverage += Math.min(20, (mockCount / functionCount) * 20);

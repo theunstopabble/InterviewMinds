@@ -37,6 +37,7 @@ import {
   getAuditStats,
   searchAuditLogs,
 } from "../lib/auditTrail";
+import { logger } from "../lib/logger";
 import { requireAuth } from "../middleware/auth";
 
 const router = Router();
@@ -248,7 +249,7 @@ router.get("/security-controls", requireAuth, (_req, res) => {
     const controls = checkSecurityControls();
     res.json({ controls, count: controls.length });
   } catch (error) {
-    console.error('Error fetching security controls:', error);
+    logger.error({ err: error }, 'Error fetching security controls:');
     res.status(500).json({ error: 'Failed to fetch security controls' });
   }
 });
@@ -274,7 +275,7 @@ router.get("/report/:framework", requireAuth, (req, res) => {
       nextReview: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
     });
   } catch (error) {
-    console.error('Error generating compliance report:', error);
+    logger.error({ err: error }, 'Error generating compliance report:');
     res.status(500).json({ error: 'Failed to generate compliance report' });
   }
 });
