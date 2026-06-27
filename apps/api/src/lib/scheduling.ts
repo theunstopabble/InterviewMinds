@@ -284,6 +284,19 @@ class SchedulingService {
       if (reason) interview.notes = reason;
       await interview.save();
 
+      notificationService.sendTemplatedNotification(
+        interview.candidateId,
+        'interview-cancelled',
+        {
+          candidate_name: interview.candidateId,
+          role: interview.role,
+          interview_date: interview.scheduledTime.toLocaleDateString('en-US'),
+          reason: reason || 'No specific reason provided.',
+        }
+      ).catch((err) => {
+        logger.error({ err, interviewId }, 'Failed to send interview-cancelled notification');
+      });
+
       return true;
     } catch (error) {
       logger.error({ err: error, interviewId }, 'Error cancelling interview');
@@ -373,6 +386,19 @@ class SchedulingService {
 
       interview.status = 'completed';
       await interview.save();
+
+      notificationService.sendTemplatedNotification(
+        interview.candidateId,
+        'interview-completed',
+        {
+          candidate_name: interview.candidateId,
+          role: interview.role,
+          response_time: '48 hours',
+        }
+      ).catch((err) => {
+        logger.error({ err, interviewId }, 'Failed to send interview-completed notification');
+      });
+
       return true;
     } catch (error) {
       logger.error({ err: error, interviewId }, 'Error completing interview');

@@ -5,6 +5,7 @@ import Groq from "groq-sdk";
 import dotenv from "dotenv";
 import { uploadMiddleware } from "../middleware/upload";
 import { logger } from "../lib/logger";
+import { notificationService } from "../lib/notifications";
 import { validateBody, EndInterviewSchema, UploadVideoSchema } from "../lib/validation";
 import { interviewsCompleted } from "../lib/metrics";
 
@@ -182,6 +183,18 @@ router.post(
 
       await interview.save();
       interviewsCompleted.inc({ outcome: "evaluated" });
+
+      notificationService.sendTemplatedNotification(
+        userId,
+        'interview-completed',
+        {
+          candidate_name: userId,
+          role: 'Technical Interview',
+          response_time: '48 hours',
+        }
+      ).catch((err) => {
+        logger.error({ err, userId }, 'Failed to send interview-completed from /interview/end');
+      });
 
       res.json({
         id: interview._id,

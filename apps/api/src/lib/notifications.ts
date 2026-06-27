@@ -155,6 +155,26 @@ class NotificationService {
         variables: ['role', 'interview_time', 'interview_link'],
         isActive: true,
       },
+      {
+        id: 'interview-cancelled',
+        name: 'Interview Cancelled',
+        type: 'interview',
+        channel: 'email',
+        subject: 'Interview Cancelled - {{role}}',
+        body: 'Dear {{candidate_name}}, Your interview for the {{role}} position scheduled at {{interview_date}} has been cancelled. {{reason}} We apologise for the inconvenience and will reach out to reschedule.',
+        variables: ['candidate_name', 'role', 'interview_date', 'reason'],
+        isActive: true,
+      },
+      {
+        id: 'code-assessment',
+        name: 'Code Assessment Assigned',
+        type: 'interview',
+        channel: 'email',
+        subject: 'Coding Challenge - {{role}}',
+        body: 'Hi {{candidate_name}}, You have been assigned a coding challenge for the {{role}} position. Challenge: {{challenge_name}}. Deadline: {{deadline}}. Duration: {{duration}}. Language: {{language}}. Good luck!',
+        variables: ['candidate_name', 'role', 'challenge_name', 'deadline', 'duration', 'language'],
+        isActive: true,
+      },
     ];
 
     defaultTemplates.forEach(t => this.templates.set(t.id, t));

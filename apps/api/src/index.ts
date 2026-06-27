@@ -70,6 +70,8 @@ import collaborationRoutes from "./routes/collaboration";
 import developerRoutes from "./routes/developer";
 import { startWorkers, closeQueues } from "./lib/queue";
 import { requireEnvVars } from "./lib/envValidation";
+import { notificationService } from './lib/notifications';
+import { ScheduledInterviewModel } from './models/Scheduling';
 
 dotenv.config();
 initSentry();
@@ -630,6 +632,45 @@ if (require.main === module) {
   httpServer.listen(PORT, () => {
     logger.info({ port: PORT, env: process.env.NODE_ENV || "development" }, "server started with Socket.IO");
   });
+
+  // ─── Interview Reminder (every 15 minutes) ─────────────────────────
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const inOneHour = new Date(now.getTime() + 60 * 60 * 1000);
+      const upcoming = await ScheduledInterviewModel.find({
+        status: 'scheduled',
+        reminderSent: false,
+        scheduledTime: { $gte: now, $lte: inOneHour },
+      }).lean();
+
+      for (const interview of upcoming) {
+        notificationService.sendTemplatedNotification(
+          interview.candidateId,
+          'interview-reminder',
+          {
+            candidate_name: interview.candidateId,
+            role: interview.role,
+            interview_time: interview.scheduledTime.toLocaleTimeString('en-US'),
+            interview_link: interview.meetingLink || 'https://interviewminds.com/interview',
+          }
+        ).catch((err) => {
+          logger.error({ err, interviewId: interview.id }, 'Failed to send interview reminder');
+        });
+
+        await ScheduledInterviewModel.updateOne(
+          { id: interview.id },
+          { $set: { reminderSent: true } }
+        );
+      }
+
+      if (upcoming.length > 0) {
+        logger.info({ sent: upcoming.length }, 'Interview reminders dispatched');
+      }
+    } catch (err) {
+      logger.error({ err }, 'Interview reminder check failed');
+    }
+  }, 15 * 60 * 1000);
 }
 
 // 17. Export App
