@@ -108,7 +108,7 @@ export default function Navbar() {
         </Link>
 
         {/* ================= CENTER/RIGHT: DESKTOP MENU ================= */}
-        <div className="hidden md:flex items-center gap-4 overflow-x-auto flex-nowrap scrollbar-none">
+        <div className="hidden md:flex items-center gap-1 lg:gap-2">
           {/* 1. Install App Button (Purple Glassy Theme) */}
           {!isInstalled && deferredPrompt && (
             <Button
