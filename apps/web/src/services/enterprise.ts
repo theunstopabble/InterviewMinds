@@ -1079,3 +1079,17 @@ export const codeEvaluationService = {
       body: JSON.stringify(data),
     }),
 };
+
+export const interviewService = {
+  reject: (interviewId: string, reason?: string) =>
+    fetchAPI<any>('/interview/reject', {
+      method: 'POST',
+      body: JSON.stringify({ interviewId, reason }),
+    }),
+
+  sendOffer: (interviewId: string, companyName: string, responseDeadline: string) =>
+    fetchAPI<any>('/interview/offer', {
+      method: 'POST',
+      body: JSON.stringify({ interviewId, companyName, responseDeadline }),
+    }),
+};

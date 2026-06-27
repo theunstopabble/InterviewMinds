@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { analyticsService } from '../services/enterprise';
+import { analyticsService, interviewService } from '../services/enterprise';
 import { toast } from 'sonner';
 import { logger } from "@/lib/logger";
 
@@ -36,6 +36,9 @@ export default function PipelinePage() {
   const [filterRole, setFilterRole] = useState<string>('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', email: '', role: '' });
+  const [offerTarget, setOfferTarget] = useState<Candidate | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<Candidate | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     loadCandidates();
@@ -113,6 +116,46 @@ export default function PipelinePage() {
       loadCandidates();
     } catch {
       toast.error('Failed to delete candidate');
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectTarget) return;
+    setActionLoading(true);
+    try {
+      await interviewService.reject(rejectTarget.id, 'Position requirements mismatch');
+      await analyticsService.updateCandidateStage(rejectTarget.id, 'rejected');
+      setCandidates(prev => prev.map(c =>
+        c.id === rejectTarget.id ? { ...c, stage: 'rejected' } : c
+      ));
+      toast.success(`${rejectTarget.name} has been notified`);
+      setRejectTarget(null);
+    } catch {
+      toast.error('Failed to reject candidate');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSendOffer = async () => {
+    if (!offerTarget) return;
+    setActionLoading(true);
+    try {
+      await interviewService.sendOffer(
+        offerTarget.id,
+        'InterviewMinds',
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US')
+      );
+      await analyticsService.updateCandidateStage(offerTarget.id, 'offer');
+      setCandidates(prev => prev.map(c =>
+        c.id === offerTarget.id ? { ...c, stage: 'offer' } : c
+      ));
+      toast.success(`Offer sent to ${offerTarget.name}`);
+      setOfferTarget(null);
+    } catch {
+      toast.error('Failed to send offer');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -210,6 +253,29 @@ export default function PipelinePage() {
                         ))}
                       </div>
                       <div className="text-xs text-gray-500">{candidate.lastActivity}</div>
+                      <div className="flex gap-1 mt-2">
+                        {(candidate.stage === 'screening' || candidate.stage === 'interview') && (
+                          <>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setOfferTarget(candidate); }}
+                              className="px-2 py-1 text-xs bg-green-600/60 rounded hover:bg-green-600 transition"
+                              title="Send Offer"
+                            >
+                              📋 Offer
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setRejectTarget(candidate); }}
+                              className="px-2 py-1 text-xs bg-red-600/60 rounded hover:bg-red-600 transition"
+                              title="Reject Candidate"
+                            >
+                              ❌ Reject
+                            </button>
+                          </>
+                        )}
+                        {candidate.stage === 'offer' && (
+                          <span className="px-2 py-1 text-xs bg-orange-500/40 rounded">Pending decision</span>
+                        )}
+                      </div>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteCandidate(candidate.id); }}
                         className="absolute top-2 right-2 w-6 h-6 bg-red-600/60 rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 hover:bg-red-600 transition"
@@ -235,6 +301,7 @@ export default function PipelinePage() {
                   <th className="px-4 py-3 text-left text-sm font-semibold">Stage</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold">Tags</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold">Last Activity</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -260,6 +327,26 @@ export default function PipelinePage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-sm">{candidate.lastActivity}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        {(candidate.stage === 'screening' || candidate.stage === 'interview') && (
+                          <>
+                            <button
+                              onClick={() => setOfferTarget(candidate)}
+                              className="px-2 py-1 text-xs bg-green-600/60 rounded hover:bg-green-600 transition"
+                            >
+                              📋 Offer
+                            </button>
+                            <button
+                              onClick={() => setRejectTarget(candidate)}
+                              className="px-2 py-1 text-xs bg-red-600/60 rounded hover:bg-red-600 transition"
+                            >
+                              ❌ Reject
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -306,6 +393,54 @@ export default function PipelinePage() {
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setShowAddModal(false)} className="px-4 py-2 bg-gray-600 rounded-lg">Cancel</button>
                 <button onClick={handleAddCandidate} className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500">Add</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reject Confirmation Modal */}
+        {rejectTarget && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md space-y-4">
+              <h3 className="text-lg font-bold text-red-400">❌ Reject Candidate</h3>
+              <p className="text-gray-300">
+                Are you sure you want to reject <strong>{rejectTarget.name}</strong> for the <strong>{rejectTarget.role}</strong> position?
+              </p>
+              <p className="text-sm text-gray-400">
+                A rejection email will be sent to {rejectTarget.email} with the InterviewMinds branded template.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setRejectTarget(null)} className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500">
+                  Cancel
+                </button>
+                <button onClick={handleReject} disabled={actionLoading}
+                  className="px-4 py-2 bg-red-600 rounded-lg hover:bg-red-500 disabled:opacity-50">
+                  {actionLoading ? 'Rejecting...' : 'Confirm Reject'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Offer Confirmation Modal */}
+        {offerTarget && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md space-y-4">
+              <h3 className="text-lg font-bold text-green-400">📋 Send Offer</h3>
+              <p className="text-gray-300">
+                Send an offer letter to <strong>{offerTarget.name}</strong> for the <strong>{offerTarget.role}</strong> position?
+              </p>
+              <p className="text-sm text-gray-400">
+                An offer letter email with a 7-day response deadline will be sent to {offerTarget.email}.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setOfferTarget(null)} className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500">
+                  Cancel
+                </button>
+                <button onClick={handleSendOffer} disabled={actionLoading}
+                  className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-500 disabled:opacity-50">
+                  {actionLoading ? 'Sending...' : 'Send Offer'}
+                </button>
               </div>
             </div>
           </div>
