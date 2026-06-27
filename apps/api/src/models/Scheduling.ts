@@ -20,7 +20,7 @@ export interface IScheduledInterview extends Document {
   scheduledTime: Date;
   endTime: Date;
   timezone: string;
-  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'no-show';
+  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'no-show' | 'rejected' | 'offered';
   reminderSent: boolean;
   interviewType: 'live' | 'async' | 'take-home';
   role: string;
@@ -58,7 +58,7 @@ const scheduledInterviewSchema = new mongoose.Schema({
   timezone: { type: String, required: true },
   status: {
     type: String,
-    enum: ['scheduled', 'in-progress', 'completed', 'cancelled', 'no-show'],
+    enum: ['scheduled', 'in-progress', 'completed', 'cancelled', 'no-show', 'rejected', 'offered'],
     default: 'scheduled',
   },
   reminderSent: { type: Boolean, default: false },

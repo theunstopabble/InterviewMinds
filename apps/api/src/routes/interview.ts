@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { uploadMiddleware } from "../middleware/upload";
 import { logger } from "../lib/logger";
 import { notificationService } from "../lib/notifications";
+import { rejectInterview, sendOffer } from "../lib/scheduling";
 import { validateBody, EndInterviewSchema, UploadVideoSchema } from "../lib/validation";
 import { interviewsCompleted } from "../lib/metrics";
 
@@ -305,6 +306,63 @@ router.post(
       const msg = error instanceof Error ? error.message : "Unknown error";
       logger.error({ err: msg, userId, interviewId }, "video upload failed");
       res.status(500).json({ error: "Video upload failed", details: msg });
+    }
+  },
+);
+
+// ============================================================================
+// 5. REJECT CANDIDATE
+// ============================================================================
+router.post(
+  "/reject",
+  requireAuth,
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const { interviewId, reason } = req.body;
+      if (!interviewId) {
+        return res.status(400).json({ error: "interviewId is required" });
+      }
+
+      const result = await rejectInterview(interviewId, reason);
+      if (!result.success) {
+        return res.status(404).json({ error: result.error || "Failed to reject candidate" });
+      }
+
+      res.json({ success: true, message: "Candidate rejected" });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      logger.error({ err: msg }, "rejection failed");
+      res.status(500).json({ error: "Failed to reject candidate", details: msg });
+    }
+  },
+);
+
+// ============================================================================
+// 6. SEND OFFER
+// ============================================================================
+router.post(
+  "/offer",
+  requireAuth,
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const { interviewId, companyName, responseDeadline } = req.body;
+      if (!interviewId) {
+        return res.status(400).json({ error: "interviewId is required" });
+      }
+      if (!companyName || !responseDeadline) {
+        return res.status(400).json({ error: "companyName and responseDeadline are required" });
+      }
+
+      const result = await sendOffer(interviewId, { companyName, responseDeadline });
+      if (!result.success) {
+        return res.status(404).json({ error: result.error || "Failed to send offer" });
+      }
+
+      res.json({ success: true, message: "Offer sent to candidate" });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      logger.error({ err: msg }, "offer failed");
+      res.status(500).json({ error: "Failed to send offer", details: msg });
     }
   },
 );

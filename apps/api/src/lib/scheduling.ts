@@ -22,7 +22,7 @@ export interface ScheduledInterview {
   scheduledTime: Date;
   endTime: Date;
   timezone: string;
-  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'no-show';
+  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'no-show' | 'rejected' | 'offered';
   reminderSent: boolean;
   interviewType: 'live' | 'async' | 'take-home';
   role: string;
@@ -405,6 +405,74 @@ class SchedulingService {
       return false;
     }
   }
+
+  async rejectInterview(
+    interviewId: string,
+    reason?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const interview = await ScheduledInterviewModel.findOne({ id: interviewId });
+      if (!interview) return { success: false, error: 'Interview not found' };
+
+      interview.status = 'rejected';
+      if (reason) interview.notes = reason;
+      await interview.save();
+
+      notificationService.sendTemplatedNotification(
+        interview.candidateId,
+        'rejection-notification',
+        {
+          candidate_name: interview.candidateId,
+          role: interview.role,
+          email: interview.candidateId,
+        }
+      ).catch((err) => {
+        logger.error({ err, interviewId }, 'Failed to send rejection notification');
+      });
+
+      logger.info({ interviewId, candidateId: interview.candidateId }, 'Candidate rejected');
+      return { success: true };
+    } catch (error) {
+      logger.error({ err: error, interviewId }, 'Error rejecting candidate');
+      return { success: false, error: 'Failed to reject candidate' };
+    }
+  }
+
+  async sendOffer(
+    interviewId: string,
+    offerDetails: {
+      companyName: string;
+      responseDeadline: string;
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const interview = await ScheduledInterviewModel.findOne({ id: interviewId });
+      if (!interview) return { success: false, error: 'Interview not found' };
+
+      interview.status = 'offered';
+      await interview.save();
+
+      notificationService.sendTemplatedNotification(
+        interview.candidateId,
+        'offer-letter',
+        {
+          candidate_name: interview.candidateId,
+          role: interview.role,
+          company_name: offerDetails.companyName,
+          response_deadline: offerDetails.responseDeadline,
+          email: interview.candidateId,
+        }
+      ).catch((err) => {
+        logger.error({ err, interviewId }, 'Failed to send offer letter');
+      });
+
+      logger.info({ interviewId, candidateId: interview.candidateId }, 'Offer sent to candidate');
+      return { success: true };
+    } catch (error) {
+      logger.error({ err: error, interviewId }, 'Error sending offer');
+      return { success: false, error: 'Failed to send offer' };
+    }
+  }
 }
 
 export const schedulingService = new SchedulingService();
@@ -443,4 +511,12 @@ export async function rescheduleInterview(interviewId: string, newSlotId: string
 
 export async function cancelInterview(interviewId: string): Promise<any> {
   return schedulingService.cancelInterview(interviewId, "Cancelled by user");
+}
+
+export async function rejectInterview(interviewId: string, reason?: string): Promise<any> {
+  return schedulingService.rejectInterview(interviewId, reason);
+}
+
+export async function sendOffer(interviewId: string, offerDetails: { companyName: string; responseDeadline: string }): Promise<any> {
+  return schedulingService.sendOffer(interviewId, offerDetails);
 }
