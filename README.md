@@ -32,7 +32,7 @@ _Production-grade AI interview simulation platform with real-time ML proctoring,
 
 ## 👨‍💻 About the Developer
 
-**InterviewMinds** is designed, architected, and built by **[Gautam Kumar](https://gautam-kr.vercel.app)** — a Full-Stack Developer and AI Engineer specializing in production-grade web applications with machine learning integration.
+**InterviewMinds** is designed, architected, and built by **[Gautam Kumar](https://gautam-kr.vercel.app)** — a Full-Stack Developer specializing in production-grade web applications with machine learning integration.
 
 - 🌐 **Portfolio:** [gautam-kr.vercel.app](https://gautam-kr.vercel.app)
 - 💼 **LinkedIn:** [linkedin.com/in/gautamkr62](https://www.linkedin.com/in/gautamkr62)
