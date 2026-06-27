@@ -137,7 +137,7 @@ fc.assert(
 
 ### Bug Condition Tests
 
-These tests verify that specific bugs identified during the enterprise-production-readiness audit are fixed:
+These tests verify that specific bugs identified during the production-production-readiness audit are fixed:
 
 1. Video proctoring produces input-dependent results (not static)
 2. Multimodal voice analysis uses Groq LLM as primary (not keyword-only)

@@ -11,7 +11,7 @@ Answer Engines (like Perplexity, ChatGPT Search, and Google AI Overviews) aim to
 **Implementation Details:**
 
 - **JSON-LD Schema Injection:** We provide a highly structured `@type: "WebApplication"` schema inside `index.html` that explicitly answers _what_ the application does, _how_ it does it, and _who_ built it.
-- **Direct Value Proposition:** The description explicitly states: _"Enterprise-grade AI mock interview platform with real-time ML proctoring, CRDT collaborative coding, multimodal voice analysis..."_. This allows Answer Engines to pull exact feature sets when users ask, "What are the best AI mock interview platforms with ML proctoring?"
+- **Direct Value Proposition:** The description explicitly states: _"Production-grade AI Mock Interview Platform with real-time ML proctoring, CRDT collaborative coding, multimodal voice analysis..."_. This allows Answer Engines to pull exact feature sets when users ask, "What are the best AI mock interview platforms with ML proctoring?"
 
 ## 2. GEO (Generative Engine Optimization)
 
@@ -48,7 +48,8 @@ Google's E-E-A-T framework is crucial for ranking, particularly for tools dealin
 
 - **Authoritativeness & Expertise:** The `JSON-LD` schema explicitly defines the creator.
   - `@type: "Person", "name": "Gautam Kumar"`
-  - `"jobTitle": "Full-Stack Developer & AI Engineer"`
+  - `"jobTitle": "Full-Stack Developer | Solo-shipped 4 SaaS products | AI integration
+"`
 - **Trustworthiness:** We link external verification profiles directly in the `sameAs` array, including GitHub (`https://github.com/theunstopabble`), LinkedIn (`https://www.linkedin.com/in/gautamkr62`), and personal portfolio.
 - **Organization Linkage:** We cite `"EducationalOrganization": "Jagannath University, Jaipur"`, legally grounding the project's origins, building strong entity relationships in Google’s Knowledge Graph.
 
