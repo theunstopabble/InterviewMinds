@@ -36,33 +36,32 @@ router.get('/:reportId', requireAuth, async (req, res) => {
 // POST /api/reports/generate
 router.post('/generate', requireAuth, async (req, res) => {
   try {
-    const { candidateId, interviewIds } = req.body;
+    const { candidateId, candidateName, candidateEmail, interviews, detailedScores } = req.body;
+    if (!candidateId) {
+      res.status(400).json({ error: 'candidateId is required' });
+      return;
+    }
     const candidate: CandidateInfo = {
-      id: candidateId || 'default',
-      name: 'Candidate',
-      email: 'candidate@example.com',
+      id: candidateId,
+      name: candidateName || 'Candidate',
+      email: candidateEmail || `${candidateId}@example.com`,
     };
-    const interviews: InterviewSummary[] = (interviewIds || []).length > 0
-      ? (interviewIds as string[]).map((id, i) => ({
-          id,
-          date: new Date(),
-          duration: 60,
-          type: ['technical', 'behavioral', 'system-design'][i % 3],
-          role: ['Frontend Engineer', 'Backend Engineer', 'Full Stack'][i % 3],
-          interviewer: 'AI Interviewer',
-          score: Math.floor(Math.random() * 35) + 65,
-        }))
-      : [
-          { id: 'sample_1', date: new Date(), duration: 45, type: 'technical', role: 'Frontend Engineer', interviewer: 'AI Interviewer', score: 82 },
-          { id: 'sample_2', date: new Date(), duration: 30, type: 'behavioral', role: 'Behavioral', interviewer: 'AI Interviewer', score: 78 },
-        ];
-    const detailedScores = [
-      { category: 'Technical Skills', score: 80, maxScore: 100, feedback: 'Strong technical foundation with good problem-solving approach.' },
-      { category: 'Communication', score: 85, maxScore: 100, feedback: 'Clear and articulate responses. Explains concepts well.' },
-      { category: 'Problem Solving', score: 75, maxScore: 100, feedback: 'Systematic approach to problems. Could improve on optimization.' },
-      { category: 'System Design', score: 70, maxScore: 100, feedback: 'Understands core concepts but needs more depth in distributed systems.' },
-    ];
-    const report = await reportGeneratorService.createReport(candidate, interviews, detailedScores);
+    const interviewSummaries: InterviewSummary[] = (interviews || []).map((i: any) => ({
+      id: i.id || `int_${Date.now()}`,
+      date: i.date ? new Date(i.date) : new Date(),
+      duration: i.duration || 60,
+      type: i.type || 'technical',
+      role: i.role || 'General',
+      interviewer: i.interviewer || 'AI Interviewer',
+      score: i.score || 0,
+    }));
+    const scoreDetails = (detailedScores || []).map((s: any) => ({
+      category: s.category,
+      score: s.score,
+      maxScore: s.maxScore || 100,
+      feedback: s.feedback || '',
+    }));
+    const report = await reportGeneratorService.createReport(candidate, interviewSummaries, scoreDetails);
     res.json({ success: true, report });
   } catch (error) {
     logger.error({ err: error }, 'Error generating report:');

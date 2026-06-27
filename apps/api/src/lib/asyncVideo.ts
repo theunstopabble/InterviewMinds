@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { AsyncInterviewModel } from '../models/AsyncInterview';
 
 export type AsyncStatus = 'draft' | 'sent' | 'in-progress' | 'completed' | 'expired';
 
@@ -44,10 +45,48 @@ export interface AsyncInterview {
   updatedAt: Date;
 }
 
-class AsyncVideoService {
-  private interviews: Map<string, AsyncInterview> = new Map();
+function toInterview(doc: Record<string, any>): AsyncInterview {
+  return {
+    id: doc.id,
+    title: doc.title,
+    description: doc.description ?? '',
+    candidateId: doc.candidateId,
+    candidateEmail: doc.candidateEmail ?? '',
+    companyId: doc.companyId ?? '',
+    role: doc.role,
+    questions: (doc.questions ?? []).map((q: Record<string, any>) => ({
+      id: q.id,
+      questionText: q.questionText,
+      questionType: q.questionType,
+      timeLimit: q.timeLimit,
+      maxRetakes: q.maxRetakes,
+      videoUrl: q.videoUrl,
+      codeTemplate: q.codeTemplate,
+      options: q.options,
+      correctAnswer: q.correctAnswer,
+    })),
+    answers: (doc.answers ?? []).map((a: Record<string, any>) => ({
+      questionId: a.questionId,
+      answerText: a.answerText,
+      videoUrl: a.videoUrl,
+      codeAnswer: a.codeAnswer,
+      selectedOption: a.selectedOption,
+      recordedAt: a.recordedAt,
+      retakeCount: a.retakeCount,
+    })),
+    status: doc.status,
+    sentAt: doc.sentAt,
+    startedAt: doc.startedAt,
+    completedAt: doc.completedAt,
+    expiresAt: doc.expiresAt,
+    timeSpent: doc.timeSpent ?? 0,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  };
+}
 
-  createAsyncInterview(
+class AsyncVideoService {
+  async createAsyncInterview(
     title: string,
     description: string,
     candidateId: string,
@@ -55,8 +94,8 @@ class AsyncVideoService {
     companyId: string,
     role: string,
     questions: AsyncQuestion[]
-  ): AsyncInterview {
-    const interview: AsyncInterview = {
+  ): Promise<AsyncInterview> {
+    const doc = await AsyncInterviewModel.create({
       id: uuidv4(),
       title,
       description,
@@ -69,160 +108,156 @@ class AsyncVideoService {
       status: 'draft',
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       timeSpent: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    this.interviews.set(interview.id, interview);
-    return interview;
+    });
+    return toInterview(doc.toObject());
   }
 
-  sendToCandidate(interviewId: string): AsyncInterview | null {
-    const interview = this.interviews.get(interviewId);
-    if (!interview || interview.status !== 'draft') return null;
-
-    interview.status = 'sent';
-    interview.sentAt = new Date();
-    interview.updatedAt = new Date();
-
-    this.interviews.set(interviewId, interview);
-    return interview;
+  async sendToCandidate(interviewId: string): Promise<AsyncInterview | null> {
+    const doc = await AsyncInterviewModel.findOneAndUpdate(
+      { id: interviewId, status: 'draft' },
+      { $set: { status: 'sent', sentAt: new Date() } },
+      { new: true, lean: true }
+    );
+    return doc ? toInterview(doc) : null;
   }
 
-  startInterview(interviewId: string, candidateId: string): AsyncInterview | null {
-    const interview = this.interviews.get(interviewId);
-    if (!interview || interview.candidateId !== candidateId) return null;
-
-    if (interview.status === 'expired' || interview.status === 'completed') return null;
-
-    interview.status = 'in-progress';
-    interview.startedAt = new Date();
-    interview.updatedAt = new Date();
-
-    this.interviews.set(interviewId, interview);
-    return interview;
+  async startInterview(interviewId: string, candidateId: string): Promise<AsyncInterview | null> {
+    const doc = await AsyncInterviewModel.findOneAndUpdate(
+      {
+        id: interviewId,
+        candidateId,
+        status: { $nin: ['expired', 'completed'] },
+      },
+      { $set: { status: 'in-progress', startedAt: new Date() } },
+      { new: true, lean: true }
+    );
+    return doc ? toInterview(doc) : null;
   }
 
-  saveAnswer(
+  async saveAnswer(
     interviewId: string,
     questionId: string,
     answer: Omit<AsyncAnswer, 'questionId' | 'recordedAt'>
-  ): AsyncInterview | null {
-    const interview = this.interviews.get(interviewId);
+  ): Promise<AsyncInterview | null> {
+    const interview = await AsyncInterviewModel.findOne({ id: interviewId });
     if (!interview || interview.status !== 'in-progress') return null;
 
-    const question = interview.questions.find(q => q.id === questionId);
+    const question = interview.questions.find((q: any) => q.id === questionId);
     if (!question) return null;
 
-    const existingAnswerIndex = interview.answers.findIndex(a => a.questionId === questionId);
-    const newAnswer: AsyncAnswer = {
+    const existingAnswerIndex = interview.answers.findIndex((a: any) => a.questionId === questionId);
+    const newAnswer = {
       questionId,
       ...answer,
       recordedAt: new Date(),
     };
 
     if (existingAnswerIndex !== -1) {
-      interview.answers[existingAnswerIndex] = newAnswer;
+      interview.answers[existingAnswerIndex] = newAnswer as any;
     } else {
-      interview.answers.push(newAnswer);
+      interview.answers.push(newAnswer as any);
     }
 
-    interview.updatedAt = new Date();
-    this.interviews.set(interviewId, interview);
-    return interview;
+    await interview.save();
+    return toInterview(interview.toObject());
   }
 
-  completeInterview(interviewId: string, candidateId: string): AsyncInterview | null {
-    const interview = this.interviews.get(interviewId);
-    if (!interview || interview.candidateId !== candidateId) return null;
+  async completeInterview(interviewId: string, candidateId: string): Promise<AsyncInterview | null> {
+    const interview = await AsyncInterviewModel.findOne({ id: interviewId, candidateId });
+    if (!interview) return null;
 
+    let timeSpent = 0;
     if (interview.startedAt) {
-      interview.timeSpent = (new Date().getTime() - interview.startedAt.getTime()) / 1000;
+      timeSpent = (Date.now() - new Date(interview.startedAt).getTime()) / 1000;
     }
 
     interview.status = 'completed';
     interview.completedAt = new Date();
-    interview.updatedAt = new Date();
+    interview.timeSpent = timeSpent;
 
-    this.interviews.set(interviewId, interview);
-    return interview;
+    await interview.save();
+    return toInterview(interview.toObject());
   }
 
-  getInterview(id: string): AsyncInterview | null {
-    return this.interviews.get(id) || null;
+  async getInterview(id: string): Promise<AsyncInterview | null> {
+    const doc = await AsyncInterviewModel.findOne({ id }).lean();
+    return doc ? toInterview(doc) : null;
   }
 
-  getCandidateInterviews(candidateId: string): AsyncInterview[] {
-    return Array.from(this.interviews.values())
-      .filter(i => i.candidateId === candidateId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  async getCandidateInterviews(candidateId: string): Promise<AsyncInterview[]> {
+    const docs = await AsyncInterviewModel.find({ candidateId })
+      .sort({ createdAt: -1 })
+      .lean();
+    return docs.map(toInterview);
   }
 
-  getCompanyInterviews(companyId: string): AsyncInterview[] {
-    return Array.from(this.interviews.values())
-      .filter(i => i.companyId === companyId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  async getCompanyInterviews(companyId: string): Promise<AsyncInterview[]> {
+    const docs = await AsyncInterviewModel.find({ companyId })
+      .sort({ createdAt: -1 })
+      .lean();
+    return docs.map(toInterview);
   }
 
-  getPendingInterviews(candidateId: string): AsyncInterview[] {
-    return Array.from(this.interviews.values())
-      .filter(i => i.candidateId === candidateId && (i.status === 'sent' || i.status === 'in-progress'))
-      .sort((a, b) => new Date(b.expiresAt).getTime() - new Date(a.expiresAt).getTime());
+  async getPendingInterviews(candidateId: string): Promise<AsyncInterview[]> {
+    const docs = await AsyncInterviewModel.find({
+      candidateId,
+      status: { $in: ['sent', 'in-progress'] },
+    })
+      .sort({ expiresAt: -1 })
+      .lean();
+    return docs.map(toInterview);
   }
 
-  getCompletedInterviews(candidateId: string): AsyncInterview[] {
-    return Array.from(this.interviews.values())
-      .filter(i => i.candidateId === candidateId && i.status === 'completed');
+  async getCompletedInterviews(candidateId: string): Promise<AsyncInterview[]> {
+    const docs = await AsyncInterviewModel.find({
+      candidateId,
+      status: 'completed',
+    }).lean();
+    return docs.map(toInterview);
   }
 
-  checkExpiredInterviews(): number {
-    let expired = 0;
-    const now = new Date();
-
-    for (const [id, interview] of this.interviews.entries()) {
-      if (now >= interview.expiresAt && (interview.status === 'sent' || interview.status === 'in-progress')) {
-        interview.status = 'expired';
-        interview.updatedAt = new Date();
-        this.interviews.set(id, interview);
-        expired++;
-      }
-    }
-
-    return expired;
+  async checkExpiredInterviews(): Promise<number> {
+    const result = await AsyncInterviewModel.updateMany(
+      {
+        expiresAt: { $lte: new Date() },
+        status: { $in: ['sent', 'in-progress'] },
+      },
+      { $set: { status: 'expired' } }
+    );
+    return result.modifiedCount;
   }
 
-  getProgress(interviewId: string): { answered: number; total: number; percentage: number } {
-    const interview = this.interviews.get(interviewId);
-    if (!interview) return { answered: 0, total: 0, percentage: 0 };
+  async getProgress(interviewId: string): Promise<{ answered: number; total: number; percentage: number }> {
+    const doc = await AsyncInterviewModel.findOne({ id: interviewId }).lean();
+    if (!doc) return { answered: 0, total: 0, percentage: 0 };
 
-    const answered = interview.answers.length;
-    const total = interview.questions.length;
+    const answered = doc.answers.length;
+    const total = doc.questions.length;
     const percentage = total > 0 ? Math.round((answered / total) * 100) : 0;
 
     return { answered, total, percentage };
   }
 
-  canRetake(interviewId: string, questionId: string, candidateId: string): boolean {
-    const interview = this.interviews.get(interviewId);
-    if (!interview || interview.candidateId !== candidateId) return false;
+  async canRetake(interviewId: string, questionId: string, candidateId: string): Promise<boolean> {
+    const doc = await AsyncInterviewModel.findOne({ id: interviewId, candidateId }).lean();
+    if (!doc) return false;
 
-    const question = interview.questions.find(q => q.id === questionId);
+    const question = doc.questions.find((q: any) => q.id === questionId);
     if (!question) return false;
 
-    const existingAnswer = interview.answers.find(a => a.questionId === questionId);
+    const existingAnswer = doc.answers.find((a: any) => a.questionId === questionId);
     if (!existingAnswer) return true;
 
     return existingAnswer.retakeCount < question.maxRetakes;
   }
 
-  getTimeRemaining(interviewId: string): number {
-    const interview = this.interviews.get(interviewId);
-    if (!interview) return 0;
+  async getTimeRemaining(interviewId: string): Promise<number> {
+    const doc = await AsyncInterviewModel.findOne({ id: interviewId }).lean();
+    if (!doc) return 0;
 
-    if (interview.status === 'completed' || interview.status === 'expired') return 0;
+    if (doc.status === 'completed' || doc.status === 'expired') return 0;
 
-    const now = new Date();
-    const remaining = interview.expiresAt.getTime() - now.getTime();
+    const remaining = new Date(doc.expiresAt).getTime() - Date.now();
     return Math.max(0, remaining);
   }
 }

@@ -283,7 +283,7 @@ export class ResumeVerificationService {
     // This is a mock implementation
     // In production, integrate with actual APIs
 
-    logger.info({ entity: entity.name, type: entity.type }, "Verifying entity externally");
+    logger.warn({ entity: entity.name, type: entity.type }, "External verification not configured—using mock");
 
     // Simulate API call with circuit breaker
     try {

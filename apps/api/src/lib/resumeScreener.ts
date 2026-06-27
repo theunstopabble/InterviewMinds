@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import Groq from 'groq-sdk';
+import { ScreenerResultModel } from '../models/ScreenerResult';
+import { ChatbotConversationModel } from '../models/ChatbotConversation';
 
 export interface ResumeScore {
   overallScore: number;
@@ -58,10 +60,6 @@ function getGroqClient(): Groq {
 }
 
 class ResumeScreenerService {
-  private screenerResults: Map<string, ScreenerResult> = new Map();
-  private conversations: Map<string, ChatbotConversation> = new Map();
-
-  /* fallback keyword map when Groq is unavailable */
   private roleKeywords: Record<string, string[]> = {
     'Software Engineer': ['javascript', 'python', 'java', 'react', 'node', 'sql', 'api', 'agile', 'git', 'debugging'],
     'Frontend Developer': ['react', 'vue', 'angular', 'css', 'html', 'javascript', 'typescript', 'responsive', 'ui', 'ux'],
@@ -83,7 +81,6 @@ class ResumeScreenerService {
   ): Promise<ScreenerResult> {
     const text = resumeText.toLowerCase();
 
-    /* Try Groq first for real AI analysis */
     try {
       const groq = getGroqClient();
       const prompt = `You are an expert technical recruiter. Evaluate this resume for the role of ${targetRole}.
@@ -145,19 +142,18 @@ Return ONLY a JSON object with this exact structure:
         screenedAt: new Date(),
       };
 
-      this.screenerResults.set(result.id, result);
+      await this.saveScreenerResult(result);
       return result;
-    } catch (err: any) {
-      /* Fallback to keyword-based scoring if Groq fails */
+    } catch {
       return this.fallbackScreenResume(resumeId, candidateId, targetRole, text);
     }
   }
 
   /* --------------------------------------------------------------- */
-  /*  Fallback keyword-based screening                                  */
+  /*  Keyword-based fallback screening                                  */
   /* --------------------------------------------------------------- */
 
-  private fallbackScreenResume(resumeId: string, candidateId: string, targetRole: string, text: string): ScreenerResult {
+  private async fallbackScreenResume(resumeId: string, candidateId: string, targetRole: string, text: string): Promise<ScreenerResult> {
     const keywords = this.roleKeywords[targetRole] || this.roleKeywords['Software Engineer'];
     const matchedKeywords = keywords.filter(kw => text.includes(kw.toLowerCase()));
     const missingKeywords = keywords.filter(kw => !text.includes(kw.toLowerCase()));
@@ -202,8 +198,55 @@ Return ONLY a JSON object with this exact structure:
       screenedAt: new Date(),
     };
 
-    this.screenerResults.set(result.id, result);
+    await this.saveScreenerResult(result);
     return result;
+  }
+
+  private async saveScreenerResult(result: ScreenerResult): Promise<void> {
+    await ScreenerResultModel.create({
+      id: result.id,
+      candidateId: result.candidateId,
+      resumeId: result.resumeId,
+      jobTitle: result.targetRole,
+      company: '',
+      overallScore: result.score.overallScore,
+      skillMatches: [
+        ...result.score.matchedKeywords.map(kw => ({
+          name: kw, matched: true, yearsRequired: 0, yearsActual: 0, source: 'resume' as const,
+        })),
+        ...result.score.missingKeywords.map(kw => ({
+          name: kw, matched: false, yearsRequired: 0, yearsActual: 0, source: 'inferred' as const,
+        })),
+      ],
+      experience: { years: 0, relevance: Math.round(result.score.breakdown.experience) },
+      education: { level: '', field: '', matched: result.score.breakdown.education >= 50 },
+      cultureFit: result.score.fitScore,
+      recommendation: this.mapRecommendation(result.score.recommendation),
+      redFlags: result.concerns,
+      notes: result.aiSummary,
+      processedAt: result.screenedAt,
+    });
+  }
+
+  private mapRecommendation(r: string): 'strong_reject' | 'reject' | 'maybe' | 'hire' | 'strong_hire' {
+    switch (r) {
+      case 'strong_fit': return 'strong_hire';
+      case 'good_fit': return 'hire';
+      case 'partial_fit': return 'maybe';
+      case 'poor_fit': return 'reject';
+      default: return 'maybe';
+    }
+  }
+
+  private reverseMapRecommendation(r: string): 'strong_fit' | 'good_fit' | 'partial_fit' | 'poor_fit' {
+    switch (r) {
+      case 'strong_hire': return 'strong_fit';
+      case 'hire': return 'good_fit';
+      case 'maybe': return 'partial_fit';
+      case 'reject':
+      case 'strong_reject': return 'poor_fit';
+      default: return 'partial_fit';
+    }
   }
 
   private calculateEducationScore(text: string): number {
@@ -274,23 +317,71 @@ Return ONLY a JSON object with this exact structure:
     }
   }
 
-  getScreeningResult(resultId: string): ScreenerResult | null {
-    return this.screenerResults.get(resultId) || null;
+  async getScreenerResult(id: string): Promise<ScreenerResult | null> {
+    const doc = await ScreenerResultModel.findOne({ id }).lean();
+    if (!doc) return null;
+    return this.toScreenerResult(doc);
   }
 
-  getResultsByCandidate(candidateId: string): ScreenerResult[] {
-    return Array.from(this.screenerResults.values())
-      .filter(r => r.candidateId === candidateId)
-      .sort((a, b) => b.score.overallScore - a.score.overallScore);
+  async getScreenerResultsByCandidate(candidateId: string): Promise<ScreenerResult[]> {
+    const docs = await ScreenerResultModel.find({ candidateId }).sort({ overallScore: -1 }).lean();
+    return docs.map(d => this.toScreenerResult(d));
+  }
+
+  private toScreenerResult(doc: Record<string, any>): ScreenerResult {
+    const matchedKeywords: string[] = (doc.skillMatches || [])
+      .filter((s: any) => s.matched)
+      .map((s: any) => s.name);
+    const missingKeywords: string[] = (doc.skillMatches || [])
+      .filter((s: any) => !s.matched)
+      .map((s: any) => s.name);
+
+    const overallScore = doc.overallScore || 0;
+    const fitScore = doc.cultureFit || 0;
+    const matchedCount = matchedKeywords.length;
+    const totalSkills = (doc.skillMatches || []).length;
+    const skillsScore = totalSkills > 0 ? Math.round((matchedCount / totalSkills) * 100) : 50;
+
+    const recommendation = this.reverseMapRecommendation(doc.recommendation || 'maybe');
+
+    const score: ResumeScore = {
+      overallScore,
+      breakdown: {
+        education: doc.education?.matched ? 70 : 40,
+        experience: doc.experience?.relevance || 50,
+        skills: skillsScore,
+        certifications: 50,
+        achievements: 50,
+      },
+      matchedKeywords,
+      missingKeywords,
+      recommendation,
+      fitScore,
+    };
+
+    return {
+      id: doc.id,
+      resumeId: doc.resumeId,
+      candidateId: doc.candidateId,
+      targetRole: doc.jobTitle || '',
+      score,
+      screeningStatus: this.determineScreeningStatus(score),
+      aiSummary: doc.notes || `AI screening: ${overallScore}% match`,
+      strengths: overallScore >= 70 ? ['Strong match'] : [],
+      concerns: doc.redFlags || [],
+      recommendation: this.generateRecommendation(recommendation),
+      screenedAt: doc.processedAt || doc.createdAt || new Date(),
+    };
   }
 
   /* --------------------------------------------------------------- */
   /*  AI-POWERED CHATBOT (Groq-driven conversation)                     */
   /* --------------------------------------------------------------- */
 
-  startChatbotConversation(candidateId: string): ChatbotConversation {
+  async startChatbotConversation(candidateId: string, sessionId: string): Promise<ChatbotConversation> {
+    const id = uuidv4();
     const conversation: ChatbotConversation = {
-      id: uuidv4(),
+      id,
       candidateId,
       messages: [
         {
@@ -305,13 +396,73 @@ Return ONLY a JSON object with this exact structure:
       stage: 'initial',
     };
 
-    this.conversations.set(conversation.id, conversation);
+    await ChatbotConversationModel.create({
+      id,
+      candidateId,
+      sessionId,
+      messages: conversation.messages.map(m => ({
+        id: m.id,
+        role: m.sender === 'bot' ? 'assistant' as const : 'candidate' as const,
+        content: m.content,
+        timestamp: m.timestamp,
+        metadata: new Map<string, any>(),
+      })),
+      status: conversation.status,
+      startedAt: conversation.startedAt,
+      endedAt: null,
+    });
+
     return conversation;
   }
 
+  async sendChatbotMessage(
+    candidateId: string,
+    sessionId: string,
+    role: 'bot' | 'candidate',
+    content: string
+  ): Promise<ChatbotConversation | null> {
+    const doc = await ChatbotConversationModel.findOne({ candidateId, sessionId });
+    if (!doc || doc.status !== 'active') return null;
+
+    const message: ChatbotMessage = {
+      id: uuidv4(),
+      sender: role,
+      content,
+      timestamp: new Date(),
+    };
+
+    doc.messages.push({
+      id: message.id,
+      role: role === 'bot' ? 'assistant' : 'candidate',
+      content: message.content,
+      timestamp: message.timestamp,
+      metadata: new Map<string, any>(),
+    });
+    await doc.save();
+
+    return this.toConversation(doc.toObject());
+  }
+
+  async endChatbotConversation(candidateId: string, sessionId: string): Promise<ChatbotConversation | null> {
+    const doc = await ChatbotConversationModel.findOne({ candidateId, sessionId });
+    if (!doc) return null;
+
+    doc.status = 'completed';
+    doc.endedAt = new Date();
+    await doc.save();
+
+    return this.toConversation(doc.toObject());
+  }
+
+  async getChatbotConversation(candidateId: string, sessionId: string): Promise<ChatbotConversation | null> {
+    const doc = await ChatbotConversationModel.findOne({ candidateId, sessionId }).lean();
+    if (!doc) return null;
+    return this.toConversation(doc);
+  }
+
   async respondToChatbot(conversationId: string, response: string): Promise<ChatbotMessage | null> {
-    const conversation = this.conversations.get(conversationId);
-    if (!conversation || conversation.status !== 'active') return null;
+    const doc = await ChatbotConversationModel.findOne({ id: conversationId });
+    if (!doc || doc.status !== 'active') return null;
 
     const userMessage: ChatbotMessage = {
       id: uuidv4(),
@@ -319,11 +470,18 @@ Return ONLY a JSON object with this exact structure:
       content: response,
       timestamp: new Date(),
     };
-    conversation.messages.push(userMessage);
+
+    doc.messages.push({
+      id: userMessage.id,
+      role: 'candidate',
+      content: userMessage.content,
+      timestamp: userMessage.timestamp,
+      metadata: new Map<string, any>(),
+    });
 
     try {
       const groq = getGroqClient();
-      const history = conversation.messages.map(m => `${m.sender}: ${m.content}`).join('\n');
+      const history = doc.messages.map(m => `${m.role}: ${m.content}`).join('\n');
       const prompt = `You are a friendly AI pre-screening recruiter for a tech company. Continue the conversation naturally. Ask ONE concise follow-up question based on the candidate's last answer. If you have enough info (role, experience, key skills), say "Thank you! We'll be in touch." and end the conversation.
 
 Conversation so far:
@@ -350,81 +508,66 @@ Return ONLY JSON: {"content": "...", "options": ["..."] || null, "endConversatio
         options: parsed.options || undefined,
       };
 
-      conversation.messages.push(botResponse);
+      doc.messages.push({
+        id: botResponse.id,
+        role: 'assistant',
+        content: botResponse.content,
+        timestamp: botResponse.timestamp,
+        metadata: botResponse.options ? new Map<string, any>([['options', botResponse.options]]) : new Map<string, any>(),
+      });
 
       if (parsed.endConversation) {
-        conversation.status = 'completed';
-        conversation.completedAt = new Date();
-        const msgCount = conversation.messages.length;
-        const botMsgs = conversation.messages.filter(m => m.sender === 'bot').length;
-        const userMsgs = conversation.messages.filter(m => m.sender === 'candidate').length;
-        const avgLen = userMsgs > 0
-          ? conversation.messages.filter(m => m.sender === 'candidate').reduce((sum, m) => sum + m.content.length, 0) / userMsgs
-          : 0;
-        const engagement = Math.min(100, (msgCount / 10) * 40 + (avgLen / 100) * 30 + (botMsgs / msgCount || 0) * 30);
-        conversation.score = Math.round(Math.min(100, Math.max(0, engagement)));
+        doc.status = 'completed';
+        doc.endedAt = new Date();
       }
 
-      this.conversations.set(conversationId, conversation);
+      await doc.save();
       return botResponse;
     } catch {
-      /* Fallback to scripted response on Groq failure */
-      const botResponse = this.generateFallbackBotResponse(conversation, response);
-      conversation.messages.push(botResponse);
-      this.conversations.set(conversationId, conversation);
+      const botResponse: ChatbotMessage = {
+        id: uuidv4(),
+        sender: 'bot',
+        content: "Thank you for your response. Our team will review your information and get back to you.",
+        timestamp: new Date(),
+      };
+
+      doc.messages.push({
+        id: botResponse.id,
+        role: 'assistant',
+        content: botResponse.content,
+        timestamp: botResponse.timestamp,
+        metadata: new Map<string, any>(),
+      });
+
+      await doc.save();
       return botResponse;
     }
   }
 
-  private generateFallbackBotResponse(conversation: ChatbotConversation, lastResponse: string): ChatbotMessage {
-    const stage = conversation.stage || 'initial';
-    let content = '';
-    let options: string[] | undefined;
-
-    switch (stage) {
-      case 'initial':
-        content = 'Great! Now, tell me about your work experience. How many years have you been working in your field?';
-        options = ['0-2 years', '3-5 years', '5-10 years', '10+ years'];
-        conversation.stage = 'background';
-        break;
-      case 'background':
-        content = 'What technologies or tools are you most proficient in?';
-        options = ['Frontend', 'Backend', 'Full Stack', 'DevOps', 'Data/ML'];
-        conversation.stage = 'technical';
-        break;
-      case 'technical':
-        content = 'Can you describe a challenging project you worked on?';
-        options = ['Yes, describe it', 'Prefer to discuss in interview', 'No challenging projects'];
-        conversation.stage = 'cultural';
-        break;
-      case 'cultural':
-        content = 'What type of work environment do you prefer?';
-        options = ['Remote', 'Hybrid', 'On-site', 'Flexible'];
-        conversation.stage = 'closing';
-        break;
-      case 'closing':
-        content = 'Thank you for completing the pre-screening! Based on your responses, we\'ll recommend next steps.';
-        options = ['View Results', 'Schedule Interview'];
-        conversation.stage = 'closing';
-        conversation.status = 'completed';
-        conversation.completedAt = new Date();
-        conversation.score = 75;
-        break;
-      default:
-        content = 'Thank you for your responses. Our team will review and get back to you.';
-    }
-
-    return { id: uuidv4(), sender: 'bot', content, timestamp: new Date(), options };
-  }
-
-  getConversation(conversationId: string): ChatbotConversation | null {
-    return this.conversations.get(conversationId) || null;
-  }
-
-  getConversationsByCandidate(candidateId: string): ChatbotConversation[] {
-    return Array.from(this.conversations.values())
-      .filter(c => c.candidateId === candidateId)
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  private toConversation(doc: Record<string, any>): ChatbotConversation {
+    const messages = (doc.messages || []).map((m: any) => {
+      const meta = m.metadata && typeof m.metadata.get === 'function'
+        ? Object.fromEntries(m.metadata)
+        : (m.metadata || {});
+      return {
+        id: m.id,
+        sender: m.role === 'assistant' ? 'bot' as const : 'candidate' as const,
+        content: m.content,
+        timestamp: m.timestamp,
+        options: meta.options as string[] | undefined,
+        isCorrect: meta.isCorrect as boolean | undefined,
+        evaluation: meta.evaluation as string | undefined,
+      };
+    });
+    return {
+      id: doc.id,
+      candidateId: doc.candidateId,
+      messages,
+      status: doc.status as 'active' | 'completed' | 'abandoned',
+      startedAt: doc.startedAt || new Date(),
+      completedAt: doc.endedAt || undefined,
+      stage: 'initial',
+    };
   }
 }
 

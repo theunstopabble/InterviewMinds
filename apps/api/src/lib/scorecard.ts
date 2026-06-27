@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import { ScorecardModel } from '../models/Scorecard';
+import { ScorecardTemplateModel } from '../models/ScorecardTemplate';
 
 export type ScorecardStatus = 'draft' | 'submitted' | 'reviewed';
 
@@ -58,139 +60,124 @@ export interface TimestampNote {
 }
 
 class ScorecardService {
-  private templates: Map<string, ScorecardTemplate> = new Map();
-  private scorecards: Map<string, Scorecard[]> = new Map();
-
-  constructor() {
-    this.initializeDefaultTemplates();
+  async getTemplates(role?: string): Promise<ScorecardTemplate[]> {
+    const filter: Record<string, unknown> = {};
+    if (role) filter.role = { $regex: role, $options: 'i' };
+    const docs = await ScorecardTemplateModel.find(filter).lean();
+    return docs.map(d => ({
+      id: d.id,
+      name: d.name,
+      description: d.description || '',
+      role: (d as any).role || 'General',
+      criteria: d.criteria.map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        weight: c.weight,
+        maxScore: c.maxScore,
+      })),
+      createdBy: d.createdBy,
+      isDefault: false,
+      createdAt: d.createdAt,
+    }));
   }
 
-  private initializeDefaultTemplates() {
-    const defaultTemplates: ScorecardTemplate[] = [
-      {
-        id: 'technical-default',
-        name: 'Technical Interview',
-        description: 'Standard technical evaluation for software engineers',
-        role: 'Software Engineer',
-        isDefault: true,
-        createdBy: 'system',
-        createdAt: new Date(),
-        criteria: [
-          { id: 'problem-solving', name: 'Problem Solving', description: 'Ability to approach and solve problems', weight: 1, maxScore: 5 },
-          { id: 'coding-skills', name: 'Coding Skills', description: 'Code quality, syntax, efficiency', weight: 1, maxScore: 5 },
-          { id: 'data-structures', name: 'Data Structures', description: 'Knowledge of DS fundamentals', weight: 0.8, maxScore: 5 },
-          { id: 'algorithms', name: 'Algorithms', description: 'Algorithm design and analysis', weight: 0.8, maxScore: 5 },
-          { id: 'communication', name: 'Communication', description: 'Explaining thought process clearly', weight: 0.6, maxScore: 5 },
-          { id: 'time-complexity', name: 'Time & Space Complexity', description: 'Understanding of optimization', weight: 0.8, maxScore: 5 },
-        ],
-      },
-      {
-        id: 'behavioral-default',
-        name: 'Behavioral Interview',
-        description: 'Evaluate cultural fit and soft skills',
-        role: 'General',
-        isDefault: true,
-        createdBy: 'system',
-        createdAt: new Date(),
-        criteria: [
-          { id: 'leadership', name: 'Leadership', description: 'Past leadership experiences', weight: 1, maxScore: 5 },
-          { id: 'teamwork', name: 'Teamwork', description: 'Collaboration abilities', weight: 1, maxScore: 5 },
-          { id: 'conflict-resolution', name: 'Conflict Resolution', description: 'Handling disagreements', weight: 0.8, maxScore: 5 },
-          { id: 'adaptability', name: 'Adaptability', description: 'Handling change', weight: 0.8, maxScore: 5 },
-          { id: 'motivation', name: 'Motivation', description: 'Career goals and drive', weight: 0.6, maxScore: 5 },
-          { id: 'culture-fit', name: 'Culture Fit', description: 'Alignment with company values', weight: 1, maxScore: 5 },
-        ],
-      },
-      {
-        id: 'system-design-default',
-        name: 'System Design Interview',
-        description: 'Architecture and design evaluation',
-        role: 'Senior Engineer',
-        isDefault: true,
-        createdBy: 'system',
-        createdAt: new Date(),
-        criteria: [
-          { id: 'requirements', name: 'Requirements Gathering', description: 'Clarifying scope and constraints', weight: 1, maxScore: 5 },
-          { id: 'scalability', name: 'Scalability', description: 'Handling growth', weight: 1, maxScore: 5 },
-          { id: 'data-model', name: 'Data Modeling', description: 'Schema design', weight: 0.8, maxScore: 5 },
-          { id: 'api-design', name: 'API Design', description: 'RESTful design', weight: 0.8, maxScore: 5 },
-          { id: 'tradeoffs', name: 'Trade-offs', description: 'Understanding pros/cons', weight: 1, maxScore: 5 },
-          { id: 'communication', name: 'Communication', description: 'Clear explanation', weight: 0.6, maxScore: 5 },
-        ],
-      },
-      {
-        id: 'frontend-default',
-        name: 'Frontend Interview',
-        description: 'Frontend specific evaluation',
-        role: 'Frontend Developer',
-        isDefault: true,
-        createdBy: 'system',
-        createdAt: new Date(),
-        criteria: [
-          { id: 'html-css', name: 'HTML/CSS', description: 'Markup and styling knowledge', weight: 1, maxScore: 5 },
-          { id: 'javascript', name: 'JavaScript', description: 'Core JS fundamentals', weight: 1, maxScore: 5 },
-          { id: 'frameworks', name: 'Frameworks', description: 'React/Vue/Angular knowledge', weight: 1, maxScore: 5 },
-          { id: 'performance', name: 'Performance', description: 'Optimization techniques', weight: 0.8, maxScore: 5 },
-          { id: 'accessibility', name: 'Accessibility', description: 'A11y best practices', weight: 0.6, maxScore: 5 },
-          { id: 'responsive', name: 'Responsive Design', description: 'Mobile-friendly layouts', weight: 0.6, maxScore: 5 },
-        ],
-      },
-    ];
-
-    defaultTemplates.forEach(t => this.templates.set(t.id, t));
+  async getTemplate(id: string): Promise<ScorecardTemplate | null> {
+    const doc = await ScorecardTemplateModel.findOne({ id }).lean();
+    if (!doc) return null;
+    return {
+      id: doc.id,
+      name: doc.name,
+      description: doc.description || '',
+      role: (doc as any).role || 'General',
+      criteria: doc.criteria.map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        weight: c.weight,
+        maxScore: c.maxScore,
+      })),
+      createdBy: doc.createdBy,
+      isDefault: false,
+      createdAt: doc.createdAt,
+    };
   }
 
-  getTemplates(role?: string): ScorecardTemplate[] {
-    const templates = Array.from(this.templates.values());
-    if (role) {
-      return templates.filter(t => t.role.toLowerCase().includes(role.toLowerCase()));
-    }
-    return templates;
-  }
-
-  getTemplate(id: string): ScorecardTemplate | null {
-    return this.templates.get(id) || null;
-  }
-
-  createTemplate(data: Partial<ScorecardTemplate> & { name: string; criteria: ScoreCriterion[]; createdBy: string }): ScorecardTemplate {
-    const template: ScorecardTemplate = {
+  async createTemplate(data: Partial<ScorecardTemplate> & { name: string; criteria: ScoreCriterion[]; createdBy: string }): Promise<ScorecardTemplate> {
+    const doc = await ScorecardTemplateModel.create({
       id: uuidv4(),
       name: data.name,
       description: data.description || '',
-      role: data.role || 'General',
-      criteria: data.criteria,
+      criteria: data.criteria.map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        maxScore: c.maxScore,
+        weight: c.weight,
+      })),
       createdBy: data.createdBy,
+    });
+    return {
+      id: doc.id,
+      name: doc.name,
+      description: doc.description || '',
+      role: (doc as any).role || 'General',
+      criteria: doc.criteria.map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        weight: c.weight,
+        maxScore: c.maxScore,
+      })),
+      createdBy: doc.createdBy,
       isDefault: false,
-      createdAt: new Date(),
+      createdAt: doc.createdAt,
     };
-    this.templates.set(template.id, template);
-    return template;
   }
 
-  createScorecard(
+  async createScorecard(
     interviewId: string,
     candidateId: string,
     interviewerId: string,
     templateId: string
-  ): Scorecard | null {
-    const template = this.templates.get(templateId);
+  ): Promise<Scorecard | null> {
+    const template = await ScorecardTemplateModel.findOne({ id: templateId }).lean();
     if (!template) return null;
 
-    const scorecard: Scorecard = {
+    const maxPossibleScore = template.criteria.reduce((sum, c) => sum + c.maxScore * c.weight, 0);
+    const doc = await ScorecardModel.create({
       id: uuidv4(),
+      interviewId,
+      candidateId,
+      interviewerId,
+      templateId,
+      scores: template.criteria.map(c => ({
+        criterionId: c.id,
+        criterionName: c.name,
+        score: 0,
+        maxScore: c.maxScore,
+      })),
+      totalScore: 0,
+      maxTotalScore: maxPossibleScore,
+      percentageScore: 0,
+      status: 'draft',
+    });
+
+    return {
+      id: doc.id,
       interviewId,
       candidateId,
       interviewerId,
       templateId,
       templateName: template.name,
       status: 'draft',
-      scores: template.criteria.map(c => ({
-        criterionId: c.id,
-        score: 0,
-        comments: '',
+      scores: doc.scores.map(s => ({
+        criterionId: s.criterionId,
+        score: s.score,
+        comments: s.comment || '',
       })),
       totalScore: 0,
-      maxPossibleScore: template.criteria.reduce((sum, c) => sum + c.maxScore * c.weight, 0),
+      maxPossibleScore,
       percentage: 0,
       overallRating: 'average',
       strengths: [],
@@ -198,101 +185,141 @@ class ScorecardService {
       recommendation: 'neutral',
       notes: '',
       timestampNotes: [],
-      createdAt: new Date(),
+      createdAt: doc.createdAt,
     };
-
-    const existing = this.scorecards.get(interviewId) || [];
-    existing.push(scorecard);
-    this.scorecards.set(interviewId, existing);
-
-    return scorecard;
   }
 
-  getScorecard(id: string): Scorecard | null {
-    for (const scorecards of this.scorecards.values()) {
-      const found = scorecards.find(s => s.id === id);
-      if (found) return found;
+  async getScorecard(id: string): Promise<Scorecard | null> {
+    const doc = await ScorecardModel.findOne({ id }).lean();
+    if (!doc) return null;
+    return this.docToScorecard(doc);
+  }
+
+  async updateScorecard(id: string, updates: Partial<Scorecard>): Promise<Scorecard | null> {
+    const setFields: Record<string, unknown> = {};
+    if (updates.status) setFields.status = updates.status;
+    if (updates.notes !== undefined) setFields.notes = updates.notes;
+    if (updates.submittedAt) setFields.submittedAt = updates.submittedAt;
+    if (updates.scores) {
+      setFields.scores = updates.scores.map(s => ({
+        criterionId: s.criterionId,
+        criterionName: '',
+        score: s.score,
+        maxScore: 5,
+        comment: s.comments,
+      }));
     }
-    return null;
+    const doc = await ScorecardModel.findOneAndUpdate(
+      { id },
+      { $set: setFields },
+      { new: true }
+    ).lean();
+    if (!doc) return null;
+    return this.docToScorecard(doc);
   }
 
-  updateScorecard(id: string, updates: Partial<Scorecard>): Scorecard | null {
-    for (const [interviewId, scorecards] of this.scorecards.entries()) {
-      const index = scorecards.findIndex(s => s.id === id);
-      if (index !== -1) {
-        const updated = { ...scorecards[index], ...updates };
-        scorecards[index] = updated;
-        this.scorecards.set(interviewId, scorecards);
-        return updated;
-      }
-    }
-    return null;
-  }
-
-  addScoreEntry(scorecardId: string, entry: ScoreEntry): Scorecard | null {
-    const scorecard = this.getScorecard(scorecardId);
+  async addScoreEntry(scorecardId: string, entry: ScoreEntry): Promise<Scorecard | null> {
+    const scorecard = await ScorecardModel.findOne({ id: scorecardId });
     if (!scorecard) return null;
 
-    const entryIndex = scorecard.scores.findIndex(s => s.criterionId === entry.criterionId);
-    if (entryIndex !== -1) {
-      scorecard.scores[entryIndex] = entry;
+    const idx = scorecard.scores.findIndex(s => s.criterionId === entry.criterionId);
+    if (idx !== -1) {
+      scorecard.scores[idx].score = entry.score;
+      scorecard.scores[idx].comment = entry.comments;
     } else {
-      scorecard.scores.push(entry);
+      scorecard.scores.push({
+        criterionId: entry.criterionId,
+        criterionName: '',
+        score: entry.score,
+        maxScore: 5,
+        comment: entry.comments,
+      });
     }
 
-    this.recalculateScore(scorecard);
-    return this.updateScorecard(scorecardId, scorecard);
+    scorecard.totalScore = scorecard.scores.reduce((sum, s) => sum + s.score, 0);
+    scorecard.percentageScore = scorecard.maxTotalScore > 0
+      ? (scorecard.totalScore / scorecard.maxTotalScore) * 100
+      : 0;
+
+    await scorecard.save();
+    return this.docToScorecard(scorecard.toObject());
   }
 
-  addTimestampNote(
+  async addTimestampNote(
     scorecardId: string,
     content: string,
     timestamp: number,
     category: TimestampNote['category']
-  ): Scorecard | null {
-    const scorecard = this.getScorecard(scorecardId);
+  ): Promise<Scorecard | null> {
+    const scorecard = await ScorecardModel.findOne({ id: scorecardId });
     if (!scorecard) return null;
+    const note = { id: uuidv4(), content, timestamp, category, createdAt: new Date() };
+    const existing = (scorecard as any).timestampNotes || [];
+    existing.push(note);
+    await ScorecardModel.updateOne({ id: scorecardId }, { $set: { timestampNotes: existing } });
+    return this.getScorecard(scorecardId);
+  }
 
-    const note: TimestampNote = {
-      id: uuidv4(),
-      content,
-      timestamp,
-      category,
-      createdAt: new Date(),
+  async submitScorecard(id: string): Promise<Scorecard | null> {
+    const doc = await ScorecardModel.findOneAndUpdate(
+      { id },
+      { $set: { status: 'submitted', submittedAt: new Date() } },
+      { new: true }
+    ).lean();
+    if (!doc) return null;
+    return this.docToScorecard(doc);
+  }
+
+  async getInterviewScorecards(interviewId: string): Promise<Scorecard[]> {
+    const docs = await ScorecardModel.find({ interviewId }).lean();
+    return docs.map(d => this.docToScorecard(d));
+  }
+
+  async getCandidateScorecards(candidateId: string): Promise<Scorecard[]> {
+    const docs = await ScorecardModel.find({ candidateId }).lean();
+    return docs.map(d => this.docToScorecard(d));
+  }
+
+  async getAverageScore(candidateId: string): Promise<number> {
+    const docs = await ScorecardModel.find({ candidateId, status: 'submitted' }).lean();
+    if (docs.length === 0) return 0;
+    return docs.reduce((sum, d) => sum + (d.percentageScore || 0), 0) / docs.length;
+  }
+
+  async getInterviewsWithScorecards(): Promise<string[]> {
+    const docs = await ScorecardModel.find().distinct('interviewId');
+    return docs;
+  }
+
+  private docToScorecard(doc: any): Scorecard {
+    const templateName = doc.templateName || '';
+    const maxPossibleScore = doc.maxTotalScore || doc.scores.reduce((sum: number, s: any) => sum + (s.maxScore || 5), 0);
+    const percentage = doc.percentageScore || (maxPossibleScore > 0 ? (doc.totalScore / maxPossibleScore) * 100 : 0);
+    return {
+      id: doc.id,
+      interviewId: doc.interviewId,
+      candidateId: doc.candidateId,
+      interviewerId: doc.interviewerId,
+      templateId: doc.templateId,
+      templateName,
+      status: doc.status === 'approved' ? 'submitted' : doc.status,
+      scores: (doc.scores || []).map((s: any) => ({
+        criterionId: s.criterionId,
+        score: s.score,
+        comments: s.comment || '',
+      })),
+      totalScore: doc.totalScore || 0,
+      maxPossibleScore,
+      percentage,
+      overallRating: this.getOverallRating(percentage),
+      strengths: (doc as any).strengths || [],
+      weaknesses: (doc as any).weaknesses || [],
+      recommendation: (doc as any).recommendation || 'neutral',
+      notes: doc.notes || '',
+      timestampNotes: (doc as any).timestampNotes || [],
+      createdAt: doc.createdAt,
+      submittedAt: doc.submittedAt,
     };
-
-    scorecard.timestampNotes.push(note);
-    return this.updateScorecard(scorecardId, scorecard);
-  }
-
-  submitScorecard(id: string): Scorecard | null {
-    const scorecard = this.getScorecard(id);
-    if (!scorecard) return null;
-
-    scorecard.status = 'submitted';
-    scorecard.submittedAt = new Date();
-
-    return this.updateScorecard(id, scorecard);
-  }
-
-  private recalculateScore(scorecard: Scorecard): void {
-    const template = this.templates.get(scorecard.templateId);
-    if (!template) return;
-
-    let totalWeightedScore = 0;
-    let totalWeight = 0;
-
-    scorecard.scores.forEach(entry => {
-      const criterion = template.criteria.find(c => c.id === entry.criterionId);
-      if (criterion) {
-        totalWeightedScore += (entry.score / criterion.maxScore) * criterion.weight * criterion.maxScore;
-        totalWeight += criterion.weight;
-      }
-    });
-
-    scorecard.totalScore = totalWeightedScore;
-    scorecard.percentage = totalWeight > 0 ? (totalWeightedScore / (scorecard.maxPossibleScore || 1)) * 100 : 0;
-    scorecard.overallRating = this.getOverallRating(scorecard.percentage);
   }
 
   private getOverallRating(percentage: number): Scorecard['overallRating'] {
@@ -301,32 +328,6 @@ class ScorecardService {
     if (percentage >= 60) return 'average';
     if (percentage >= 40) return 'below-average';
     return 'poor';
-  }
-
-  getInterviewScorecards(interviewId: string): Scorecard[] {
-    return this.scorecards.get(interviewId) || [];
-  }
-
-  getCandidateScorecards(candidateId: string): Scorecard[] {
-    const allScorecards: Scorecard[] = [];
-    for (const scorecards of this.scorecards.values()) {
-      allScorecards.push(...scorecards.filter(s => s.candidateId === candidateId));
-    }
-    return allScorecards;
-  }
-
-  getAverageScore(candidateId: string): number {
-    const scorecards = this.getCandidateScorecards(candidateId);
-    if (scorecards.length === 0) return 0;
-
-    const submitted = scorecards.filter(s => s.status === 'submitted');
-    if (submitted.length === 0) return 0;
-
-    return submitted.reduce((sum, s) => sum + s.percentage, 0) / submitted.length;
-  }
-
-  getInterviewsWithScorecards(): string[] {
-    return Array.from(this.scorecards.keys());
   }
 }
 

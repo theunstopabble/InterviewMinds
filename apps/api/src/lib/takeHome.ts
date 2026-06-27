@@ -1,4 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
+import { ChallengeModel } from '../models/TakeHomeChallenge';
+import { ChallengeInviteModel } from '../models/TakeHomeInvite';
 
 export type ChallengeStatus = 'draft' | 'sent' | 'in-progress' | 'submitted' | 'graded' | 'expired';
 export type ChallengeType = 'coding' | 'project' | 'quiz' | 'design';
@@ -80,266 +81,6 @@ export interface ChallengeInvite {
   expiresAt: Date;
 }
 
-class TakeHomeService {
-  private challenges: Map<string, Challenge> = new Map();
-  private invites: Map<string, ChallengeInvite> = new Map();
-
-  createChallenge(
-    title: string,
-    description: string,
-    instructions: string,
-    companyId: string,
-    role: string,
-    difficulty: 'easy' | 'medium' | 'hard' | 'expert',
-    duration: number,
-    questions: ChallengeQuestion[],
-    allowedLanguages?: string[]
-  ): Challenge {
-    const challenge: Challenge = {
-      id: uuidv4(),
-      title,
-      description,
-      instructions,
-      companyId,
-      role,
-      difficulty,
-      duration,
-      questions,
-      allowedLanguages,
-      status: 'draft',
-      candidates: [],
-      submissions: [],
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    this.challenges.set(challenge.id, challenge);
-    return challenge;
-  }
-
-  inviteCandidate(
-    challengeId: string,
-    candidateId: string,
-    candidateEmail: string,
-    expiresAt?: Date
-  ): ChallengeInvite | null {
-    const challenge = this.challenges.get(challengeId);
-    if (!challenge) return null;
-
-    const invite: ChallengeInvite = {
-      id: uuidv4(),
-      challengeId,
-      candidateId,
-      candidateEmail,
-      status: 'pending',
-      sentAt: new Date(),
-      expiresAt: expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    };
-
-    this.invites.set(invite.id, invite);
-    challenge.candidates.push(candidateId);
-    this.challenges.set(challengeId, challenge);
-
-    return invite;
-  }
-
-  bulkInvite(
-    challengeId: string,
-    candidates: { id: string; email: string }[]
-  ): ChallengeInvite[] {
-    const invites: ChallengeInvite[] = [];
-    candidates.forEach(c => {
-      const invite = this.inviteCandidate(challengeId, c.id, c.email);
-      if (invite) invites.push(invite);
-    });
-    return invites;
-  }
-
-  startChallenge(inviteId: string, candidateId: string): Challenge | null {
-    const invite = this.invites.get(inviteId);
-    if (!invite || invite.candidateId !== candidateId) return null;
-
-    if (invite.status === 'expired') return null;
-
-    invite.status = 'started';
-    invite.startedAt = new Date();
-    this.invites.set(inviteId, invite);
-
-    const challenge = this.challenges.get(invite.challengeId);
-    if (challenge) {
-      challenge.status = 'in-progress';
-      this.challenges.set(challenge.id, challenge);
-    }
-
-    return challenge || null;
-  }
-
-  submitChallenge(
-    challengeId: string,
-    candidateId: string,
-    answers: ChallengeAnswer[]
-  ): Submission | null {
-    const challenge = this.challenges.get(challengeId);
-    if (!challenge) return null;
-
-    const invite = Array.from(this.invites.values())
-      .find(i => i.challengeId === challengeId && i.candidateId === candidateId);
-    
-    if (!invite || invite.status !== 'started') return null;
-
-    const submission: Submission = {
-      id: uuidv4(),
-      challengeId,
-      candidateId,
-      answers,
-      submittedAt: new Date(),
-      timeSpent: invite.startedAt
-        ? (new Date().getTime() - invite.startedAt.getTime()) / 1000
-        : 0,
-      status: 'submitted',
-    };
-
-    challenge.submissions.push(submission);
-    challenge.status = 'submitted';
-    this.challenges.set(challengeId, challenge);
-
-    invite.status = 'submitted';
-    invite.submittedAt = new Date();
-    this.invites.set(invite.id, invite);
-
-    return submission;
-  }
-
-  autoGrade(submissionId: string): { score: number; results: GradingResult[] } | null {
-    for (const challenge of this.challenges.values()) {
-      const submission = challenge.submissions.find(s => s.id === submissionId);
-      if (submission) {
-        const results: GradingResult[] = [];
-        let totalScore = 0;
-
-        submission.answers.forEach(answer => {
-          const question = challenge.questions.find(q => q.id === answer.questionId);
-          if (!question) return;
-
-          const questionResult: GradingResult = {
-            questionId: question.id,
-            passed: false,
-            score: 0,
-            details: '',
-          };
-
-          if (question.type === 'coding' && answer.code && question.testCases) {
-            const passedTests = question.testCases.filter(tc => {
-              if (tc.isHidden) return true;
-              return true;
-            });
-
-            const score = Math.round((passedTests.length / question.testCases.length) * question.points);
-            questionResult.passed = passedTests.length === question.testCases.length;
-            questionResult.score = score;
-            questionResult.details = `${passedTests.length}/${question.testCases.length} tests passed`;
-            totalScore += score;
-          } else if (question.type === 'quiz') {
-            const isCorrect = question.multipleChoiceAnswer === answer.multipleChoiceAnswer;
-            questionResult.passed = isCorrect;
-            questionResult.score = isCorrect ? question.points : 0;
-          }
-
-          results.push(questionResult);
-        });
-
-        submission.score = totalScore;
-        this.challenges.set(challenge.id, challenge);
-
-        return { score: totalScore, results };
-      }
-    }
-    return null;
-  }
-
-  addFeedback(submissionId: string, feedback: string): boolean {
-    for (const challenge of this.challenges.values()) {
-      const submission = challenge.submissions.find(s => s.id === submissionId);
-      if (submission) {
-        submission.feedback = feedback;
-        challenge.status = 'graded';
-        this.challenges.set(challenge.id, challenge);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  getChallenge(id: string): Challenge | null {
-    return this.challenges.get(id) || null;
-  }
-
-  getChallengeByCandidate(candidateId: string): Challenge[] {
-    return Array.from(this.challenges.values())
-      .filter(c => c.candidates.includes(candidateId))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }
-
-  getPendingChallenges(candidateId: string): ChallengeInvite[] {
-    return Array.from(this.invites.values())
-      .filter(i => i.candidateId === candidateId && i.status === 'pending')
-      .sort((a, b) => a.expiresAt.getTime() - b.expiresAt.getTime());
-  }
-
-  getSubmittedChallenges(candidateId: string): { challenge: Challenge; submission: Submission }[] {
-    const results: { challenge: Challenge; submission: Submission }[] = [];
-
-    for (const challenge of this.challenges.values()) {
-      const submission = challenge.submissions.find(s => s.candidateId === candidateId);
-      if (submission) {
-        results.push({ challenge, submission });
-      }
-    }
-
-    return results;
-  }
-
-  getCompanyChallenges(companyId: string): Challenge[] {
-    return Array.from(this.challenges.values())
-      .filter(c => c.companyId === companyId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }
-
-  checkExpiredChallenges(): number {
-    let expired = 0;
-    const now = new Date();
-
-    for (const [id, challenge] of this.challenges.entries()) {
-      if (now >= challenge.expiresAt && (challenge.status === 'sent' || challenge.status === 'in-progress')) {
-        challenge.status = 'expired';
-        challenge.updatedAt = new Date();
-        this.challenges.set(id, challenge);
-        expired++;
-      }
-    }
-
-    return expired;
-  }
-
-  getStats(challengeId: string): ChallengeStats {
-    const challenge = this.challenges.get(challengeId);
-    if (!challenge) return { total: 0, submitted: 0, graded: 0, avgScore: 0 };
-
-    const submitted = challenge.submissions.filter(s => s.status !== 'submitted').length;
-    const graded = challenge.submissions.filter(s => s.feedback).length;
-    const scores = challenge.submissions.filter(s => s.score !== undefined).map(s => s.score!);
-    const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-
-    return {
-      total: challenge.candidates.length,
-      submitted,
-      graded,
-      avgScore: Math.round(avgScore),
-    };
-  }
-}
-
 export interface GradingResult {
   questionId: string;
   passed: boolean;
@@ -352,6 +93,374 @@ export interface ChallengeStats {
   submitted: number;
   graded: number;
   avgScore: number;
+}
+
+class TakeHomeService {
+  async createChallenge(
+    title: string,
+    description: string,
+    instructions: string,
+    companyId: string,
+    role: string,
+    difficulty: 'easy' | 'medium' | 'hard' | 'expert',
+    duration: number,
+    questions: ChallengeQuestion[],
+    allowedLanguages?: string[]
+  ): Promise<Challenge> {
+    const doc = await ChallengeModel.create({
+      title,
+      description,
+      instructions,
+      companyId,
+      role,
+      difficulty,
+      duration,
+      questions,
+      allowedLanguages,
+      status: 'draft',
+      candidates: [],
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    });
+    return this.toChallenge(doc.toObject());
+  }
+
+  async updateChallenge(
+    id: string,
+    updates: Partial<Omit<Challenge, 'id' | 'createdAt' | 'updatedAt' | 'submissions'>>
+  ): Promise<Challenge | null> {
+    const doc = await ChallengeModel.findOneAndUpdate(
+      { id },
+      { $set: updates },
+      { new: true }
+    );
+    if (!doc) return null;
+    return this.toChallenge(doc.toObject());
+  }
+
+  async listChallenges(companyId?: string): Promise<Challenge[]> {
+    const filter = companyId ? { companyId } : {};
+    const docs = await ChallengeModel.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+    return docs.map(d => this.toChallenge(d));
+  }
+
+  async deleteChallenge(id: string): Promise<boolean> {
+    const result = await ChallengeModel.deleteOne({ id });
+    await ChallengeInviteModel.deleteMany({ challengeId: id });
+    return result.deletedCount > 0;
+  }
+
+  async inviteCandidate(
+    challengeId: string,
+    candidateId: string,
+    candidateEmail: string,
+    expiresAt?: Date
+  ): Promise<ChallengeInvite | null> {
+    const challenge = await ChallengeModel.findOne({ id: challengeId });
+    if (!challenge) return null;
+
+    const invite = await ChallengeInviteModel.create({
+      challengeId,
+      candidateId,
+      candidateEmail,
+      status: 'pending',
+      sentAt: new Date(),
+      expiresAt: expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    if (!challenge.candidates.includes(candidateId)) {
+      challenge.candidates.push(candidateId);
+      await challenge.save();
+    }
+
+    return this.toChallengeInvite(invite.toObject());
+  }
+
+  async bulkInvite(
+    challengeId: string,
+    candidates: { id: string; email: string }[]
+  ): Promise<ChallengeInvite[]> {
+    const results: ChallengeInvite[] = [];
+    for (const c of candidates) {
+      const invite = await this.inviteCandidate(challengeId, c.id, c.email);
+      if (invite) results.push(invite);
+    }
+    return results;
+  }
+
+  async getInvite(id: string): Promise<ChallengeInvite | null> {
+    const doc = await ChallengeInviteModel.findOne({ id }).lean();
+    if (!doc) return null;
+    return this.toChallengeInvite(doc);
+  }
+
+  async startChallenge(inviteId: string, candidateId: string): Promise<Challenge | null> {
+    const invite = await ChallengeInviteModel.findOne({ id: inviteId });
+    if (!invite || invite.candidateId !== candidateId) return null;
+    if (invite.status === 'expired') return null;
+
+    invite.status = 'started';
+    invite.startedAt = new Date();
+    await invite.save();
+
+    const challenge = await ChallengeModel.findOne({ id: invite.challengeId });
+    if (challenge) {
+      challenge.status = 'in-progress';
+      await challenge.save();
+      return this.toChallenge(challenge.toObject());
+    }
+
+    return null;
+  }
+
+  async submitChallenge(
+    challengeId: string,
+    candidateId: string,
+    answers: ChallengeAnswer[]
+  ): Promise<Submission | null> {
+    const invite = await ChallengeInviteModel.findOne({
+      challengeId,
+      candidateId,
+      status: 'started',
+    });
+    if (!invite) return null;
+
+    const submittedAt = new Date();
+    const timeSpent = invite.startedAt
+      ? (submittedAt.getTime() - invite.startedAt.getTime()) / 1000
+      : 0;
+
+    invite.answers = answers as any;
+    invite.timeSpent = timeSpent;
+    invite.status = 'submitted';
+    invite.submittedAt = submittedAt;
+    await invite.save();
+
+    await ChallengeModel.updateOne(
+      { id: challengeId },
+      { $set: { status: 'submitted' } }
+    );
+
+    return {
+      id: invite.id,
+      challengeId,
+      candidateId,
+      answers,
+      submittedAt,
+      timeSpent,
+      status: 'submitted',
+    };
+  }
+
+  async getSubmissions(challengeId: string): Promise<Submission[]> {
+    const invites = await ChallengeInviteModel.find({
+      challengeId,
+      status: 'submitted',
+    }).lean();
+
+    return invites.map(invite => ({
+      id: invite.id,
+      challengeId: invite.challengeId,
+      candidateId: invite.candidateId,
+      answers: (invite.answers || []) as unknown as ChallengeAnswer[],
+      submittedAt: invite.submittedAt!,
+      timeSpent: invite.timeSpent || 0,
+      status: invite.score != null ? 'graded' as const : 'submitted' as const,
+      score: invite.score,
+      feedback: invite.feedback,
+    }));
+  }
+
+  async gradeSubmission(
+    inviteId: string,
+    score: number,
+    feedback: string
+  ): Promise<Submission | null> {
+    const invite = await ChallengeInviteModel.findOne({ id: inviteId });
+    if (!invite || invite.status !== 'submitted') return null;
+
+    invite.score = score;
+    invite.feedback = feedback;
+    await invite.save();
+
+    await ChallengeModel.updateOne(
+      { id: invite.challengeId },
+      { $set: { status: 'graded' } }
+    );
+
+    return {
+      id: invite.id,
+      challengeId: invite.challengeId,
+      candidateId: invite.candidateId,
+      answers: (invite.answers || []) as unknown as ChallengeAnswer[],
+      submittedAt: invite.submittedAt || new Date(),
+      timeSpent: invite.timeSpent || 0,
+      status: 'graded',
+      score,
+      feedback,
+    };
+  }
+
+  autoGrade(_submissionId: string): { score: number; results: GradingResult[] } | null {
+    return null;
+  }
+
+  async addFeedback(submissionId: string, feedback: string): Promise<boolean> {
+    const invite = await ChallengeInviteModel.findOne({ id: submissionId });
+    if (!invite || invite.status !== 'submitted') return false;
+
+    invite.feedback = feedback;
+    await invite.save();
+
+    await ChallengeModel.updateOne(
+      { id: invite.challengeId },
+      { $set: { status: 'graded' } }
+    );
+
+    return true;
+  }
+
+  async getChallenge(id: string): Promise<Challenge | null> {
+    const doc = await ChallengeModel.findOne({ id }).lean();
+    if (!doc) return null;
+    return this.toChallenge(doc);
+  }
+
+  async getChallengeByCandidate(candidateId: string): Promise<Challenge[]> {
+    const docs = await ChallengeModel.find({ candidates: candidateId })
+      .sort({ createdAt: -1 })
+      .lean();
+    return docs.map(d => this.toChallenge(d));
+  }
+
+  async getPendingChallenges(candidateId: string): Promise<ChallengeInvite[]> {
+    const invites = await ChallengeInviteModel.find({
+      candidateId,
+      status: 'pending',
+    })
+      .sort({ expiresAt: 1 })
+      .lean();
+    return invites.map(i => this.toChallengeInvite(i));
+  }
+
+  async getSubmittedChallenges(
+    candidateId: string
+  ): Promise<{ challenge: Challenge; submission: Submission }[]> {
+    const invites = await ChallengeInviteModel.find({
+      candidateId,
+      status: 'submitted',
+    }).lean();
+
+    if (invites.length === 0) return [];
+
+    const challengeIds = [...new Set(invites.map(i => i.challengeId))];
+    const challenges = await ChallengeModel.find({ id: { $in: challengeIds } }).lean();
+    const challengeMap = new Map(challenges.map(c => [c.id, c]));
+
+    const results: { challenge: Challenge; submission: Submission }[] = [];
+    for (const invite of invites) {
+      const challenge = challengeMap.get(invite.challengeId);
+      if (!challenge) continue;
+      results.push({
+        challenge: this.toChallenge(challenge),
+        submission: {
+          id: invite.id,
+          challengeId: invite.challengeId,
+          candidateId: invite.candidateId,
+          answers: (invite.answers || []) as unknown as ChallengeAnswer[],
+          submittedAt: invite.submittedAt!,
+          timeSpent: invite.timeSpent || 0,
+          status: invite.score != null ? 'graded' as const : 'submitted' as const,
+          score: invite.score,
+          feedback: invite.feedback,
+        },
+      });
+    }
+    return results;
+  }
+
+  async getCompanyChallenges(companyId: string): Promise<Challenge[]> {
+    const docs = await ChallengeModel.find({ companyId })
+      .sort({ createdAt: -1 })
+      .lean();
+    return docs.map(d => this.toChallenge(d));
+  }
+
+  async checkExpiredChallenges(): Promise<number> {
+    const now = new Date();
+    const result = await ChallengeModel.updateMany(
+      {
+        expiresAt: { $lte: now },
+        status: { $in: ['sent', 'in-progress'] },
+      },
+      { $set: { status: 'expired' } }
+    );
+
+    await ChallengeInviteModel.updateMany(
+      {
+        expiresAt: { $lte: now },
+        status: { $in: ['pending', 'started'] },
+      },
+      { $set: { status: 'expired' } }
+    );
+
+    return result.modifiedCount;
+  }
+
+  async getStats(challengeId: string): Promise<ChallengeStats> {
+    const [challenge, invites] = await Promise.all([
+      ChallengeModel.findOne({ id: challengeId }).lean(),
+      ChallengeInviteModel.find({ challengeId }).lean(),
+    ]);
+
+    const total = challenge?.candidates.length || 0;
+    const submitted = invites.filter(i => i.status === 'submitted').length;
+    const graded = invites.filter(i => i.score != null).length;
+    const scores = invites.filter(i => i.score != null).map(i => i.score!);
+    const avgScore = scores.length > 0
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      : 0;
+
+    return { total, submitted, graded, avgScore };
+  }
+
+  private toChallenge(doc: any): Challenge {
+    return {
+      id: doc.id,
+      title: doc.title,
+      description: doc.description,
+      instructions: doc.instructions,
+      companyId: doc.companyId,
+      role: doc.role,
+      difficulty: doc.difficulty,
+      duration: doc.duration,
+      questions: doc.questions || [],
+      allowedLanguages: doc.allowedLanguages,
+      status: doc.status,
+      candidates: doc.candidates || [],
+      submissions: [],
+      sentAt: doc.sentAt,
+      startsAt: doc.startsAt,
+      expiresAt: doc.expiresAt,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
+  }
+
+  private toChallengeInvite(doc: any): ChallengeInvite {
+    return {
+      id: doc.id,
+      challengeId: doc.challengeId,
+      candidateId: doc.candidateId,
+      candidateEmail: doc.candidateEmail,
+      status: doc.status,
+      sentAt: doc.sentAt,
+      startedAt: doc.startedAt,
+      submittedAt: doc.submittedAt,
+      expiresAt: doc.expiresAt,
+    };
+  }
 }
 
 export const takeHomeService = new TakeHomeService();

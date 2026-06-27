@@ -1,26 +1,7 @@
 import { Router } from 'express';
 import { logger } from '../lib/logger';
 import { evaluateAnswer, batchEvaluateAnswers } from '../lib/answerValidation';
-
-interface AnswerEvaluation {
-  questionId: string;
-  transcript: string;
-  evaluation: {
-    contentScore: number;
-    technicalAccuracy: number;
-    clarity: number;
-    depthScore: number;
-    starMethod: { situation: number; task: number; action: number; result: number };
-  };
-  redFlags: {
-    type: 'vague' | 'inconsistent' | 'memorized' | 'copied' | 'over_confident' | 'under_confident';
-    description: string;
-    timestamp: string;
-  }[];
-  suggestedFollowUp?: string;
-  overallScore: number;
-  feedback: string;
-}
+import { AnswerEvaluationModel } from '../models/AnswerEvaluation';
 
 const router = Router();
 
@@ -56,6 +37,21 @@ router.post('/evaluate', async (req, res) => {
       resumeEntities: body.resumeEntities,
       questionType: body.questionType,
       expectedCompetencies: body.expectedCompetencies
+    });
+
+    await AnswerEvaluationModel.create({
+      id: result.questionId,
+      question: body.question,
+      transcript: body.transcript,
+      contentScore: result.evaluation.contentScore,
+      technicalAccuracy: result.evaluation.technicalAccuracy,
+      clarity: result.evaluation.clarity,
+      depthScore: result.evaluation.depthScore,
+      starMethod: result.evaluation.starMethod,
+      redFlags: result.redFlags,
+      suggestedFollowUp: result.suggestedFollowUp,
+      overallScore: result.overallScore,
+      feedback: result.feedback,
     });
 
     res.json(result);
@@ -94,28 +90,32 @@ router.post('/batch-evaluate', async (req, res) => {
 router.get('/:evaluationId', async (req, res) => {
   try {
     const { evaluationId } = req.params;
-    
     if (!evaluationId) {
       res.status(400).json({ error: 'Missing evaluation ID' });
       return;
     }
 
-    const mockEvaluation: AnswerEvaluation = {
-      questionId: evaluationId,
-      transcript: 'Mock transcript for demonstration',
-      evaluation: {
-        contentScore: 75,
-        technicalAccuracy: 80,
-        clarity: 70,
-        depthScore: 65,
-        starMethod: { situation: 70, task: 75, action: 80, result: 60 }
-      },
-      redFlags: [],
-      overallScore: 72,
-      feedback: 'Good response with room for more detail.'
-    };
+    const doc = await AnswerEvaluationModel.findOne({ id: evaluationId }).lean();
+    if (!doc) {
+      res.status(404).json({ error: 'Evaluation not found' });
+      return;
+    }
 
-    res.json(mockEvaluation);
+    res.json({
+      questionId: doc.id,
+      transcript: doc.transcript,
+      evaluation: {
+        contentScore: doc.contentScore,
+        technicalAccuracy: doc.technicalAccuracy,
+        clarity: doc.clarity,
+        depthScore: doc.depthScore,
+        starMethod: doc.starMethod,
+      },
+      redFlags: doc.redFlags || [],
+      suggestedFollowUp: doc.suggestedFollowUp,
+      overallScore: doc.overallScore,
+      feedback: doc.feedback,
+    });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching evaluation:');
     res.status(500).json({ error: 'Failed to fetch evaluation' });

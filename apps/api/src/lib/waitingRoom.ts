@@ -1,3 +1,4 @@
+import { WaitingRoomSessionModel } from '../models/WaitingRoom';
 import { v4 as uuidv4 } from 'uuid';
 
 export type WaitingRoomStatus = 'queued' | 'in_waiting' | 'tech_check' | 'ready' | 'interview_started' | 'no_show' | 'cancelled';
@@ -37,44 +38,79 @@ export interface WaitingRoomSession {
   createdAt: Date;
 }
 
-class WaitingRoomService {
-  private sessions: Map<string, WaitingRoomSession> = new Map();
-  private queue: Map<string, WaitingRoomEntry[]> = new Map();
+function toEntry(raw: Record<string, unknown>): WaitingRoomEntry {
+  const tcd = raw.techCheckDetails as Record<string, unknown> | null;
+  return {
+    id: raw.id as string,
+    candidateId: raw.candidateId as string,
+    candidateName: raw.candidateName as string,
+    candidateEmail: raw.candidateEmail as string,
+    interviewId: raw.interviewId as string,
+    role: raw.role as string,
+    scheduledTime: raw.scheduledTime as Date,
+    status: raw.status as WaitingRoomStatus,
+    position: raw.position as number,
+    estimatedWaitTime: raw.estimatedWaitTime as number,
+    techCheckPassed: raw.techCheckPassed as boolean,
+    techCheckDetails: tcd
+      ? {
+          cameraWorking: tcd.cameraWorking as boolean,
+          microphoneWorking: tcd.microphoneWorking as boolean,
+          speakerWorking: tcd.speakerWorking as boolean,
+          internetSpeed: tcd.internetSpeed as number,
+          browserSupported: tcd.browserSupported as boolean,
+          screenShareSupported: tcd.screenShareSupported as boolean,
+          checkedAt: tcd.checkedAt as Date,
+        }
+      : null,
+    joinedAt: raw.joinedAt as Date,
+    readyAt: raw.readyAt as Date | undefined,
+    interviewStartedAt: raw.interviewStartedAt as Date | undefined,
+  };
+}
 
-  createSession(interviewId: string, maxCapacity: number = 10): WaitingRoomSession {
-    const session: WaitingRoomSession = {
+function toSession(raw: Record<string, unknown>): WaitingRoomSession {
+  return {
+    interviewId: raw.interviewId as string,
+    entries: ((raw.entries as Record<string, unknown>[]) || []).map(toEntry),
+    maxCapacity: raw.maxCapacity as number,
+    createdAt: raw.createdAt as Date,
+  };
+}
+
+class WaitingRoomService {
+  async createSession(interviewId: string, maxCapacity: number = 10): Promise<WaitingRoomSession> {
+    const doc = await WaitingRoomSessionModel.create({
       interviewId,
       entries: [],
       maxCapacity,
-      createdAt: new Date(),
-    };
-
-    this.sessions.set(interviewId, session);
-    this.queue.set(interviewId, []);
-    return session;
+    });
+    return toSession(doc.toObject() as unknown as Record<string, unknown>);
   }
 
-  addToQueue(
+  async addToQueue(
     candidateId: string,
     candidateName: string,
     candidateEmail: string,
     interviewId: string,
     role: string,
     scheduledTime: Date
-  ): WaitingRoomEntry | null {
-    const session = this.sessions.get(interviewId);
-    if (!session) {
+  ): Promise<WaitingRoomEntry | null> {
+    const doc = await WaitingRoomSessionModel.findOne({ interviewId });
+    if (!doc) {
       return null;
     }
 
-    if (session.entries.length >= session.maxCapacity) {
+    if (doc.entries.length >= doc.maxCapacity) {
       return null;
     }
 
-    const existingQueue = this.queue.get(interviewId) || [];
-    const position = existingQueue.length + 1;
+    const activeCount = doc.entries.filter(
+      e => e.status !== 'interview_started' && e.status !== 'cancelled'
+    ).length;
+    const position = activeCount + 1;
 
-    const entry: WaitingRoomEntry = {
+    const entry = {
       id: uuidv4(),
       candidateId,
       candidateName,
@@ -82,7 +118,7 @@ class WaitingRoomService {
       interviewId,
       role,
       scheduledTime,
-      status: 'queued',
+      status: 'queued' as const,
       position,
       estimatedWaitTime: position * 10,
       techCheckPassed: false,
@@ -90,15 +126,13 @@ class WaitingRoomService {
       joinedAt: new Date(),
     };
 
-    existingQueue.push(entry);
-    this.queue.set(interviewId, existingQueue);
-    session.entries.push(entry);
-    this.sessions.set(interviewId, session);
+    doc.entries.push(entry as unknown as typeof doc.entries[0]);
+    await doc.save();
 
-    return entry;
+    return toEntry(entry as unknown as Record<string, unknown>);
   }
 
-  runTechCheck(entryId: string): TechCheckDetails {
+  runTechCheck(_entryId: string): TechCheckDetails {
     const details: TechCheckDetails = {
       cameraWorking: false,
       microphoneWorking: false,
@@ -123,143 +157,126 @@ class WaitingRoomService {
     return details;
   }
 
-  updateEntryTechCheck(entryId: string, details: TechCheckDetails): WaitingRoomEntry | null {
-    for (const [interviewId, queue] of this.queue.entries()) {
-      const entry = queue.find(e => e.id === entryId);
-      if (entry) {
-        entry.techCheckDetails = details;
-        entry.techCheckPassed = details.cameraWorking && 
-          details.microphoneWorking && 
-          details.internetSpeed >= 5;
-        entry.status = entry.techCheckPassed ? 'tech_check' : 'queued';
-        
-        this.queue.set(interviewId, queue);
-        
-        const session = this.sessions.get(interviewId);
-        if (session) {
-          const sessionEntry = session.entries.find(e => e.id === entryId);
-          if (sessionEntry) {
-            sessionEntry.techCheckDetails = details;
-            sessionEntry.techCheckPassed = entry.techCheckPassed;
-            sessionEntry.status = entry.status;
-            this.sessions.set(interviewId, session);
-          }
-        }
-        
-        return entry;
+  async updateEntryTechCheck(entryId: string, details: TechCheckDetails): Promise<WaitingRoomEntry | null> {
+    const doc = await WaitingRoomSessionModel.findOne({ 'entries.id': entryId });
+    if (!doc) return null;
+
+    const entry = doc.entries.find(e => e.id === entryId);
+    if (!entry) return null;
+
+    entry.techCheckDetails = details as typeof entry.techCheckDetails;
+    entry.techCheckPassed = details.cameraWorking && details.microphoneWorking && details.internetSpeed >= 5;
+    entry.status = entry.techCheckPassed ? 'tech_check' : 'queued';
+    await doc.save();
+
+    return toEntry(entry as unknown as Record<string, unknown>);
+  }
+
+  async markReady(entryId: string): Promise<WaitingRoomEntry | null> {
+    const doc = await WaitingRoomSessionModel.findOne({ 'entries.id': entryId });
+    if (!doc) return null;
+
+    const entry = doc.entries.find(e => e.id === entryId);
+    if (!entry || !entry.techCheckPassed) return null;
+
+    entry.status = 'ready';
+    entry.readyAt = new Date();
+    await doc.save();
+
+    return toEntry(entry as unknown as Record<string, unknown>);
+  }
+
+  async startInterview(entryId: string): Promise<WaitingRoomEntry | null> {
+    const doc = await WaitingRoomSessionModel.findOne({ 'entries.id': entryId });
+    if (!doc) return null;
+
+    const entryIndex = doc.entries.findIndex(e => e.id === entryId && e.status === 'ready');
+    if (entryIndex === -1) return null;
+
+    const entry = doc.entries[entryIndex];
+    entry.status = 'interview_started';
+    entry.interviewStartedAt = new Date();
+
+    let pos = 1;
+    doc.entries.forEach(e => {
+      if (e.id !== entryId && e.status !== 'interview_started' && e.status !== 'cancelled') {
+        e.position = pos;
+        e.estimatedWaitTime = pos * 10;
+        pos++;
       }
-    }
-    return null;
+    });
+
+    await doc.save();
+    return toEntry(entry as unknown as Record<string, unknown>);
   }
 
-  markReady(entryId: string): WaitingRoomEntry | null {
-    for (const [interviewId, queue] of this.queue.entries()) {
-      const entry = queue.find(e => e.id === entryId);
-      if (entry && entry.techCheckPassed) {
-        entry.status = 'ready';
-        entry.readyAt = new Date();
-        
-        this.queue.set(interviewId, queue);
-        
-        const session = this.sessions.get(interviewId);
-        if (session) {
-          const sessionEntry = session.entries.find(e => e.id === entryId);
-          if (sessionEntry) {
-            sessionEntry.status = 'ready';
-            sessionEntry.readyAt = new Date();
-            this.sessions.set(interviewId, session);
-          }
-        }
-        
-        return entry;
+  async getQueue(interviewId: string): Promise<WaitingRoomEntry[]> {
+    const doc = await WaitingRoomSessionModel.findOne({ interviewId }).lean();
+    if (!doc) return [];
+    return (doc.entries as unknown as Record<string, unknown>[])
+      .filter(e => {
+        const s = e.status as string;
+        return s !== 'interview_started' && s !== 'cancelled';
+      })
+      .map(toEntry);
+  }
+
+  async getNextInLine(interviewId: string): Promise<WaitingRoomEntry | null> {
+    const doc = await WaitingRoomSessionModel.findOne({ interviewId }).lean();
+    if (!doc) return null;
+
+    const active = (doc.entries as unknown as Record<string, unknown>[]).filter(e => {
+      const s = e.status as string;
+      return s !== 'interview_started' && s !== 'cancelled';
+    });
+    const found = active.find(e => e.status === 'ready') || active.find(e => e.status === 'tech_check') || null;
+    return found ? toEntry(found) : null;
+  }
+
+  async getSession(interviewId: string): Promise<WaitingRoomSession | null> {
+    const doc = await WaitingRoomSessionModel.findOne({ interviewId }).lean();
+    if (!doc) return null;
+    return toSession(doc as unknown as Record<string, unknown>);
+  }
+
+  async removeFromQueue(entryId: string): Promise<boolean> {
+    const doc = await WaitingRoomSessionModel.findOne({ 'entries.id': entryId });
+    if (!doc) return false;
+
+    const entry = doc.entries.find(e => e.id === entryId);
+    if (!entry) return false;
+
+    entry.status = 'cancelled';
+
+    let pos = 1;
+    doc.entries.forEach(e => {
+      if (e.id !== entryId && e.status !== 'interview_started' && e.status !== 'cancelled') {
+        e.position = pos;
+        e.estimatedWaitTime = pos * 10;
+        pos++;
       }
-    }
-    return null;
+    });
+
+    await doc.save();
+    return true;
   }
 
-  startInterview(entryId: string): WaitingRoomEntry | null {
-    for (const [interviewId, queue] of this.queue.entries()) {
-      const entryIndex = queue.findIndex(e => e.id === entryId && e.status === 'ready');
-      if (entryIndex !== -1) {
-        const entry = queue[entryIndex];
-        entry.status = 'interview_started';
-        entry.interviewStartedAt = new Date();
-        
-        queue.splice(entryIndex, 1);
-        queue.forEach((e, idx) => {
-          e.position = idx + 1;
-          e.estimatedWaitTime = (e.position) * 10;
-        });
-        
-        this.queue.set(interviewId, queue);
-        
-        const session = this.sessions.get(interviewId);
-        if (session) {
-          const sessionEntry = session.entries.find(e => e.id === entryId);
-          if (sessionEntry) {
-            sessionEntry.status = 'interview_started';
-            sessionEntry.interviewStartedAt = new Date();
-            this.sessions.set(interviewId, session);
-          }
-        }
-        
-        return entry;
-      }
-    }
-    return null;
+  async getQueuePosition(entryId: string): Promise<number> {
+    const doc = await WaitingRoomSessionModel.findOne(
+      { 'entries.id': entryId },
+      { 'entries.$': 1 }
+    ).lean();
+    if (!doc || !doc.entries || doc.entries.length === 0) return -1;
+    return (doc.entries[0] as unknown as Record<string, unknown>).position as number;
   }
 
-  getQueue(interviewId: string): WaitingRoomEntry[] {
-    return this.queue.get(interviewId) || [];
-  }
-
-  getNextInLine(interviewId: string): WaitingRoomEntry | null {
-    const queue = this.queue.get(interviewId) || [];
-    return queue.find(e => e.status === 'ready') || queue.find(e => e.status === 'tech_check') || null;
-  }
-
-  getSession(interviewId: string): WaitingRoomSession | null {
-    return this.sessions.get(interviewId) || null;
-  }
-
-  removeFromQueue(entryId: string): boolean {
-    for (const [interviewId, queue] of this.queue.entries()) {
-      const index = queue.findIndex(e => e.id === entryId);
-      if (index !== -1) {
-        const entry = queue[index];
-        entry.status = 'cancelled';
-        
-        queue.splice(index, 1);
-        queue.forEach((e, idx) => {
-          e.position = idx + 1;
-          e.estimatedWaitTime = (e.position) * 10;
-        });
-        
-        this.queue.set(interviewId, queue);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  getQueuePosition(entryId: string): number {
-    for (const queue of this.queue.values()) {
-      const entry = queue.find(e => e.id === entryId);
-      if (entry) {
-        return entry.position;
-      }
-    }
-    return -1;
-  }
-
-  getEstimatedWaitTime(entryId: string): number {
-    for (const queue of this.queue.values()) {
-      const entry = queue.find(e => e.id === entryId);
-      if (entry) {
-        return entry.estimatedWaitTime;
-      }
-    }
-    return 0;
+  async getEstimatedWaitTime(entryId: string): Promise<number> {
+    const doc = await WaitingRoomSessionModel.findOne(
+      { 'entries.id': entryId },
+      { 'entries.$': 1 }
+    ).lean();
+    if (!doc || !doc.entries || doc.entries.length === 0) return 0;
+    return (doc.entries[0] as unknown as Record<string, unknown>).estimatedWaitTime as number;
   }
 }
 

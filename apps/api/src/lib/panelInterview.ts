@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { PanelInterviewModel } from '../models/PanelInterview';
 
 export type PanelStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
@@ -49,11 +50,23 @@ export interface PanelInterview {
   completedAt?: Date;
 }
 
+function toPanelInterview(doc: Record<string, any> | null): PanelInterview | null {
+  if (!doc) return null;
+  const { _id, __v, updatedAt, ...rest } = doc;
+  return rest as PanelInterview;
+}
+
+function toPanelInterviews(docs: Record<string, any>[]): PanelInterview[] {
+  return docs.map(doc => {
+    const { _id, __v, updatedAt, ...rest } = doc;
+    return rest as PanelInterview;
+  });
+}
+
 class PanelInterviewService {
-  private panelInterviews: Map<string, PanelInterview> = new Map();
   private activeSessions: Map<string, Set<string>> = new Map();
 
-  createPanelInterview(
+  async createPanelInterview(
     title: string,
     candidateId: string,
     candidateName: string,
@@ -63,8 +76,8 @@ class PanelInterviewService {
     duration: number,
     createdBy: string,
     initialPanelists: { name: string; email: string; role: string }[] = []
-  ): PanelInterview {
-    const panelInterview: PanelInterview = {
+  ): Promise<PanelInterview> {
+    const doc = new PanelInterviewModel({
       id: uuidv4(),
       title,
       candidateId,
@@ -85,23 +98,25 @@ class PanelInterviewService {
       scores: [],
       createdBy,
       createdAt: new Date(),
-    };
+    });
 
-    this.panelInterviews.set(panelInterview.id, panelInterview);
-    return panelInterview;
+    await doc.save();
+    return toPanelInterview(doc.toObject())!;
   }
 
-  addPanelist(
+  async addPanelist(
     panelId: string,
     name: string,
     email: string,
     role: string
-  ): Panelist | null {
-    const panelInterview = this.panelInterviews.get(panelId);
-    if (!panelInterview) return null;
-
-    const existingPanelist = panelInterview.panelists.find(p => p.email === email);
-    if (existingPanelist) return existingPanelist;
+  ): Promise<Panelist | null> {
+    const existing = await PanelInterviewModel.findOne(
+      { id: panelId, 'panelists.email': email }
+    ).lean();
+    if (existing) {
+      const panelist = existing.panelists.find(p => p.email === email) as Panelist | undefined;
+      return panelist || null;
+    }
 
     const newPanelist: Panelist = {
       id: uuidv4(),
@@ -111,30 +126,30 @@ class PanelInterviewService {
       companyId: '',
     };
 
-    panelInterview.panelists.push(newPanelist);
-    this.panelInterviews.set(panelId, panelInterview);
+    const doc = await PanelInterviewModel.findOneAndUpdate(
+      { id: panelId },
+      { $push: { panelists: newPanelist } },
+      { new: true }
+    ).lean();
 
+    if (!doc) return null;
     return newPanelist;
   }
 
-  removePanelist(panelId: string, panelistId: string): boolean {
-    const panelInterview = this.panelInterviews.get(panelId);
-    if (!panelInterview) return false;
-
-    const index = panelInterview.panelists.findIndex(p => p.id === panelistId);
-    if (index === -1) return false;
-
-    panelInterview.panelists.splice(index, 1);
-    this.panelInterviews.set(panelId, panelInterview);
-
-    return true;
+  async removePanelist(panelId: string, panelistId: string): Promise<boolean> {
+    const doc = await PanelInterviewModel.findOneAndUpdate(
+      { id: panelId },
+      { $pull: { panelists: { id: panelistId } } },
+      { new: true }
+    ).lean();
+    return doc !== null;
   }
 
-  joinSession(panelId: string, panelistId: string): PanelInterview | null {
-    const panelInterview = this.panelInterviews.get(panelId);
-    if (!panelInterview) return null;
+  async joinSession(panelId: string, panelistId: string): Promise<PanelInterview | null> {
+    const doc = await PanelInterviewModel.findOne({ id: panelId });
+    if (!doc) return null;
 
-    const panelist = panelInterview.panelists.find(p => p.id === panelistId);
+    const panelist = doc.panelists.find(p => p.id === panelistId);
     if (!panelist) return null;
 
     panelist.joinedAt = new Date();
@@ -144,42 +159,36 @@ class PanelInterviewService {
     }
     this.activeSessions.get(panelId)!.add(panelistId);
 
-    if (panelInterview.status === 'scheduled') {
-      const allPanelistsJoined = panelInterview.panelists.every(p => p.joinedAt);
+    if (doc.status === 'scheduled') {
+      const allPanelistsJoined = doc.panelists.every(p => p.joinedAt);
       if (allPanelistsJoined) {
-        panelInterview.status = 'in_progress';
-        panelInterview.startedAt = new Date();
+        doc.status = 'in_progress';
+        doc.startedAt = new Date();
       }
     }
 
-    this.panelInterviews.set(panelId, panelInterview);
-    return panelInterview;
+    await doc.save();
+    return toPanelInterview(doc.toObject());
   }
 
-  leaveSession(panelId: string, panelistId: string): boolean {
-    const panelInterview = this.panelInterviews.get(panelId);
-    if (!panelInterview) return false;
-
-    const panelist = panelInterview.panelists.find(p => p.id === panelistId);
-    if (!panelist) return false;
-
-    panelist.leftAt = new Date();
+  async leaveSession(panelId: string, panelistId: string): Promise<boolean> {
+    const doc = await PanelInterviewModel.findOneAndUpdate(
+      { id: panelId, 'panelists.id': panelistId },
+      { $set: { 'panelists.$.leftAt': new Date() } },
+      { new: true }
+    );
 
     this.activeSessions.get(panelId)?.delete(panelistId);
-
-    return true;
+    return doc !== null;
   }
 
-  sendMessage(
+  async sendMessage(
     panelId: string,
     senderId: string,
     senderName: string,
     content: string,
     isPrivate: boolean = false
-  ): PanelMessage | null {
-    const panelInterview = this.panelInterviews.get(panelId);
-    if (!panelInterview) return null;
-
+  ): Promise<PanelMessage | null> {
     const message: PanelMessage = {
       id: uuidv4(),
       senderId,
@@ -189,23 +198,27 @@ class PanelInterviewService {
       isPrivate,
     };
 
-    panelInterview.messages.push(message);
-    this.panelInterviews.set(panelId, panelInterview);
+    const doc = await PanelInterviewModel.findOneAndUpdate(
+      { id: panelId },
+      { $push: { messages: message } },
+      { new: true }
+    ).lean();
 
+    if (!doc) return null;
     return message;
   }
 
-  submitScore(
+  async submitScore(
     panelId: string,
     interviewerId: string,
     score: number,
     feedback: string
-  ): PanelInterview | null {
-    const panelInterview = this.panelInterviews.get(panelId);
-    if (!panelInterview) return null;
+  ): Promise<PanelInterview | null> {
+    const doc = await PanelInterviewModel.findOne({ id: panelId });
+    if (!doc) return null;
 
-    const existingScoreIndex = panelInterview.scores.findIndex(s => s.interviewerId === interviewerId);
-    
+    const existingIndex = doc.scores.findIndex(s => s.interviewerId === interviewerId);
+
     const panelScore: PanelScore = {
       interviewerId,
       score,
@@ -213,19 +226,19 @@ class PanelInterviewService {
       submittedAt: new Date(),
     };
 
-    if (existingScoreIndex !== -1) {
-      panelInterview.scores[existingScoreIndex] = panelScore;
+    if (existingIndex !== -1) {
+      doc.scores[existingIndex] = panelScore;
     } else {
-      panelInterview.scores.push(panelScore);
+      doc.scores.push(panelScore);
     }
 
-    if (panelInterview.scores.length === panelInterview.panelists.length) {
-      panelInterview.finalScore = this.calculateFinalScore(panelInterview.scores);
-      panelInterview.recommendation = this.getRecommendation(panelInterview.finalScore);
+    if (doc.scores.length === doc.panelists.length) {
+      doc.finalScore = this.calculateFinalScore(doc.scores);
+      doc.recommendation = this.getRecommendation(doc.finalScore);
     }
 
-    this.panelInterviews.set(panelId, panelInterview);
-    return panelInterview;
+    await doc.save();
+    return toPanelInterview(doc.toObject());
   }
 
   private calculateFinalScore(scores: PanelScore[]): number {
@@ -242,57 +255,63 @@ class PanelInterviewService {
     return 'strong_no_hire';
   }
 
-  completePanelInterview(panelId: string): PanelInterview | null {
-    const panelInterview = this.panelInterviews.get(panelId);
-    if (!panelInterview || panelInterview.status !== 'in_progress') return null;
+  async completePanelInterview(panelId: string): Promise<PanelInterview | null> {
+    const doc = await PanelInterviewModel.findOne({ id: panelId, status: 'in_progress' });
+    if (!doc) return null;
 
-    panelInterview.status = 'completed';
-    panelInterview.completedAt = new Date();
+    doc.status = 'completed';
+    doc.completedAt = new Date();
 
-    if (!panelInterview.finalScore && panelInterview.scores.length > 0) {
-      panelInterview.finalScore = this.calculateFinalScore(panelInterview.scores);
-      panelInterview.recommendation = this.getRecommendation(panelInterview.finalScore);
+    if (!doc.finalScore && doc.scores.length > 0) {
+      doc.finalScore = this.calculateFinalScore(doc.scores);
+      doc.recommendation = this.getRecommendation(doc.finalScore);
     }
 
-    this.panelInterviews.set(panelId, panelInterview);
-    return panelInterview;
+    await doc.save();
+    return toPanelInterview(doc.toObject());
   }
 
-  cancelPanelInterview(panelId: string): boolean {
-    const panelInterview = this.panelInterviews.get(panelId);
-    if (!panelInterview || panelInterview.status === 'completed') return false;
-
-    panelInterview.status = 'cancelled';
-    this.panelInterviews.set(panelId, panelInterview);
-
-    return true;
+  async cancelPanelInterview(panelId: string): Promise<boolean> {
+    const doc = await PanelInterviewModel.findOneAndUpdate(
+      { id: panelId, status: { $ne: 'completed' } },
+      { $set: { status: 'cancelled' } },
+      { new: true }
+    ).lean();
+    return doc !== null;
   }
 
-  getPanelInterview(panelId: string): PanelInterview | null {
-    return this.panelInterviews.get(panelId) || null;
+  async getPanelInterview(panelId: string): Promise<PanelInterview | null> {
+    const doc = await PanelInterviewModel.findOne({ id: panelId }).lean();
+    return toPanelInterview(doc);
   }
 
   getActivePanelists(panelId: string): string[] {
     return Array.from(this.activeSessions.get(panelId) || []);
   }
 
-  getPanelInterviewsByCandidate(candidateId: string): PanelInterview[] {
-    return Array.from(this.panelInterviews.values())
-      .filter(p => p.candidateId === candidateId)
-      .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
+  async getPanelInterviewsByCandidate(candidateId: string): Promise<PanelInterview[]> {
+    const docs = await PanelInterviewModel.find({ candidateId })
+      .sort({ scheduledTime: -1 })
+      .lean();
+    return toPanelInterviews(docs);
   }
 
-  getPanelInterviewsByPanelist(panelistId: string): PanelInterview[] {
-    return Array.from(this.panelInterviews.values())
-      .filter(p => p.panelists.some(panelist => panelist.id === panelistId))
-      .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
+  async getPanelInterviewsByPanelist(panelistId: string): Promise<PanelInterview[]> {
+    const docs = await PanelInterviewModel.find({ 'panelists.id': panelistId })
+      .sort({ scheduledTime: -1 })
+      .lean();
+    return toPanelInterviews(docs);
   }
 
-  getUpcomingPanelInterviews(): PanelInterview[] {
+  async getUpcomingPanelInterviews(): Promise<PanelInterview[]> {
     const now = new Date();
-    return Array.from(this.panelInterviews.values())
-      .filter(p => p.status === 'scheduled' && new Date(p.scheduledTime) > now)
-      .sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime());
+    const docs = await PanelInterviewModel.find({
+      status: 'scheduled',
+      scheduledTime: { $gt: now },
+    })
+      .sort({ scheduledTime: 1 })
+      .lean();
+    return toPanelInterviews(docs);
   }
 }
 
