@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { questionBankService } from '@/services/enterprise';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { logger } from "@/lib/logger";
 
 interface Question {
   id: string;
@@ -83,7 +84,7 @@ export default function QuestionBankPage() {
       }
       setQuestions(res.questions || []);
     } catch (error) {
-      console.error('Failed to load questions:', error);
+      logger.error('Failed to load questions:', error);
     } finally {
       setLoading(false);
     }

@@ -23,11 +23,13 @@ import {
   Video,
 } from "lucide-react";
 import { biometricService, ssoService, encryptionService, geoFencingService, webhookService, atsService, integrationService } from "../services/enterprise";
+import { EXTERNAL_URLS } from "@/config/urls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 
 function getCurrentUserId(): string {
   return (window as any).Clerk?.user?.id || "default-user";
@@ -76,7 +78,7 @@ export default function SettingsPage() {
       setGeoConfig(geo);
       setWebhookConfig(webhooks);
     } catch (e) {
-      console.error("Error loading settings:", e);
+      logger.error("Error loading settings:", e);
     }
     setLoading(false);
   };
@@ -144,10 +146,10 @@ export default function SettingsPage() {
             {activeTab === "biometric" && (
               <BiometricSettings status={biometricStatus} userId={getCurrentUserId()} />
             )}
-            {activeTab === "sso" && <SSOSettings config={ssoConfig} userId={getCurrentUserId()} />}
+            {activeTab === "sso" && <SSOSettings config={ssoConfig} userId={getCurrentUserId()} onRefresh={() => loadSettings(getCurrentUserId())} />}
             {activeTab === "geo" && <GeoSettings config={geoConfig} />}
             {activeTab === "encryption" && (
-              <EncryptionSettings status={encryptionStatus} userId={getCurrentUserId()} />
+              <EncryptionSettings status={encryptionStatus} userId={getCurrentUserId()} onRefresh={() => loadSettings(getCurrentUserId())} />
             )}
             {activeTab === "integrations" && <IntegrationSettings config={null} />}
             {activeTab === "ats" && <ATSSettings config={null} />}
@@ -386,7 +388,7 @@ function BiometricSettings({ status, userId }: { status: any; userId: string }) 
   );
 }
 
-function SSOSettings({ config, userId }: { config: any; userId: string }) {
+function SSOSettings({ config, userId, onRefresh }: { config: any; userId: string; onRefresh?: () => void }) {
   const providers = ["okta", "azure-ad", "google-workspace", "custom"];
 
   const handleSetup = async (provider: string) => {
@@ -407,7 +409,7 @@ function SSOSettings({ config, userId }: { config: any; userId: string }) {
     try {
       await ssoService.configure({ provider: null, enabled: false, userId });
       toast.success(`${provider} disconnected`);
-      window.location.reload();
+      onRefresh?.();
     } catch (e: any) {
       toast.error(e.message || "Disconnect failed");
     }
@@ -609,28 +611,35 @@ function GeoSettings({ config }: { config: any }) {
   );
 }
 
-function EncryptionSettings({ status, userId }: { status: any; userId: string }) {
+function EncryptionSettings({ status, userId, onRefresh }: { status: any; userId: string; onRefresh?: () => void }) {
+  const [showGenModal, setShowGenModal] = useState(false);
+  const [showRotModal, setShowRotModal] = useState(false);
+  const [genPassword, setGenPassword] = useState('');
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+
   const handleGenerateKeys = async () => {
-    const password = prompt("Enter a password for key generation:");
-    if (!password) return;
+    if (!genPassword) return;
     try {
-      await encryptionService.createKeys(userId, password);
+      await encryptionService.createKeys(userId, genPassword);
       toast.success("Keys generated successfully");
-      window.location.reload();
+      setShowGenModal(false);
+      setGenPassword('');
+      onRefresh?.();
     } catch (e: any) {
       toast.error(e.message || "Key generation failed");
     }
   };
 
   const handleRotateKeys = async () => {
-    const oldPassword = prompt("Enter current password:");
-    if (!oldPassword) return;
-    const newPassword = prompt("Enter new password:");
-    if (!newPassword) return;
+    if (!oldPassword || !newPassword) return;
     try {
       await encryptionService.rotateKeys(userId, oldPassword, newPassword);
       toast.success("Keys rotated successfully");
-      window.location.reload();
+      setShowRotModal(false);
+      setOldPassword('');
+      setNewPassword('');
+      onRefresh?.();
     } catch (e: any) {
       toast.error(e.message || "Key rotation failed");
     }
@@ -696,12 +705,12 @@ function EncryptionSettings({ status, userId }: { status: any; userId: string })
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Button onClick={handleGenerateKeys} className="bg-blue-600 hover:bg-blue-500">
+        <Button onClick={() => setShowGenModal(true)} className="bg-blue-600 hover:bg-blue-500">
           <Key className="w-4 h-4 mr-2" />
           Generate New Keys
         </Button>
         <Button
-          onClick={handleRotateKeys}
+          onClick={() => setShowRotModal(true)}
           variant="outline"
           className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
         >
@@ -709,6 +718,33 @@ function EncryptionSettings({ status, userId }: { status: any; userId: string })
           Rotate Keys
         </Button>
       </div>
+
+      {showGenModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowGenModal(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white">Generate Keys</h3>
+            <input type="password" value={genPassword} onChange={e => setGenPassword(e.target.value)} placeholder="Enter password for key generation" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowGenModal(false)} className="border-slate-700 text-slate-300">Cancel</Button>
+              <Button onClick={handleGenerateKeys} className="bg-blue-600 hover:bg-blue-500">Generate</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRotModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowRotModal(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white">Rotate Keys</h3>
+            <input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} placeholder="Current password" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowRotModal(false)} className="border-slate-700 text-slate-300">Cancel</Button>
+              <Button onClick={handleRotateKeys} className="bg-blue-600 hover:bg-blue-500">Rotate</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -718,6 +754,7 @@ function IntegrationSettings({ config: _config }: { config: any }) {
   const [slackStatus, setSlackStatus] = useState<string>('not_configured');
   const [teamsStatus, setTeamsStatus] = useState<string>('not_configured');
   const [zoomStatus, setZoomStatus] = useState<string>('not_configured');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
@@ -730,19 +767,35 @@ function IntegrationSettings({ config: _config }: { config: any }) {
       if (slack) setSlackStatus('connected');
       if (teams) setTeamsStatus('connected');
       if (zoom) setZoomStatus('connected');
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-6 w-48 bg-slate-800 rounded-lg" />
+        <div className="grid gap-3">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-20 w-full bg-slate-800 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
 
   const handleConnect = async (integration: string) => {
     try {
       const result = await (integration === 'hris'
         ? integrationService.validateHRIS?.({})
         : integration === 'slack'
-        ? integrationService.sendSlackNotification?.('https://hooks.slack.com/test', { text: 'Connected!' })
+        ? integrationService.sendSlackNotification?.(EXTERNAL_URLS.SLACK_WEBHOOK, { text: 'Connected!' })
         : Promise.resolve(null));
       if (result) {
         toast.success(`${integration} connected successfully`);
-        window.location.reload();
+        switch (integration) {
+          case 'hris': setHrisStatus('connected'); break;
+          case 'slack': setSlackStatus('connected'); break;
+          case 'teams': setTeamsStatus('connected'); break;
+          case 'zoom': setZoomStatus('connected'); break;
+        }
       }
     } catch {
       toast.error(`Failed to connect ${integration}`);
@@ -878,6 +931,8 @@ function ATSSettings({ config }: { config: any }) {
 function WebhookSettings({ config: _config }: { config: any }) {
   const [webhooks, setWebhooks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showWebhookModal, setShowWebhookModal] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
 
   const loadWebhooks = async () => {
     setLoading(true);
@@ -893,11 +948,12 @@ function WebhookSettings({ config: _config }: { config: any }) {
   useEffect(() => { loadWebhooks(); }, []);
 
   const handleRegister = async () => {
-    const url = prompt('Enter webhook URL:');
-    if (!url) return;
+    if (!webhookUrl) return;
     try {
-      await webhookService.register?.(url, ['interview.completed', 'candidate.created']);
+      await webhookService.register?.(webhookUrl, ['interview.completed', 'candidate.created']);
       toast.success('Webhook registered');
+      setShowWebhookModal(false);
+      setWebhookUrl('');
       loadWebhooks();
     } catch {
       toast.error('Failed to register webhook');
@@ -910,10 +966,23 @@ function WebhookSettings({ config: _config }: { config: any }) {
         <Activity className="w-5 h-5 text-cyan-400" />
         Webhooks
       </h2>
-      <Button onClick={handleRegister} className="bg-blue-600 hover:bg-blue-500">
+      <Button onClick={() => setShowWebhookModal(true)} className="bg-blue-600 hover:bg-blue-500">
         <Plus className="w-4 h-4 mr-2" />
         Register Webhook
       </Button>
+
+      {showWebhookModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowWebhookModal(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white">Register Webhook</h3>
+            <input value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} placeholder="https://example.com/webhook" className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowWebhookModal(false)} className="border-slate-700 text-slate-300">Cancel</Button>
+              <Button onClick={handleRegister} className="bg-blue-600 hover:bg-blue-500">Register</Button>
+            </div>
+          </div>
+        </div>
+      )}
       <Card className="bg-gray-800/80 border-gray-700/50">
         <CardContent className="p-5">
           {loading ? (

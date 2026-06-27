@@ -31,6 +31,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { logger } from "@/lib/logger";
 
 const RANGES = [7, 14, 30, 60, 90];
 
@@ -71,12 +72,12 @@ export default function AnalyticsPage() {
         }))
       );
     } catch (e) {
-      console.error("Error loading analytics:", e);
+      logger.error("Error loading analytics:", e);
     }
     setLoading(false);
   };
 
-  const handleExport = () => {
+  const handleExport = (format: 'json' | 'csv' = 'json') => {
     const data = {
       overview: analytics?.overview,
       scoreDistribution: analytics?.scoreDistribution,
@@ -85,13 +86,39 @@ export default function AnalyticsPage() {
       topPerformers,
       exportedAt: new Date().toISOString(),
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `analytics-export-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    if (format === 'csv') {
+      const rows: string[][] = [];
+      rows.push(['Category', 'Metric', 'Value']);
+      if (analytics?.overview) {
+        Object.entries(analytics.overview).forEach(([key, val]) => rows.push(['Overview', key, String(val)]));
+      }
+      if (analytics?.scoreDistribution) {
+        Object.entries(analytics.scoreDistribution).forEach(([key, val]) => rows.push(['Score Distribution', key, String(val)]));
+      }
+      if (analytics?.competencyScores) {
+        Object.entries(analytics.competencyScores).forEach(([key, val]) => rows.push(['Competency', key, String(val)]));
+      }
+      if (topPerformers?.length) {
+        topPerformers.forEach((p: any) => rows.push(['Top Performer', p.name || '', String(p.score || '')]));
+      }
+      const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `analytics-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `analytics-export-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
     setShowExport(false);
   };
 
@@ -144,15 +171,13 @@ export default function AnalyticsPage() {
             {showExport && (
               <div className="absolute right-4 top-20 z-10 bg-slate-900 border border-slate-700 rounded-xl p-2 shadow-2xl">
                 <button
-                  onClick={handleExport}
+                  onClick={() => handleExport('json')}
                   className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                 >
                   Export as JSON
                 </button>
                 <button
-                  onClick={() => {
-                    handleExport();
-                  }}
+                  onClick={() => handleExport('csv')}
                   className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
                 >
                   Export as CSV

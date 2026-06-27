@@ -1,4 +1,5 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { logger } from "./logger";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
@@ -33,7 +34,7 @@ api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (!error.response) {
-      console.error("Network error:", error.message);
+      logger.error("Network error:", error.message);
       return Promise.reject(new Error("Network error. Please check your connection."));
     }
 

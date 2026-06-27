@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { reportService } from '../services/enterprise';
+import { logger } from "@/lib/logger";
 
 interface Report {
   reportId: string;
@@ -38,7 +39,7 @@ export default function ReportsPage() {
       const data = await reportService.getCandidateReports(uid).catch(() => ({ reports: [] }));
       setReports(data.reports || []);
     } catch (e) {
-      console.error('Error loading reports:', e);
+      logger.error('Error loading reports:', e);
     }
     setLoading(false);
   };
@@ -52,7 +53,7 @@ export default function ReportsPage() {
       }
       loadReports(userId);
     } catch (e) {
-      console.error('Error generating report:', e);
+      logger.error('Error generating report:', e);
       toast.error('Failed to generate report');
     }
     setLoading(false);
@@ -71,7 +72,7 @@ export default function ReportsPage() {
         toast.success('JSON exported');
       }
     } catch (e) {
-      console.error('Error downloading report:', e);
+      logger.error('Error downloading report:', e);
       toast.error('Download failed. Please try again.');
     }
   };

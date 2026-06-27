@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
 // Response ka Type Definition (Taaki TypeScript khush rahe)
 export interface ExecutionResult {
@@ -21,7 +22,7 @@ export const executeCode = async (language: string, code: string) => {
     });
     return response.data;
   } catch (error: unknown) {
-    console.error("Execution Failed:", error);
+    logger.error("Execution Failed:", error);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     throw (error as any).response?.data?.error || "Failed to run code";
   }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { schedulingService } from '../services/enterprise';
 import { toast } from 'sonner';
+import { logger } from "@/lib/logger";
 
 interface Interview {
   id: string;
@@ -22,6 +23,8 @@ export default function SchedulingPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'schedule' | 'upcoming' | 'calendar'>('upcoming');
   const [upcomingInterviews, setUpcomingInterviews] = useState<Interview[]>([]);
+  const [rescheduleTarget, setRescheduleTarget] = useState<string | null>(null);
+  const [newSlotId, setNewSlotId] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [availableSlots, setAvailableSlots] = useState<any[]>([]);
   const [timezones, setTimezones] = useState<any[]>([]);
@@ -60,7 +63,7 @@ export default function SchedulingPage() {
         setSelectedTimezone(tzArray[0] as string);
       }
     } catch (e) {
-      console.error('Error loading data:', e);
+      logger.error('Error loading data:', e);
     }
     setLoading(false);
   };
@@ -72,7 +75,7 @@ export default function SchedulingPage() {
       const slotsData = await schedulingService.getAvailableSlots(tenantId, dateStr, selectedTimezone);
       setAvailableSlots(slotsData?.slots || []);
     } catch (e) {
-      console.error('Error loading slots:', e);
+      logger.error('Error loading slots:', e);
       setAvailableSlots([]);
     } finally {
       setLoading(false);
@@ -97,7 +100,7 @@ export default function SchedulingPage() {
         toast.error('Failed to book slot. Please try again.');
       }
     } catch (e: any) {
-      console.error('Error booking slot:', e);
+      logger.error('Error booking slot:', e);
       toast.error(e?.message || 'Failed to book slot');
     }
   };
@@ -224,20 +227,26 @@ export default function SchedulingPage() {
                             >
                               Join
                             </button>
-                            <button
-                              onClick={async () => {
-                                const newSlotId = prompt('Enter new slot ID to reschedule:');
-                                if (!newSlotId) return;
-                                try {
-                                  await schedulingService.reschedule(interview.id, newSlotId);
-                                  toast.success('Rescheduled successfully');
-                                  loadUpcoming();
-                                } catch { toast.error('Reschedule failed'); }
-                              }}
-                              className="px-3 py-2 bg-amber-600/80 rounded-lg hover:bg-amber-600 transition text-sm"
-                            >
-                              Reschedule
-                            </button>
+                            {rescheduleTarget === interview.id ? (
+                              <div className="flex gap-2 items-center">
+                                <input value={newSlotId} onChange={e => setNewSlotId(e.target.value)} placeholder="New slot ID" className="w-32 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white" />
+                                <button onClick={async () => {
+                                  if (!newSlotId) return;
+                                  try {
+                                    await schedulingService.reschedule(interview.id, newSlotId);
+                                    toast.success('Rescheduled successfully');
+                                    setRescheduleTarget(null);
+                                    setNewSlotId('');
+                                    loadUpcoming();
+                                  } catch { toast.error('Reschedule failed'); }
+                                }} className="px-2 py-1 bg-emerald-600 rounded text-xs hover:bg-emerald-500">Confirm</button>
+                                <button onClick={() => { setRescheduleTarget(null); setNewSlotId(''); }} className="px-2 py-1 bg-slate-700 rounded text-xs hover:bg-slate-600">Cancel</button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setRescheduleTarget(interview.id)} className="px-3 py-2 bg-amber-600/80 rounded-lg hover:bg-amber-600 transition text-sm">
+                                Reschedule
+                              </button>
+                            )}
                             <button
                               onClick={async () => {
                                 if (!confirm('Cancel this interview?')) return;

@@ -46,6 +46,7 @@ import {
 } from "recharts";
 import { feedbackService } from "@/services/enterprise";
 import type { FeedbackResult } from "@/services/enterprise";
+import { logger } from "@/lib/logger";
 
 interface InterviewData {
   score: number;
@@ -101,7 +102,7 @@ export default function FeedbackPage() {
         });
         setAiFeedback(feedback);
       } catch (error) {
-        console.error("Error fetching feedback:", error);
+        logger.error("Error fetching feedback:", error);
         toast.error("Could not load feedback.");
       } finally {
         setLoading(false);

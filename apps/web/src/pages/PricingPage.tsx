@@ -1,3 +1,4 @@
+import { EXTERNAL_URLS } from "@/config/urls";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
@@ -296,7 +297,9 @@ export default function PricingPage() {
           {plans.map((plan) => {
             const Icon = plan.icon;
             const monthlyPrice = plan.id === "enterprise" ? "Custom" : plan.price;
-            const annualPrice = plan.id === "enterprise" ? "Custom" : `$${Math.round(parseInt(plan.price.replace("$", "")) * 10 * 12 / 12)}`;
+            const priceNum = parseInt(plan.price.replace("$", ""));
+            const annualTotal = priceNum * 10;
+            const annualPrice = plan.id === "enterprise" ? "Custom" : `$${Math.round(annualTotal / 12)}`;
 
             return (
               <div
@@ -336,15 +339,18 @@ export default function PricingPage() {
                     <span className="text-4xl font-extrabold text-white">
                       {annual && plan.id !== "enterprise" ? annualPrice : monthlyPrice}
                     </span>
-                    {plan.period && (
-                      <span className="text-slate-400 text-sm">{plan.period}</span>
-                    )}
+{!annual && plan.period && (
+                       <span className="text-slate-400 text-sm">{plan.period}</span>
+                     )}
+                     {annual && plan.id !== "enterprise" && (
+                       <span className="text-slate-400 text-sm">/month</span>
+                     )}
                   </div>
-                  {annual && plan.id !== "enterprise" && (
-                    <p className="text-xs text-emerald-400 -mt-4">
-                      ${parseInt(plan.price.replace("$", "")) * 10}/month billed annually
-                    </p>
-                  )}
+{annual && plan.id !== "enterprise" && (
+                     <p className="text-xs text-emerald-400 -mt-4">
+                       ${annualTotal} billed annually
+                     </p>
+                   )}
 
                   {/* CTA */}
                   <Link to={isSignedIn ? "/settings" : "/sign-in"}>
@@ -515,7 +521,7 @@ export default function PricingPage() {
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
-            <Link to="https://texfolio.vercel.app" target="_blank">
+            <Link to={EXTERNAL_URLS.TEXFOLIO} target="_blank">
               <Button variant="outline" className="h-12 px-8 text-base border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800">
                 <Headphones className="w-4 h-4 mr-2" />
                 Talk to Sales

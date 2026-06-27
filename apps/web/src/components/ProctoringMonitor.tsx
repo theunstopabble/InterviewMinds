@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { proctoringService } from '../services/enterprise';
+import { logger } from "@/lib/logger";
 
 interface Violation {
   type: string;
@@ -43,7 +44,7 @@ export default function ProctoringMonitor({ interviewId, isActive }: Props) {
           setViolations(prev => [...prev, ...results.violations]);
         }
       } catch (e) {
-        console.error('Proctoring poll error:', e);
+        logger.error('Proctoring poll error:', e);
       }
     }, 10000);
 
@@ -80,7 +81,7 @@ export default function ProctoringMonitor({ interviewId, isActive }: Props) {
         });
       }
     } catch (e) {
-      console.error('Screen check error:', e);
+      logger.error('Screen check error:', e);
     }
   };
 

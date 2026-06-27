@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { complianceService } from '../services/enterprise';
+import { logger } from "@/lib/logger";
 
 export default function CandidatePortal() {
   const navigate = useNavigate();
@@ -25,7 +26,7 @@ export default function CandidatePortal() {
       setConsents(consentsData.consents || []);
       setDataRequests(requestsData.requests || []);
     } catch (e) {
-      console.error('Error loading user data:', e);
+      logger.error('Error loading user data:', e);
     }
     setLoading(false);
   };
@@ -35,7 +36,7 @@ export default function CandidatePortal() {
       await complianceService.recordConsent(userId, consentType, granted, '1.0');
       loadUserData(userId);
     } catch (e) {
-      console.error('Error updating consent:', e);
+      logger.error('Error updating consent:', e);
     }
   };
 
@@ -44,7 +45,7 @@ export default function CandidatePortal() {
       await complianceService.createDataRequest(userId, type);
       loadUserData(userId);
     } catch (e) {
-      console.error('Error creating request:', e);
+      logger.error('Error creating request:', e);
     }
   };
 

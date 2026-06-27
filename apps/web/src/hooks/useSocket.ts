@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuth, useUser } from "@clerk/clerk-react";
+import { logger } from "@/lib/logger";
 
 export interface ChatMessage {
   id: string;
@@ -124,7 +125,7 @@ export function useSocket(roomId?: string): UseSocketReturn {
                 }
               }
             } catch (err) {
-              console.error("Token refresh failed:", err);
+              logger.error("Token refresh failed:", err);
             }
           }, TOKEN_REFRESH_INTERVAL);
         }
@@ -183,7 +184,7 @@ export function useSocket(roomId?: string): UseSocketReturn {
     } catch (err) {
       isConnectingRef.current = false;
       setError("Failed to initialize connection");
-      console.error("Socket connection error:", err);
+      logger.error("Socket connection error:", err);
     }
   }, [getToken, userId, user, authLoaded]);
 

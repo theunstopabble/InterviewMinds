@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { logger } from "@/lib/logger";
 
 interface AudioData {
   volume: number;
@@ -93,7 +94,7 @@ export function useAudioAnalysis(isListening: boolean, externalStream?: MediaStr
 
       analyzeLoop();
     } catch (error) {
-      console.error("Audio Analysis Error:", error);
+      logger.error("Audio Analysis Error:", error);
       if (!isCleanupRef.current) {
         setAudioData({ volume: 0, isSpeaking: false, warning: "" });
       }

@@ -4,6 +4,7 @@ import { Loader2, VideoOff, BrainCircuit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 
 export default function WebcamAnalysis({
   onEmotionUpdate,
@@ -58,7 +59,7 @@ export default function WebcamAnalysis({
       console.log("✅ AI Models Loaded");
       startVideo();
     } catch (err) {
-      console.error("❌ Model Load Error:", err);
+      logger.error("❌ Model Load Error:", err);
       setModelError("Failed to load AI models");
       toast.error("Failed to load AI Models. Retrying...");
       setTimeout(() => loadModels(true), 2000);
@@ -92,7 +93,7 @@ export default function WebcamAnalysis({
         onStreamReady?.(stream);
       }
     } catch (err) {
-      console.error("Camera Error:", err);
+      logger.error("Camera Error:", err);
       toast.error("Could not access camera");
     }
   };
@@ -128,7 +129,7 @@ export default function WebcamAnalysis({
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
     } catch (err) {
-      console.error("Recording Error:", err);
+      logger.error("Recording Error:", err);
     }
   };
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
 interface UseSpeechReturn {
   isListening: boolean;
@@ -94,7 +95,7 @@ export const useSpeech = (): UseSpeechReturn => {
     audio.onended = () => setIsSpeaking(false);
     audio.onplay = () => setIsSpeaking(true);
     audio.onerror = (e) => {
-      console.error("Audio Playback Error", e);
+      logger.error("Audio Playback Error", e);
       setIsSpeaking(false);
     };
 
@@ -157,7 +158,7 @@ export const useSpeech = (): UseSpeechReturn => {
       try {
         recognitionRef.current.start();
       } catch (e) {
-        console.error("Mic Start Error:", e);
+        logger.error("Mic Start Error:", e);
       }
     }
   }, []);
@@ -186,7 +187,7 @@ export const useSpeech = (): UseSpeechReturn => {
             setTtsProvider("browser");
             await speakWithBrowser(text);
           } catch (browserError) {
-            console.error("Browser TTS also failed:", browserError);
+            logger.error("Browser TTS also failed:", browserError);
             setTtsProvider("none");
             throw new Error("Both Azure and browser TTS failed");
           }

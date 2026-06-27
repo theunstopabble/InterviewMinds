@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { proctoringService } from '../services/enterprise';
+import { logger } from "@/lib/logger";
 
 interface RecordingSession {
   id: string;
@@ -51,7 +52,7 @@ export default function SessionRecorder({ interviewId, isRecording, onRecordingC
       const data = await proctoringService.getRecordingSessions(interviewId);
       setSessions(data.sessions || []);
     } catch (e) {
-      console.error('Error loading sessions:', e);
+      logger.error('Error loading sessions:', e);
     }
   };
 
@@ -80,7 +81,7 @@ export default function SessionRecorder({ interviewId, isRecording, onRecordingC
       setSessions(prev => [finalSession, ...prev]);
       onRecordingComplete?.(finalSession);
     } catch (e) {
-      console.error('Error saving session:', e);
+      logger.error('Error saving session:', e);
     }
 
     setCurrentSession(null);

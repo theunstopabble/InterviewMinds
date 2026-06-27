@@ -17,6 +17,7 @@ import ProctoringUI from "@/components/ProctoringUI";
 import { PERSONA_DETAILS, BOILERPLATES } from "@/lib/interviewConstants";
 import { InterviewSetupModal } from "@/components/interview/InterviewSetupModal";
 import { InterviewHeader } from "@/components/interview/InterviewHeader";
+import { logger } from "@/lib/logger";
 
 interface Message {
   role: "user" | "ai";
@@ -86,7 +87,8 @@ export default function InterviewPage() {
   const [analysisTab, setAnalysisTab] = useState<'console' | 'eval' | 'security' | 'complexity' | 'llm'>('console');
   const [securityResult, setSecurityResult] = useState<any>(null);
   const [complexityResult, setComplexityResult] = useState<any>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const [complexityLoading, setComplexityLoading] = useState(false);
   const [llmFeedback, setLlmFeedback] = useState<any>(null);
   const [llmLoading, setLlmLoading] = useState(false);
 
@@ -311,7 +313,7 @@ export default function InterviewPage() {
       navigate(`/feedback/${interviewId}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      console.error("End interview error:", msg);
+      logger.error("End interview error:", msg);
       toast.error("Error ending session");
       setIsSaving(false);
     }
@@ -571,7 +573,7 @@ export default function InterviewPage() {
             </div>
           ) : analysisTab === 'security' ? (
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {analysisLoading ? (
+              {securityLoading ? (
                 <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /><span className="ml-2 text-slate-400 text-sm">Scanning code...</span></div>
               ) : securityResult ? (
                 <div className="space-y-2">
@@ -590,20 +592,20 @@ export default function InterviewPage() {
               )}
               <button onClick={async () => {
                 if (!code) return;
-                setAnalysisLoading(true);
+                setSecurityLoading(true);
                 try {
                   const r = await codeAnalysisService.securityScan?.(code, language) ?? await codeAnalysisService.analyze?.(code, language);
                   setSecurityResult(r);
                   toast.success('Security scan complete');
                 } catch { toast.error('Security scan failed'); }
-                setAnalysisLoading(false);
-              }} disabled={analysisLoading || !code} className="w-full py-2 bg-gradient-to-r from-red-600 to-orange-600 rounded-lg text-sm font-bold hover:from-red-500 hover:to-orange-500 disabled:opacity-50 transition">
-                {analysisLoading ? 'Scanning...' : '🔒 Security Scan'}
+                setSecurityLoading(false);
+              }} disabled={securityLoading || !code} className="w-full py-2 bg-gradient-to-r from-red-600 to-orange-600 rounded-lg text-sm font-bold hover:from-red-500 hover:to-orange-500 disabled:opacity-50 transition">
+                {securityLoading ? 'Scanning...' : '🔒 Security Scan'}
               </button>
             </div>
           ) : analysisTab === 'complexity' ? (
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {analysisLoading ? (
+              {complexityLoading ? (
                 <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /><span className="ml-2 text-slate-400 text-sm">Analyzing...</span></div>
               ) : complexityResult ? (
                 <div className="space-y-2">
@@ -624,15 +626,15 @@ export default function InterviewPage() {
               )}
               <button onClick={async () => {
                 if (!code) return;
-                setAnalysisLoading(true);
+                setComplexityLoading(true);
                 try {
                   const r = await codeAnalysisService.analyze?.(code, language);
                   setComplexityResult(r);
                   toast.success('Complexity analysis complete');
                 } catch { toast.error('Analysis failed'); }
-                setAnalysisLoading(false);
-              }} disabled={analysisLoading || !code} className="w-full py-2 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-lg text-sm font-bold hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 transition">
-                {analysisLoading ? 'Analyzing...' : '📊 Analyze Complexity'}
+                setComplexityLoading(false);
+              }} disabled={complexityLoading || !code} className="w-full py-2 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-lg text-sm font-bold hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 transition">
+                {complexityLoading ? 'Analyzing...' : '📊 Analyze Complexity'}
               </button>
             </div>
           ) : analysisTab === 'llm' ? (

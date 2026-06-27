@@ -1,3 +1,4 @@
+import { EXTERNAL_URLS } from "@/config/urls";
 import { SignIn } from "@clerk/clerk-react";
 
 export default function SignInPage() {
@@ -18,7 +19,7 @@ export default function SignInPage() {
       <div className="mt-8 text-center">
         <p className="text-gray-500 text-xs mb-2">Don't have a resume yet?</p>
         <a
-          href="https://texfolio.vercel.app"
+          href={EXTERNAL_URLS.TEXFOLIO}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"

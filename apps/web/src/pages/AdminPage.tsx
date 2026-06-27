@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 
 type Framework = "SOC2" | "GDPR" | "HIPAA" | "ISO27001";
 
@@ -93,7 +94,7 @@ export default function AdminPage() {
       setAgentList(agents?.agents || []);
       setObservabilityData(obs);
     } catch (e) {
-      console.error("Error loading admin data:", e);
+      logger.error("Error loading admin data:", e);
     }
     setLoading(false);
   };
@@ -124,7 +125,7 @@ export default function AdminPage() {
         }))
       );
     } catch (e) {
-      console.error("Error loading reports:", e);
+      logger.error("Error loading reports:", e);
     }
     setReportLoading(false);
   };
@@ -210,9 +211,9 @@ export default function AdminPage() {
           <div>
             {activeTab === "compliance" && <CompliancePanel controls={securityControls} />}
             {activeTab === "audit" && (
-              <AuditPanel logs={auditLogs} onExport={handleExportAudit} />
+              <AuditPanel logs={auditLogs} onExport={handleExportAudit} onRefresh={loadAdminData} />
             )}
-            {activeTab === "tenants" && <TenantsPanel tenants={tenants} />}
+            {activeTab === "tenants" && <TenantsPanel tenants={tenants} onRefresh={loadAdminData} />}
             {activeTab === "reports" && (
               <ReportsPanel reports={reports} loading={reportLoading} />
             )}
@@ -325,7 +326,7 @@ function CompliancePanel({ controls }: { controls: any[] }) {
   );
 }
 
-function AuditPanel({ logs, onExport }: { logs: any[]; onExport: () => void }) {
+function AuditPanel({ logs, onExport, onRefresh }: { logs: any[]; onExport: () => void; onRefresh?: () => void }) {
   return (
     <Card className="bg-gray-800/80 border-gray-700/50">
       <CardHeader>
@@ -347,7 +348,7 @@ function AuditPanel({ logs, onExport }: { logs: any[]; onExport: () => void }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.location.reload()}
+              onClick={onRefresh}
               className="border-slate-700 text-slate-300 hover:text-white"
             >
               <RefreshCw className="w-4 h-4 mr-2" />
@@ -417,12 +418,24 @@ function AuditPanel({ logs, onExport }: { logs: any[]; onExport: () => void }) {
   );
 }
 
-function TenantsPanel({ tenants }: { tenants: any[] }) {
+function TenantsPanel({ tenants, onRefresh }: { tenants: any[]; onRefresh?: () => void }) {
   const plans = ["free", "starter", "professional", "enterprise"];
   const planCounts = plans.map((plan) => ({
     plan,
     count: tenants.filter((t: any) => t.plan === plan).length,
   }));
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({ name: '', domain: '', plan: 'free' });
+
+  const handleAddTenant = async () => {
+    try {
+      await tenantService.create(formData);
+      toast.success('Tenant created');
+      setShowForm(false);
+      setFormData({ name: '', domain: '', plan: 'free' });
+      onRefresh?.();
+    } catch { toast.error('Failed to create tenant'); }
+  };
 
   return (
     <div className="space-y-6">
@@ -431,11 +444,24 @@ function TenantsPanel({ tenants }: { tenants: any[] }) {
           <Building2 className="w-5 h-5 text-blue-400" />
           Tenant Management
         </h2>
-        <Button size="sm" className="bg-blue-600 hover:bg-blue-500">
+        <Button size="sm" onClick={() => setShowForm(!showForm)} className="bg-blue-600 hover:bg-blue-500">
           <Users className="w-4 h-4 mr-2" />
-          Add Tenant
+          {showForm ? 'Cancel' : 'Add Tenant'}
         </Button>
       </div>
+
+      {showForm && (
+        <Card className="bg-gray-800/80 border-gray-700/50 p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+            <input value={formData.name} onChange={e => setFormData(f => ({ ...f, name: e.target.value }))} placeholder="Tenant name" className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+            <input value={formData.domain} onChange={e => setFormData(f => ({ ...f, domain: e.target.value }))} placeholder="Domain (optional)" className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white" />
+            <select value={formData.plan} onChange={e => setFormData(f => ({ ...f, plan: e.target.value }))} className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white">
+              {plans.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <Button onClick={handleAddTenant} size="sm" className="bg-blue-600 hover:bg-blue-500">Create Tenant</Button>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {planCounts.map(({ plan, count }) => (
@@ -517,6 +543,7 @@ function TenantsPanel({ tenants }: { tenants: any[] }) {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => tenantService.get(tenant.id).then(() => toast.info('Tenant details loaded')).catch(() => toast.error('Failed to load tenant'))}
                           className="text-slate-400 hover:text-white"
                         >
                           <Settings className="w-4 h-4 mr-1" />
@@ -633,6 +660,15 @@ function ReportsPanel({ reports, loading }: { reports: ComplianceReport[]; loadi
 
               <Button
                 variant="outline"
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `compliance-${report.framework}-${new Date().toISOString().split('T')[0]}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
                 className="w-full border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800"
               >
                 <Download className="w-4 h-4 mr-2" />
@@ -649,6 +685,7 @@ function ReportsPanel({ reports, loading }: { reports: ComplianceReport[]; loadi
 function InfrastructurePanel({ data }: { data: any }) {
   const [health, setHealth] = useState<any>(data || null);
   const [systemInfo, setSystemInfo] = useState<any>(null);
+  const [loading, setLoading] = useState(!data);
 
   useEffect(() => {
     Promise.all([
@@ -657,8 +694,20 @@ function InfrastructurePanel({ data }: { data: any }) {
     ]).then(([h, sys]) => {
       if (h) setHealth(h);
       if (sys) setSystemInfo(sys);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-6 w-48 bg-slate-800 rounded-lg" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 bg-slate-800 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-32 w-full bg-slate-800 rounded-xl" />
+      </div>
+    );
+  }
 
   const handleClearCache = async () => {
     try {
@@ -720,6 +769,7 @@ function InfrastructurePanel({ data }: { data: any }) {
 function ObservabilityPanel({ data }: { data: any }) {
   const [metrics, setMetrics] = useState<any>(data || null);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(!data);
 
   useEffect(() => {
     Promise.all([
@@ -728,8 +778,20 @@ function ObservabilityPanel({ data }: { data: any }) {
     ]).then(([m, a]) => {
       if (m) setMetrics(m);
       if (a?.alerts) setAlerts(a.alerts);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-6 w-48 bg-slate-800 rounded-lg" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 bg-slate-800 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-32 w-full bg-slate-800 rounded-xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -790,15 +852,29 @@ function ObservabilityPanel({ data }: { data: any }) {
 function AgentsPanel({ agents }: { agents: any[] }) {
   const [list, setList] = useState<any[]>(agents || []);
   const [running, setRunning] = useState(false);
+  const [loading, setLoading] = useState(!agents?.length);
 
   useEffect(() => {
-    if (agents?.length) setList(agents);
-    else {
+    if (agents?.length) {
+      setList(agents);
+      setLoading(false);
+    } else {
       agentService.getAgents?.().then((data: any) => {
         setList(data?.agents || data || []);
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => setLoading(false));
     }
   }, [agents]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-6 w-48 bg-slate-800 rounded-lg" />
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full bg-slate-800 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
 
   const handleRunAgent = async (name: string) => {
     setRunning(true);

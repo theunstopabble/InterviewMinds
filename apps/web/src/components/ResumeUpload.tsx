@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 
 export default function ResumeUpload() {
   const [file, setFile] = useState<File | null>(null);
@@ -82,7 +83,7 @@ export default function ResumeUpload() {
       // Thoda delay taaki toast dikhe
       setTimeout(() => navigate("/interview"), 1000);
     } catch (error: unknown) {
-      console.error("Upload failed", error);
+      logger.error("Upload failed", error);
 
       const errorMessage =
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

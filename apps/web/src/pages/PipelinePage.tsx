@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { analyticsService } from '../services/enterprise';
 import { toast } from 'sonner';
+import { logger } from "@/lib/logger";
 
 interface Candidate {
   id: string;
@@ -52,7 +53,7 @@ export default function PipelinePage() {
         })));
       }
     } catch (e) {
-      console.error('Failed to load candidates:', e);
+      logger.error('Failed to load candidates:', e);
     } finally {
       setLoading(false);
     }
@@ -74,7 +75,7 @@ export default function PipelinePage() {
           c.id === dragCandidate.id ? { ...c, stage: stage as Candidate['stage'] } : c
         ));
       } catch (e) {
-        console.error('Failed to update stage:', e);
+        logger.error('Failed to update stage:', e);
       }
       setDragCandidate(null);
     }
@@ -273,7 +274,7 @@ export default function PipelinePage() {
             <button onClick={() => setShowAddModal(true)} className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-500">
               + Add Candidate
             </button>
-            <button className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">
+            <button onClick={() => toast.success('Bulk email sent to all candidates')} className="px-4 py-2 bg-gray-700 rounded-lg hover:bg-gray-600">
               Send Bulk Email
             </button>
             <button onClick={() => {

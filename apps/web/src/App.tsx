@@ -8,6 +8,7 @@ import {
 } from "react-router-dom"; // ✅ Added useLocation
 import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import { Play, Upload, FileText, ArrowLeft } from "lucide-react";
+import { EXTERNAL_URLS } from "@/config/urls";
 import { Button } from "@/components/ui/button";
 
 // Components
@@ -131,7 +132,7 @@ function Home() {
                 Don't have a resume yet?
               </p>
               <a
-                href="https://texfolio.vercel.app"
+                href={EXTERNAL_URLS.TEXFOLIO}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg text-sm font-medium transition-all shadow-lg shadow-emerald-600/20"

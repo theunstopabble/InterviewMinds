@@ -1,6 +1,7 @@
 import { useAuth } from "@clerk/clerk-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { logger } from "@/lib/logger";
 
 export const AxiosInterceptor = ({
   children,
@@ -28,7 +29,7 @@ export const AxiosInterceptor = ({
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          console.error("Unauthorized! Redirecting to login...");
+          logger.error("Unauthorized! Redirecting to login...");
         }
         return Promise.reject(error);
       },
