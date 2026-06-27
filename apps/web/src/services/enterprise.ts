@@ -5,7 +5,11 @@ declare global {
         getToken: () => Promise<string | null>;
       };
       user?: {
+        id: string;
         get: (id: string) => Promise<{ id: string }>;
+      };
+      organization?: {
+        id: string;
       };
     };
   }

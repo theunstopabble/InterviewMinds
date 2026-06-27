@@ -1,3 +1,5 @@
+import { initializeApp, cert, type App } from "firebase-admin";
+import { getMessaging, type Message } from "firebase-admin/messaging";
 import { logger } from "./logger";
 import { DeviceRegistrationModel, IDeviceRegistration } from "../models/DeviceRegistration";
 
@@ -19,12 +21,34 @@ export interface DeviceRegistration {
   lastActive: Date;
 }
 
-export interface NotificationPayload {
-  to: string;
-  notification: PushNotification;
-  data?: Record<string, unknown>;
-  priority?: "high" | "normal";
-  ttl?: number;
+let firebaseApp: App | null = null;
+
+function initFirebase(): boolean {
+  if (firebaseApp) return true;
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+  if (!projectId || !privateKey || !clientEmail) {
+    logger.warn("FIREBASE_PROJECT_ID / FIREBASE_PRIVATE_KEY / FIREBASE_CLIENT_EMAIL not set — push notifications disabled");
+    return false;
+  }
+
+  try {
+    firebaseApp = initializeApp({
+      credential: cert({
+        projectId,
+        privateKey,
+        clientEmail,
+      }),
+    });
+    logger.info("Firebase Admin SDK initialized for push notifications");
+    return true;
+  } catch (err) {
+    logger.error({ err }, "Failed to initialize Firebase Admin SDK");
+    return false;
+  }
 }
 
 function toDeviceRegistration(doc: IDeviceRegistration): DeviceRegistration {
@@ -82,24 +106,52 @@ export async function sendPushNotification(
   notification: PushNotification,
   options?: { priority?: "high" | "normal"; ttl?: number }
 ): Promise<{ sent: number; failed: number; results: unknown[] }> {
-  const devices = await DeviceRegistrationModel.find({ userId, isActive: true });
+  if (!initFirebase()) {
+    return { sent: 0, failed: 0, results: [] };
+  }
 
+  const devices = await DeviceRegistrationModel.find({ userId, isActive: true });
   const results: unknown[] = [];
+  let sent = 0;
   let failed = 0;
 
   for (const device of devices) {
     try {
-      const payload: NotificationPayload = {
-        to: device.deviceToken,
-        notification,
-        priority: options?.priority || "normal",
-        ttl: options?.ttl || 3600,
+      const message: Message = {
+        token: device.deviceToken,
+        notification: {
+          title: notification.title,
+          body: notification.body,
+          imageUrl: notification.icon,
+        },
+        android: {
+          priority: options?.priority === "high" ? "high" : "normal",
+          ttl: (options?.ttl || 3600) * 1000,
+        },
+        apns: {
+          payload: {
+            aps: {
+              badge: notification.badge ? parseInt(notification.badge, 10) : undefined,
+              "mutable-content": 1,
+            },
+          },
+        },
+        webpush: {
+          notification: {
+            icon: notification.icon,
+            badge: notification.badge,
+            actions: notification.actions?.map(a => ({
+              action: a.action,
+              title: a.title,
+              icon: a.icon,
+            })),
+          },
+        },
+        data: notification.data as { [key: string]: string } | undefined,
       };
 
-      if (device.platform === "web") {
-        payload.data = { ...notification.data, "mutable-content": true };
-      }
-
+      await getMessaging().send(message);
+      sent++;
       results.push({ deviceId: (device.deviceInfo as any)?.deviceId || device.id, platform: device.platform, success: true });
     } catch (error) {
       failed++;
@@ -107,13 +159,9 @@ export async function sendPushNotification(
     }
   }
 
-  logger.info(`Push notification sent to user ${userId}: ${devices.length - failed}/${devices.length} successful`);
+  logger.info({ userId, sent, failed, total: devices.length }, "Push notification sent");
 
-  return {
-    sent: devices.length - failed,
-    failed,
-    results,
-  };
+  return { sent, failed, results };
 }
 
 export async function sendBatchNotifications(
@@ -221,13 +269,8 @@ export async function scheduleNotification(
   scheduledTime: Date
 ): Promise<{ scheduledId: string; scheduledAt: Date }> {
   const scheduledId = `sched_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
   logger.info(`Notification scheduled: ${scheduledId} for user ${userId} at ${scheduledTime}`);
-
-  return {
-    scheduledId,
-    scheduledAt: scheduledTime,
-  };
+  return { scheduledId, scheduledAt: scheduledTime };
 }
 
 export function getNotificationStats(userId: string): {
@@ -236,10 +279,5 @@ export function getNotificationStats(userId: string): {
   opened: number;
   clicked: number;
 } {
-  return {
-    total: 45,
-    delivered: 42,
-    opened: 35,
-    clicked: 28,
-  };
+  return { total: 0, delivered: 0, opened: 0, clicked: 0 };
 }

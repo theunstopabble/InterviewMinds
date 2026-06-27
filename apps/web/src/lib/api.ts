@@ -41,10 +41,10 @@ api.interceptors.response.use(
     const status = error.response.status;
 
     if (status === 401) {
-      console.warn("Unauthorized - redirecting to sign in");
+      logger.warn("Unauthorized - redirecting to sign in");
       window.location.href = "/sign-in";
     } else if (status === 429) {
-      console.warn("Rate limited. Please wait before retrying.");
+      logger.warn("Rate limited. Please wait before retrying.");
     }
 
     return Promise.reject(error);

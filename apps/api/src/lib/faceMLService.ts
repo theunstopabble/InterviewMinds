@@ -10,6 +10,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import { logger } from "./logger";
 
 // Types for face-api results (avoid importing face-api at module level due to env issues)
 export interface MLFaceDetection {
@@ -77,7 +78,7 @@ export async function initializeFaceML(): Promise<boolean> {
     // Check if model directory exists
     if (!fs.existsSync(MODEL_DIR)) {
       modelLoadError = `Model directory not found: ${MODEL_DIR}`;
-      console.warn(`[VideoProctoring] ML models not available: ${modelLoadError}. Using content-derived analysis.`);
+      logger.warn(`[VideoProctoring] ML models not available: ${modelLoadError}. Using content-derived analysis.`);
       return false;
     }
 
@@ -87,11 +88,11 @@ export async function initializeFaceML(): Promise<boolean> {
     await faceapi.nets.faceExpressionNet.loadFromDisk(MODEL_DIR);
 
     modelsLoaded = true;
-    console.info('[VideoProctoring] Face-api.js ML models loaded successfully');
+    logger.info('[VideoProctoring] Face-api.js ML models loaded successfully');
     return true;
   } catch (err: any) {
     modelLoadError = err?.message || String(err);
-    console.warn(`[VideoProctoring] Failed to load ML models: ${modelLoadError}. Using content-derived analysis.`);
+    logger.warn(`[VideoProctoring] Failed to load ML models: ${modelLoadError}. Using content-derived analysis.`);
     return false;
   }
 }
@@ -146,7 +147,7 @@ export async function runMLInference(imageBuffer: Buffer): Promise<MLAnalysisRes
       faceCount: detections.length,
     };
   } catch (err: any) {
-    console.warn(`[VideoProctoring] ML inference failed: ${err?.message}. Falling back to content-derived analysis.`);
+    logger.warn(`[VideoProctoring] ML inference failed: ${err?.message}. Falling back to content-derived analysis.`);
     return null;
   }
 }

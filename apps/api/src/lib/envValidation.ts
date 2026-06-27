@@ -93,6 +93,18 @@ const envVars: EnvVarConfig[] = [
     name: "SENTRY_DSN",
     required: false,
   },
+  {
+    name: "FIREBASE_PROJECT_ID",
+    required: false,
+  },
+  {
+    name: "FIREBASE_PRIVATE_KEY",
+    required: false,
+  },
+  {
+    name: "FIREBASE_CLIENT_EMAIL",
+    required: false,
+  },
 ];
 
 interface ValidationResult {

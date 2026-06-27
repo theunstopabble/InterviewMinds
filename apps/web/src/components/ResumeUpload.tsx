@@ -74,7 +74,7 @@ export default function ResumeUpload() {
 
       // ✅ Store safely in LocalStorage
       localStorage.setItem("resumeId", resumeId);
-      console.log("✅ Resume ID Saved:", resumeId);
+      logger.info("Resume ID Saved:", resumeId);
 
       toast.success("Resume Analyzed!", {
         description: "Redirecting to interview setup...",

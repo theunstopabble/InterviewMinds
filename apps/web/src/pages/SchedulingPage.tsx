@@ -15,7 +15,6 @@ interface Interview {
 }
 
 function getCurrentTenantId(): string {
-  // @ts-expect-error - Clerk organization hook
   return window.Clerk?.organization?.id || 'default';
 }
 
@@ -34,7 +33,7 @@ export default function SchedulingPage() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
   useEffect(() => {
-    const orgId = (window as any).Clerk?.organization?.id || getCurrentTenantId();
+    const orgId = window.Clerk?.organization?.id || getCurrentTenantId();
     setTenantId(orgId);
     loadInitialData();
   }, []);

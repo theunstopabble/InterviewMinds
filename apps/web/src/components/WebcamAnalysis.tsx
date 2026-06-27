@@ -56,7 +56,7 @@ export default function WebcamAnalysis({
       ]);
       setIsModelLoaded(true);
       setModelError(null);
-      console.log("✅ AI Models Loaded");
+      logger.info("AI Models Loaded");
       startVideo();
     } catch (err) {
       logger.error("❌ Model Load Error:", err);

@@ -17,6 +17,7 @@ export interface InterviewSlot {
 export interface ScheduledInterview {
   id: string;
   candidateId: string;
+  candidateName: string;
   interviewerId: string;
   slotId: string;
   scheduledTime: Date;
@@ -163,6 +164,7 @@ class SchedulingService {
     interviewerId: string,
     slotId: string,
     candidateId: string,
+    candidateName: string = 'Candidate',
     interviewType: 'live' | 'async' | 'take-home' = 'live',
     role: string = 'Technical Interview'
   ): Promise<ScheduledInterview | null> {
@@ -176,6 +178,7 @@ class SchedulingService {
 
       const interviewDoc = await ScheduledInterviewModel.create({
         candidateId,
+        candidateName,
         interviewerId,
         slotId,
         scheduledTime: slot.startTime,
@@ -192,7 +195,7 @@ class SchedulingService {
         candidateId,
         'interview-scheduled',
         {
-          candidate_name: candidateId,
+          candidate_name: candidateName,
           role,
           interview_date: slot.startTime.toLocaleDateString('en-US'),
           interview_time: slot.startTime.toLocaleTimeString('en-US'),
@@ -204,6 +207,7 @@ class SchedulingService {
       return {
         id: interviewDoc.id,
         candidateId: interviewDoc.candidateId,
+        candidateName: interviewDoc.candidateName,
         interviewerId: interviewDoc.interviewerId,
         slotId: interviewDoc.slotId,
         scheduledTime: interviewDoc.scheduledTime,
@@ -243,7 +247,7 @@ class SchedulingService {
         interview.candidateId,
         'interview-rescheduled',
         {
-          candidate_name: interview.candidateId,
+          candidate_name: interview.candidateName || 'Candidate',
           role: interview.role,
           interview_date: interview.scheduledTime.toLocaleDateString('en-US'),
           interview_time: interview.scheduledTime.toLocaleTimeString('en-US'),
@@ -255,6 +259,7 @@ class SchedulingService {
       return {
         id: interview.id,
         candidateId: interview.candidateId,
+        candidateName: interview.candidateName,
         interviewerId: interview.interviewerId,
         slotId: interview.slotId,
         scheduledTime: interview.scheduledTime,
@@ -288,7 +293,7 @@ class SchedulingService {
         interview.candidateId,
         'interview-cancelled',
         {
-          candidate_name: interview.candidateId,
+          candidate_name: interview.candidateName || 'Candidate',
           role: interview.role,
           interview_date: interview.scheduledTime.toLocaleDateString('en-US'),
           reason: reason || 'No specific reason provided.',
@@ -316,6 +321,7 @@ class SchedulingService {
       return interviews.map((i) => ({
         id: i.id,
         candidateId: i.candidateId,
+        candidateName: i.candidateName,
         interviewerId: i.interviewerId,
         slotId: i.slotId,
         scheduledTime: i.scheduledTime,
@@ -345,6 +351,7 @@ class SchedulingService {
       return interviews.map((i) => ({
         id: i.id,
         candidateId: i.candidateId,
+        candidateName: i.candidateName,
         interviewerId: i.interviewerId,
         slotId: i.slotId,
         scheduledTime: i.scheduledTime,
@@ -391,7 +398,7 @@ class SchedulingService {
         interview.candidateId,
         'interview-completed',
         {
-          candidate_name: interview.candidateId,
+          candidate_name: interview.candidateName || 'Candidate',
           role: interview.role,
           response_time: '48 hours',
         }
@@ -422,7 +429,7 @@ class SchedulingService {
         interview.candidateId,
         'rejection-notification',
         {
-          candidate_name: interview.candidateId,
+          candidate_name: interview.candidateName || 'Candidate',
           role: interview.role,
           email: interview.candidateId,
         }
@@ -456,7 +463,7 @@ class SchedulingService {
         interview.candidateId,
         'offer-letter',
         {
-          candidate_name: interview.candidateId,
+          candidate_name: interview.candidateName || 'Candidate',
           role: interview.role,
           company_name: offerDetails.companyName,
           response_deadline: offerDetails.responseDeadline,
@@ -497,8 +504,8 @@ export async function getAvailableSlots(tenantId: string, date: string, timezone
   return schedulingService.getAvailableSlots(tenantId, localDate, timezone);
 }
 
-export async function bookSlot(tenantId: string, slotId: string, type: any, candidateId?: string, role?: string): Promise<any> {
-  const result = await schedulingService.bookSlot(tenantId, slotId, candidateId || "default", type || "live", role || "Technical Interview");
+export async function bookSlot(tenantId: string, slotId: string, type: any, candidateId?: string, candidateName?: string, role?: string): Promise<any> {
+  const result = await schedulingService.bookSlot(tenantId, slotId, candidateId || "default", candidateName || "Candidate", type || "live", role || "Technical Interview");
   if (!result) {
     throw new Error('Slot not found or already booked');
   }

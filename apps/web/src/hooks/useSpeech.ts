@@ -131,7 +131,7 @@ export const useSpeech = (): UseSpeechReturn => {
 
         recognitionRef.current = recognition;
       } catch (e) {
-        console.warn("Speech recognition initialization failed:", e);
+        logger.warn("Speech recognition initialization failed:", e);
       }
     }
 
@@ -182,7 +182,7 @@ export const useSpeech = (): UseSpeechReturn => {
           setTtsProvider("azure");
           await speakWithAzure(text, gender);
         } catch (azureError) {
-          console.warn("Azure TTS failed, falling back to browser:", azureError);
+          logger.warn("Azure TTS failed, falling back to browser:", azureError);
           try {
             setTtsProvider("browser");
             await speakWithBrowser(text);

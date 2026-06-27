@@ -10,8 +10,110 @@
  * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10, 3.11, 3.12, 3.13
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fc from "fast-check";
+
+// Mock MongoDB models for tests that verify service behavior (not DB behavior)
+// These prevent timeouts in CI where no MongoDB connection exists.
+import type { Mock } from "vitest";
+
+const mockDoc = (overrides: Record<string, unknown> = {}) => ({
+  _id: `mock_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  ...overrides,
+});
+
+vi.mock("../models/AuditLog", () => ({
+  AuditLogModel: {
+    create: vi.fn((data: any) => Promise.resolve(mockDoc(data))),
+    find: vi.fn(() => ({
+      sort: vi.fn(() => ({
+        lean: vi.fn(() => Promise.resolve([])),
+      })),
+    })),
+    findOne: vi.fn(() => ({
+      lean: vi.fn(() => Promise.resolve(null)),
+    })),
+    countDocuments: vi.fn(() => Promise.resolve(0)),
+  },
+}));
+
+const mockAgentData = [
+  { name: "Resume Screening Agent", type: "screening", isActive: true, tools: ["score.resume"], model: "llama-3.3-70b-versatile", temperature: 0.3, maxTokens: 1024, systemPrompt: "You are an expert technical recruiter." },
+  { name: "Scheduling Agent", type: "scheduling", isActive: true, tools: ["find.slot"], model: "llama-3.3-70b-versatile", temperature: 0.2, maxTokens: 256, systemPrompt: "You are an interview scheduler." },
+  { name: "Feedback Agent", type: "feedback", isActive: true, tools: ["analyze.responses"], model: "llama-3.3-70b-versatile", temperature: 0.4, maxTokens: 1200, systemPrompt: "You are a senior engineering manager giving feedback." },
+];
+
+const mockAutomationData = [
+  { id: "auto_001", name: "Candidate Follow-up", trigger: "interview_completed", actions: [{ type: "email", config: {} }], isActive: true, runCount: 0 },
+  { id: "auto_002", name: "Interview Reminder", trigger: "schedule_reminder", actions: [{ type: "notification", config: {} }], isActive: true, runCount: 0 },
+];
+
+const chainableFind = (resolveValue: any) => ({
+  sort: vi.fn(() => chainableFind(resolveValue)),
+  lean: vi.fn(() => Promise.resolve(resolveValue)),
+});
+
+const chainableFindOne = (resolveValue: any) => ({
+  lean: vi.fn(() => Promise.resolve(resolveValue)),
+});
+
+vi.mock("../models/AgentConfig", () => ({
+  AgentConfigModel: {
+    find: vi.fn(() => chainableFind(mockAgentData)),
+    findOne: vi.fn((filter: any) => {
+      const agent = mockAgentData.find(a => a.name === filter?.name) || null;
+      return chainableFindOne(agent);
+    }),
+    countDocuments: vi.fn(() => Promise.resolve(3)),
+    create: vi.fn((data: any) => Promise.resolve(mockDoc(data))),
+  },
+}));
+
+vi.mock("../models/Automation", () => ({
+  AutomationModel: {
+    find: vi.fn((filter?: any) => {
+      if (filter?.isActive && filter?.trigger) {
+        const matches = mockAutomationData.filter(a => a.isActive === filter.isActive && a.trigger === filter.trigger);
+        return chainableFind(matches);
+      }
+      return chainableFind(mockAutomationData);
+    }),
+    findOne: vi.fn((filter: any) => {
+      const auto = mockAutomationData.find(a => a.id === filter?.id) || null;
+      return chainableFindOne(auto);
+    }),
+    countDocuments: vi.fn(() => Promise.resolve(2)),
+    create: vi.fn((data: any) => Promise.resolve(mockDoc(data))),
+  },
+}));
+
+vi.mock("../models/Sandbox", () => ({
+  SandboxModel: {
+    create: vi.fn((data: any) => Promise.resolve(mockDoc({ ...data, id: data.id || `sandbox_${Date.now()}` }))),
+    findOne: vi.fn(() => chainableFindOne(null)),
+    deleteOne: vi.fn(() => Promise.resolve({ deletedCount: 1 })),
+  },
+}));
+
+vi.mock("../models/Notification", () => ({
+  NotificationModel: {
+    create: vi.fn((data: any) => Promise.resolve(mockDoc(data))),
+    find: vi.fn(() => chainableFind([])),
+    findOneAndUpdate: vi.fn(() => Promise.resolve(null)),
+    findByIdAndUpdate: vi.fn(() => Promise.resolve(null)),
+    countDocuments: vi.fn(() => Promise.resolve(0)),
+  },
+}));
+
+vi.mock("../models/BackgroundCheck", () => ({
+  BackgroundCheckModel: {
+    create: vi.fn((data: any) => Promise.resolve(mockDoc(data))),
+    findOne: vi.fn(() => Promise.resolve(null)),
+    find: vi.fn(() => Promise.resolve([])),
+  },
+}));
 
 // Category A services - already production-ready
 import { getInterviewTrends, getTopPerformers, analyzePipeline, getDashboardAnalytics } from "../lib/analytics";

@@ -15,6 +15,7 @@ export interface IInterviewSlot extends Document {
 export interface IScheduledInterview extends Document {
   id: string;
   candidateId: string;
+  candidateName: string;
   interviewerId: string;
   slotId: string;
   scheduledTime: Date;
@@ -51,6 +52,7 @@ interviewSlotSchema.index({ interviewerId: 1, startTime: 1, endTime: 1 });
 const scheduledInterviewSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true, default: () => uuidv4() },
   candidateId: { type: String, required: true, index: true },
+  candidateName: { type: String, default: 'Candidate' },
   interviewerId: { type: String, required: true, index: true },
   slotId: { type: String, required: true },
   scheduledTime: { type: Date, required: true },

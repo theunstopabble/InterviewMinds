@@ -63,8 +63,8 @@ router.get('/slots/:tenantId', requireAuth, async (req, res) => {
 // POST /api/scheduling/book
 router.post('/book', requireAuth, async (req, res) => {
   try {
-    const { tenantId, slotId, type, candidateId, role } = req.body;
-    const interview = await bookSlot(tenantId, slotId, (type as "live" | "async" | "take-home") || "live", candidateId, role);
+    const { tenantId, slotId, type, candidateId, candidateName, role } = req.body;
+    const interview = await bookSlot(tenantId, slotId, (type as "live" | "async" | "take-home") || "live", candidateId, candidateName, role);
     res.json({ success: true, interview });
   } catch (error) {
     logger.error({ err: error }, 'Error booking slot');

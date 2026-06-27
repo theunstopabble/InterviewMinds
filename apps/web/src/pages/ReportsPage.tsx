@@ -14,7 +14,6 @@ interface Report {
 }
 
 function getCurrentUserId(): string {
-  // @ts-expect-error - Clerk global
   return window.Clerk?.user?.id || 'default-user';
 }
 
@@ -28,7 +27,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     // Get user ID from Clerk
-    const uid = (window as any).Clerk?.user?.id || getCurrentUserId();
+    const uid = window.Clerk?.user?.id || getCurrentUserId();
     setUserId(uid);
     loadReports(uid);
   }, []);
