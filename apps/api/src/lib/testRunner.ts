@@ -49,20 +49,101 @@ export const supportedLanguages: SupportedLanguage[] = [
   { id: "rust", name: "Rust", extensions: ["rs"], compileCommand: "rustc", runCommand: "./main", timeout: 10000 },
 ];
 
+const PISTON_API = "https://emkc.org/api/v2/piston";
+
+const runtimeVersions: Record<string, string> = {
+  javascript: "18.15.0",
+  typescript: "5.0.3",
+  python: "3.10.0",
+  java: "15.0.2",
+  cpp: "10.2.0",
+  go: "1.16.0",
+  rust: "1.68.2",
+};
+
+let fetchedVersions: Record<string, string> = {};
+
+async function fetchRuntimes(): Promise<void> {
+  try {
+    const res = await fetch(`${PISTON_API}/runtimes`);
+    if (!res.ok) return;
+    const runtimes: Array<{ language: string; version: string }> = await res.json();
+    for (const lang of supportedLanguages) {
+      const match = runtimes.find(r => r.language === lang.id);
+      if (match) fetchedVersions[lang.id] = match.version;
+    }
+    logger.info(`Fetched ${Object.keys(fetchedVersions).length} Piston runtime versions`);
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch Piston runtimes, using defaults");
+  }
+}
+
+function serializeInput(input: unknown): string {
+  if (input === null || input === undefined) return "";
+  if (typeof input === "string") return input;
+  if (typeof input === "number" || typeof input === "boolean") return String(input);
+  return JSON.stringify(input);
+}
+
+function normalizeOutput(output: string): string {
+  return output.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
+async function pistonExecute(
+  language: string,
+  version: string,
+  code: string,
+  stdin: string,
+  timeout: number
+): Promise<{ stdout: string; stderr: string; error?: string }> {
+  try {
+    const res = await fetch(`${PISTON_API}/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        language,
+        version,
+        files: [{ content: code }],
+        stdin,
+        args: [],
+        run_timeout: Math.min(timeout, 10000),
+        compile_timeout: 20000,
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      return { stdout: "", stderr: "", error: `Piston API error ${res.status}: ${text}` };
+    }
+
+    const data = await res.json();
+    const run = data.run || {};
+    return {
+      stdout: run.stdout || "",
+      stderr: run.stderr || "",
+      error: run.stderr || (run.signal ? `Killed by signal ${run.signal}` : undefined),
+    };
+  } catch (err) {
+    return { stdout: "", stderr: "", error: String(err) };
+  }
+}
+
 function createTestRunner(language: string): (code: string, input: unknown) => Promise<{ output: string; error?: string }> {
   return async (code: string, input: unknown) => {
-    logger.info(`Running ${language} code with input: ${JSON.stringify(input)}`);
-    
-    const mockResults: Record<string, { output: string; error?: string }> = {
-      javascript: { output: "42" },
-      python: { output: "42" },
-      java: { output: "42" },
-      cpp: { output: "42" },
-      go: { output: "42" },
-      rust: { output: "42" },
-    };
+    const version = fetchedVersions[language] || runtimeVersions[language] || "*";
+    const langDef = supportedLanguages.find(l => l.id === language);
+    const timeout = langDef?.timeout || 5000;
+    const stdin = serializeInput(input);
 
-    return mockResults[language] || { output: "Unsupported language" };
+    logger.info(`Running ${language} ${version} via Piston`);
+
+    const result = await pistonExecute(language, version, code, stdin, timeout);
+
+    if (result.error && !result.stdout) {
+      return { output: "", error: result.error };
+    }
+
+    return { output: normalizeOutput(result.stdout), error: result.error || undefined };
   };
 }
 
@@ -190,3 +271,5 @@ export function generateTestCases(
 
   return generators[problemType]?.() || [];
 }
+
+fetchRuntimes();
