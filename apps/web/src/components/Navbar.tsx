@@ -108,7 +108,7 @@ export default function Navbar() {
         </Link>
 
         {/* ================= CENTER/RIGHT: DESKTOP MENU ================= */}
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden md:flex items-center gap-4 overflow-x-auto flex-nowrap scrollbar-none">
           {/* 1. Install App Button (Purple Glassy Theme) */}
           {!isInstalled && deferredPrompt && (
             <Button
@@ -127,7 +127,7 @@ export default function Navbar() {
           {/* 2. Navigation Links */}
           {isSignedIn ? (
             <>
-              <Link to="/dashboard">
+              <Link to="/dashboard" className="flex-shrink-0">
                 <Button
                   variant="ghost"
                   className={`gap-2 hover:bg-white/5 transition-colors ${
@@ -234,7 +234,7 @@ export default function Navbar() {
               )}
 
               {/* 🚀 New Interview (Links to Home for Resume Check) */}
-              <Link to="/">
+              <Link to="/" className="flex-shrink-0">
                 <Button
                   className={`gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white border-0 shadow-lg shadow-blue-500/20 transition-all duration-300 ${
                     isActive("/") ? "ring-2 ring-purple-500/50" : ""
@@ -245,8 +245,8 @@ export default function Navbar() {
                 </Button>
               </Link>
 
-              {/* User Profile (Gradient Ring) */}
-              <div className="ml-2 w-9 h-9 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 p-[1px]">
+              {/* User Profile (Gradient Ring) — always visible on desktop */}
+              <div className="ml-2 w-9 h-9 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 p-[1px] flex-shrink-0">
                 <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
                   <UserButton
                     afterSignOutUrl="/sign-in"
