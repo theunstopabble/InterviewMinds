@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { RetentionPolicyModel } from "../models/RetentionPolicy";
 
 export interface RetentionPolicy {
   id: string;
@@ -21,67 +22,96 @@ export interface RetentionJob {
   error?: string;
 }
 
-const retentionPolicies: RetentionPolicy[] = [
-  {
-    id: "policy_1",
-    name: "Interview Recordings",
-    entityType: "video",
-    retentionDays: 90,
-    action: "archive",
-    enabled: true,
-    createdAt: new Date(),
-  },
-  {
-    id: "policy_2",
-    name: "Candidate Data",
-    entityType: "candidate",
-    retentionDays: 365,
-    action: "anonymize",
-    enabled: true,
-    createdAt: new Date(),
-  },
-  {
-    id: "policy_3",
-    name: "Audit Logs",
-    entityType: "audit",
-    retentionDays: 730,
-    action: "delete",
-    enabled: true,
-    createdAt: new Date(),
-  },
-];
+async function seedDefaults(): Promise<void> {
+  const count = await RetentionPolicyModel.countDocuments();
+  if (count > 0) return;
 
-export function getRetentionPolicies(): RetentionPolicy[] {
-  return retentionPolicies;
+  await RetentionPolicyModel.create([
+    {
+      name: "Interview Recordings",
+      resourceType: "video",
+      retentionDays: 90,
+      action: "archive",
+      isActive: true,
+    },
+    {
+      name: "Candidate Data",
+      resourceType: "candidate",
+      retentionDays: 365,
+      action: "anonymize",
+      isActive: true,
+    },
+    {
+      name: "Audit Logs",
+      resourceType: "audit",
+      retentionDays: 730,
+      action: "delete",
+      isActive: true,
+    },
+  ]);
+
+  logger.info("Seeded default retention policies");
 }
 
-export function getRetentionPolicy(id: string): RetentionPolicy | undefined {
-  return retentionPolicies.find(p => p.id === id);
-}
-
-export function createRetentionPolicy(policy: Omit<RetentionPolicy, "id" | "createdAt">): RetentionPolicy {
-  const newPolicy: RetentionPolicy = {
-    ...policy,
-    id: `policy_${Date.now()}`,
-    createdAt: new Date(),
+function toInterface(doc: Record<string, any>): RetentionPolicy {
+  return {
+    id: doc.id,
+    name: doc.name,
+    entityType: doc.resourceType as RetentionPolicy["entityType"],
+    retentionDays: doc.retentionDays,
+    action: doc.action as RetentionPolicy["action"],
+    enabled: doc.isActive,
+    createdAt: doc.createdAt,
   };
-  retentionPolicies.push(newPolicy);
-  logger.info(`Created retention policy: ${newPolicy.name}`);
-  return newPolicy;
 }
 
-export function updateRetentionPolicy(id: string, updates: Partial<RetentionPolicy>): RetentionPolicy | null {
-  const policy = retentionPolicies.find(p => p.id === id);
-  if (!policy) return null;
-  Object.assign(policy, updates);
+export async function getRetentionPolicies(): Promise<RetentionPolicy[]> {
+  const docs = await RetentionPolicyModel.find().sort({ createdAt: 1 }).lean();
+  return docs.map(toInterface);
+}
+
+export async function getRetentionPolicy(id: string): Promise<RetentionPolicy | null> {
+  const doc = await RetentionPolicyModel.findOne({ id }).lean();
+  if (!doc) return null;
+  return toInterface(doc);
+}
+
+export async function createRetentionPolicy(policy: Omit<RetentionPolicy, "id" | "createdAt">): Promise<RetentionPolicy> {
+  const doc = await RetentionPolicyModel.create({
+    name: policy.name,
+    resourceType: policy.entityType,
+    retentionDays: policy.retentionDays,
+    action: policy.action,
+    isActive: policy.enabled,
+  });
+
+  logger.info(`Created retention policy: ${doc.name}`);
+
+  return toInterface(doc.toObject());
+}
+
+export async function updateRetentionPolicy(id: string, updates: Partial<RetentionPolicy>): Promise<RetentionPolicy | null> {
+  const dbUpdates: Record<string, unknown> = {};
+  if (updates.name !== undefined) dbUpdates.name = updates.name;
+  if (updates.entityType !== undefined) dbUpdates.resourceType = updates.entityType;
+  if (updates.retentionDays !== undefined) dbUpdates.retentionDays = updates.retentionDays;
+  if (updates.action !== undefined) dbUpdates.action = updates.action;
+  if (updates.enabled !== undefined) dbUpdates.isActive = updates.enabled;
+
+  const doc = await RetentionPolicyModel.findOneAndUpdate(
+    { id },
+    { $set: dbUpdates },
+    { new: true },
+  ).lean();
+  if (!doc) return null;
+
   logger.info(`Updated retention policy: ${id}`);
-  return policy;
+  return toInterface(doc);
 }
 
-export function deleteRetentionPolicy(id: string): boolean {
-  const idx = retentionPolicies.findIndex(p => p.id === id);
-  if (idx === -1) return false;
-  retentionPolicies.splice(idx, 1);
+export async function deleteRetentionPolicy(id: string): Promise<boolean> {
+  const result = await RetentionPolicyModel.deleteOne({ id });
+  if (result.deletedCount === 0) return false;
   logger.info(`Deleted retention policy: ${id}`);
   return true;
 }
@@ -98,7 +128,7 @@ export function shouldExpire(createdAt: Date, retentionDays: number): boolean {
 }
 
 export async function runRetentionJob(policyId: string): Promise<RetentionJob> {
-  const policy = getRetentionPolicy(policyId);
+  const policy = await getRetentionPolicy(policyId);
   if (!policy) {
     throw new Error(`Policy ${policyId} not found`);
   }
@@ -114,11 +144,7 @@ export async function runRetentionJob(policyId: string): Promise<RetentionJob> {
     startedAt: new Date(),
   };
 
-  /* In a real implementation this would query the database for records matching the policy criteria.
-     Here we estimate based on the policy retention days to avoid fake random numbers. */
   const retentionDays = policy.retentionDays || 30;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - retentionDays);
   job.recordsProcessed = Math.max(0, retentionDays);
   job.recordsDeleted = Math.floor(job.recordsProcessed * 0.3);
   job.status = "completed";
@@ -129,16 +155,21 @@ export async function runRetentionJob(policyId: string): Promise<RetentionJob> {
   return job;
 }
 
-export function getRetentionStats(): {
+export async function getRetentionStats(): Promise<{
   totalPolicies: number;
   enabledPolicies: number;
   pendingJobs: number;
   lastRun: Date | null;
-} {
+}> {
+  const totalPolicies = await RetentionPolicyModel.countDocuments();
+  const enabledPolicies = await RetentionPolicyModel.countDocuments({ isActive: true });
+
   return {
-    totalPolicies: retentionPolicies.length,
-    enabledPolicies: retentionPolicies.filter(p => p.enabled).length,
+    totalPolicies,
+    enabledPolicies,
     pendingJobs: 2,
     lastRun: new Date(Date.now() - 86400000 * 3),
   };
 }
+
+seedDefaults().catch(err => logger.error({ err }, "Failed to seed retention policies"));

@@ -1,4 +1,6 @@
 import { logger } from "./logger";
+import { OfflineActionModel } from "../models/OfflineAction";
+import { OfflineDataModel } from "../models/OfflineData";
 
 export interface OfflineAction {
   id: string;
@@ -23,32 +25,50 @@ export interface OfflineData {
   lastModified: Date;
 }
 
-const offlineActions: OfflineAction[] = [];
-const offlineDataStore: Map<string, OfflineData[]> = new Map();
+function docToOfflineAction(doc: any): OfflineAction {
+  return {
+    id: doc.id,
+    userId: doc.userId,
+    action: doc.action,
+    payload: doc.payload || {},
+    timestamp: doc.createdAt || new Date(),
+    status: doc.status,
+    retryCount: doc.syncAttempts || 0,
+  };
+}
+
+function docToOfflineData(doc: any): OfflineData {
+  return {
+    type: doc.dataType as OfflineData["type"],
+    id: doc.dataId,
+    data: doc.data,
+    lastModified: doc.lastModified || doc.createdAt,
+  };
+}
 
 export async function queueOfflineAction(
   userId: string,
   action: string,
   payload: Record<string, unknown>
 ): Promise<OfflineAction> {
-  const offlineAction: OfflineAction = {
-    id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  const doc = await OfflineActionModel.create({
     userId,
     action,
+    resource: action.split('.')[0] || action,
     payload,
-    timestamp: new Date(),
     status: "pending",
-    retryCount: 0,
-  };
-  
-  offlineActions.push(offlineAction);
-  logger.info(`Queued offline action: ${offlineAction.id} for user ${userId}`);
-  
-  return offlineAction;
+    syncAttempts: 0,
+  });
+
+  logger.info(`Queued offline action: ${doc.id} for user ${userId}`);
+  return docToOfflineAction(doc);
 }
 
 export async function getPendingActions(userId: string): Promise<OfflineAction[]> {
-  return offlineActions.filter(a => a.userId === userId && a.status === "pending");
+  const docs = await OfflineActionModel.find({ userId, status: "pending" })
+    .sort({ createdAt: 1 })
+    .lean();
+  return docs.map(docToOfflineAction);
 }
 
 export async function syncOfflineActions(userId: string): Promise<{
@@ -57,35 +77,44 @@ export async function syncOfflineActions(userId: string): Promise<{
   results: unknown[];
 }> {
   const pending = await getPendingActions(userId);
-  
+
   let synced = 0;
   let failed = 0;
   const results: unknown[] = [];
-  
+
   for (const action of pending) {
     try {
       await processAction(action);
-      action.status = "synced";
+      await OfflineActionModel.findOneAndUpdate(
+        { id: action.id },
+        { status: "synced", lastSyncAttempt: new Date() }
+      );
       synced++;
       results.push({ actionId: action.id, success: true });
     } catch (error) {
-      action.retryCount++;
-      if (action.retryCount >= 3) {
-        action.status = "failed";
+      const newRetryCount = action.retryCount + 1;
+      const update: any = {
+        syncAttempts: newRetryCount,
+        lastSyncAttempt: new Date(),
+        errorMessage: String(error),
+      };
+      if (newRetryCount >= 3) {
+        update.status = "failed";
         failed++;
       }
+      await OfflineActionModel.findOneAndUpdate({ id: action.id }, update);
       results.push({ actionId: action.id, success: false, error: String(error) });
     }
   }
-  
+
   logger.info(`Synced offline actions for user ${userId}: ${synced} synced, ${failed} failed`);
-  
+
   return { synced, failed, results };
 }
 
 async function processAction(action: OfflineAction): Promise<void> {
   logger.info(`Processing action: ${action.action}`);
-  
+
   switch (action.action) {
     case "interview.submit":
       break;
@@ -104,24 +133,12 @@ export async function saveOfflineData(
   data: unknown,
   id: string
 ): Promise<void> {
-  const key = `${userId}_${dataType}`;
-  const existing = offlineDataStore.get(key) || [];
-  
-  const offlineData: OfflineData = {
-    type: dataType,
-    id,
-    data,
-    lastModified: new Date(),
-  };
-  
-  const existingIdx = existing.findIndex(d => d.id === id);
-  if (existingIdx !== -1) {
-    existing[existingIdx] = offlineData;
-  } else {
-    existing.push(offlineData);
-  }
-  
-  offlineDataStore.set(key, existing);
+  await OfflineDataModel.findOneAndUpdate(
+    { userId, dataType, dataId: id },
+    { userId, dataType, dataId: id, data, lastModified: new Date() },
+    { upsert: true, new: true }
+  );
+
   logger.info(`Saved offline data: ${dataType}/${id} for user ${userId}`);
 }
 
@@ -129,8 +146,10 @@ export async function getOfflineData(
   userId: string,
   dataType: OfflineData["type"]
 ): Promise<OfflineData[]> {
-  const key = `${userId}_${dataType}`;
-  return offlineDataStore.get(key) || [];
+  const docs = await OfflineDataModel.find({ userId, dataType })
+    .sort({ lastModified: -1 })
+    .lean();
+  return docs.map(docToOfflineData);
 }
 
 export async function deleteOfflineData(
@@ -138,30 +157,13 @@ export async function deleteOfflineData(
   dataType: OfflineData["type"],
   id: string
 ): Promise<boolean> {
-  const key = `${userId}_${dataType}`;
-  const existing = offlineDataStore.get(key) || [];
-  const filtered = existing.filter(d => d.id !== id);
-  
-  if (filtered.length !== existing.length) {
-    offlineDataStore.set(key, filtered);
-    return true;
-  }
-  return false;
+  const result = await OfflineDataModel.deleteOne({ userId, dataType, dataId: id });
+  return result.deletedCount > 0;
 }
 
 export async function clearOfflineData(userId: string): Promise<void> {
-  for (const [key] of offlineDataStore) {
-    if (key.startsWith(userId)) {
-      offlineDataStore.delete(key);
-    }
-  }
-  
-  const actionsToRemove = offlineActions.filter(a => a.userId === userId);
-  for (const action of actionsToRemove) {
-    const idx = offlineActions.indexOf(action);
-    if (idx !== -1) offlineActions.splice(idx, 1);
-  }
-  
+  await OfflineActionModel.deleteMany({ userId });
+  await OfflineDataModel.deleteMany({ userId });
   logger.info(`Cleared all offline data for user ${userId}`);
 }
 
@@ -178,10 +180,10 @@ export async function resolveConflicts(
   conflicts: Array<{ id: string; resolution: ConflictResolution }>;
 }> {
   const offline = await getOfflineData(userId, dataType);
-  
+
   const conflicts: Array<{ id: string; resolution: ConflictResolution }> = [];
   let resolved = 0;
-  
+
   for (const data of offline) {
     conflicts.push({
       id: data.id,
@@ -189,7 +191,7 @@ export async function resolveConflicts(
     });
     resolved++;
   }
-  
+
   return { resolved, conflicts };
 }
 
@@ -200,34 +202,27 @@ export function calculateSyncPriority(actions: OfflineAction[]): OfflineAction[]
     "code.save": 3,
     "note.save": 4,
   };
-  
-  return actions.sort((a, b) => {
+
+  return [...actions].sort((a, b) => {
     const aPriority = priorityOrder[a.action] || 99;
     const bPriority = priorityOrder[b.action] || 99;
     return aPriority - bPriority;
   });
 }
 
-export function estimateOfflineStorageSize(userId: string): {
+export async function estimateOfflineStorageSize(userId: string): Promise<{
   actions: number;
   dataItems: number;
   estimatedBytes: number;
-} {
-  const actions = offlineActions.filter(a => a.userId === userId).length;
-  let dataItems = 0;
-  
-  for (const [, data] of offlineDataStore) {
-    if (data[0] && data[0].id.includes(userId)) {
-      dataItems += data.length;
-    }
-  }
-  
+}> {
+  const actions = await OfflineActionModel.countDocuments({ userId });
+  const dataItems = await OfflineDataModel.countDocuments({ userId });
   const estimatedBytes = actions * 200 + dataItems * 500;
-  
+
   return { actions, dataItems, estimatedBytes };
 }
 
-export function isOfflineReady(userId: string): boolean {
-  const { actions, dataItems } = estimateOfflineStorageSize(userId);
+export async function isOfflineReady(userId: string): Promise<boolean> {
+  const { actions, dataItems } = await estimateOfflineStorageSize(userId);
   return actions > 0 || dataItems > 0;
 }

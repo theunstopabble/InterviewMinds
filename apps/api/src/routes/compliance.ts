@@ -42,41 +42,76 @@ import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
-router.get("/retention/policies", requireAuth, (req, res) => {
-  const policies = getRetentionPolicies();
-  res.json({ success: true, data: policies });
+router.get("/retention/policies", requireAuth, async (req, res) => {
+  try {
+    const policies = await getRetentionPolicies();
+    res.json({ success: true, data: policies });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Retention route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.get("/retention/policies/:id", requireAuth, (req, res) => {
-  const policy = getRetentionPolicy(req.params.id);
-  if (!policy) return res.status(404).json({ success: false, error: "Policy not found" });
-  res.json({ success: true, data: policy });
+router.get("/retention/policies/:id", requireAuth, async (req, res) => {
+  try {
+    const policy = await getRetentionPolicy(req.params.id);
+    if (!policy) return res.status(404).json({ success: false, error: "Policy not found" });
+    res.json({ success: true, data: policy });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Retention route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.post("/retention/policies", requireAuth, (req, res) => {
-  const policy = createRetentionPolicy(req.body);
-  res.json({ success: true, data: policy });
+router.post("/retention/policies", requireAuth, async (req, res) => {
+  try {
+    const policy = await createRetentionPolicy(req.body);
+    res.json({ success: true, data: policy });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Retention route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.put("/retention/policies/:id", requireAuth, (req, res) => {
-  const policy = updateRetentionPolicy(req.params.id, req.body);
-  if (!policy) return res.status(404).json({ success: false, error: "Policy not found" });
-  res.json({ success: true, data: policy });
+router.put("/retention/policies/:id", requireAuth, async (req, res) => {
+  try {
+    const policy = await updateRetentionPolicy(req.params.id, req.body);
+    if (!policy) return res.status(404).json({ success: false, error: "Policy not found" });
+    res.json({ success: true, data: policy });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Retention route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.delete("/retention/policies/:id", requireAuth, (req, res) => {
-  const deleted = deleteRetentionPolicy(req.params.id);
-  res.json({ success: deleted });
+router.delete("/retention/policies/:id", requireAuth, async (req, res) => {
+  try {
+    const deleted = await deleteRetentionPolicy(req.params.id);
+    res.json({ success: deleted });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Retention route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/retention/run/:policyId", requireAuth, async (req, res) => {
-  const job = await runRetentionJob(req.params.policyId);
-  res.json({ success: true, data: job });
+  try {
+    const job = await runRetentionJob(req.params.policyId);
+    res.json({ success: true, data: job });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Retention route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.get("/retention/stats", requireAuth, (req, res) => {
-  const stats = getRetentionStats();
-  res.json({ success: true, data: stats });
+router.get("/retention/stats", requireAuth, async (req, res) => {
+  try {
+    const stats = await getRetentionStats();
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Retention route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.post("/pii/detect", requireAuth, (req, res) => {
@@ -115,72 +150,122 @@ router.post("/pii/mask-log", requireAuth, (req, res) => {
   res.json({ success: true, data: masked });
 });
 
-router.post("/access/request", requireAuth, (req, res) => {
-  const { requestedPermission, justification, duration, expiryDate } = req.body;
-  const userId = (req as any).user?.id || "user_123";
-  const userName = (req as any).user?.name || "User";
-  const request = createAccessRequest({ userId, userName, requestedPermission, justification, duration, expiryDate });
-  res.json({ success: true, data: request });
+router.post("/access/request", requireAuth, async (req, res) => {
+  try {
+    const { requestedPermission, justification, duration, expiryDate } = req.body;
+    const userId = (req as any).user?.id || "user_123";
+    const userName = (req as any).user?.name || "User";
+    const request = await createAccessRequest({ userId, userName, requestedPermission, justification, duration, expiryDate });
+    res.json({ success: true, data: request });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.get("/access/my-requests", requireAuth, (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const requests = getUserRequests(userId);
-  res.json({ success: true, data: requests });
+router.get("/access/my-requests", requireAuth, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const requests = await getUserRequests(userId);
+    res.json({ success: true, data: requests });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.get("/access/pending", requireAuth, (req, res) => {
-  const approverId = (req as any).user?.id || "approver_123";
-  const requests = getPendingApprovals(approverId);
-  res.json({ success: true, data: requests });
+router.get("/access/pending", requireAuth, async (req, res) => {
+  try {
+    const approverId = (req as any).user?.id || "approver_123";
+    const requests = await getPendingApprovals(approverId);
+    res.json({ success: true, data: requests });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.post("/access/approve/:requestId", requireAuth, (req, res) => {
-  const { requestId } = req.params;
-  const approverId = (req as any).user?.id || "approver_123";
-  const { comment } = req.body;
-  const request = approveRequest(requestId, approverId, comment);
-  if (!request) return res.status(404).json({ success: false, error: "Request not found" });
-  res.json({ success: true, data: request });
+router.post("/access/approve/:requestId", requireAuth, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const approverId = (req as any).user?.id || "approver_123";
+    const { comment } = req.body;
+    const request = await approveRequest(requestId, approverId, comment);
+    if (!request) return res.status(404).json({ success: false, error: "Request not found" });
+    res.json({ success: true, data: request });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.post("/access/reject/:requestId", requireAuth, (req, res) => {
-  const { requestId } = req.params;
-  const approverId = (req as any).user?.id || "approver_123";
-  const { comment } = req.body;
-  const request = rejectRequest(requestId, approverId, comment);
-  if (!request) return res.status(404).json({ success: false, error: "Request not found" });
-  res.json({ success: true, data: request });
+router.post("/access/reject/:requestId", requireAuth, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const approverId = (req as any).user?.id || "approver_123";
+    const { comment } = req.body;
+    const request = await rejectRequest(requestId, approverId, comment);
+    if (!request) return res.status(404).json({ success: false, error: "Request not found" });
+    res.json({ success: true, data: request });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.get("/access/groups", requireAuth, (req, res) => {
-  const groups = getAllPermissionGroups();
-  res.json({ success: true, data: groups });
+router.get("/access/groups", requireAuth, async (req, res) => {
+  try {
+    const groups = await getAllPermissionGroups();
+    res.json({ success: true, data: groups });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.post("/access/groups", requireAuth, (req, res) => {
-  const group = createPermissionGroup(req.body);
-  res.json({ success: true, data: group });
+router.post("/access/groups", requireAuth, async (req, res) => {
+  try {
+    const group = await createPermissionGroup(req.body);
+    res.json({ success: true, data: group });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.post("/access/groups/:groupId/user", requireAuth, (req, res) => {
-  const { userId } = req.body;
-  const group = addUserToGroup(req.params.groupId, userId);
-  if (!group) return res.status(404).json({ success: false, error: "Group not found" });
-  res.json({ success: true, data: group });
+router.post("/access/groups/:groupId/user", requireAuth, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const group = await addUserToGroup(req.params.groupId, userId);
+    if (!group) return res.status(404).json({ success: false, error: "Group not found" });
+    res.json({ success: true, data: group });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.delete("/access/groups/:groupId/user", requireAuth, (req, res) => {
-  const { userId } = req.body;
-  const group = removeUserFromGroup(req.params.groupId, userId);
-  if (!group) return res.status(404).json({ success: false, error: "Group not found" });
-  res.json({ success: true, data: group });
+router.delete("/access/groups/:groupId/user", requireAuth, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const group = await removeUserFromGroup(req.params.groupId, userId);
+    if (!group) return res.status(404).json({ success: false, error: "Group not found" });
+    res.json({ success: true, data: group });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
-router.get("/access/permissions", requireAuth, (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const permissions = getUserPermissions(userId);
-  res.json({ success: true, data: { permissions } });
+router.get("/access/permissions", requireAuth, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const permissions = await getUserPermissions(userId);
+    res.json({ success: true, data: { permissions } });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Access route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 router.get("/audit/logs", requireAuth, async (req, res) => {
@@ -243,7 +328,6 @@ router.post("/audit/log", requireAuth, async (req, res) => {
   res.json({ success: true, data: entry });
 });
 
-// GET /api/compliance/security-controls
 router.get("/security-controls", requireAuth, (_req, res) => {
   try {
     const controls = checkSecurityControls();
@@ -254,7 +338,6 @@ router.get("/security-controls", requireAuth, (_req, res) => {
   }
 });
 
-// GET /api/compliance/report/:framework
 router.get("/report/:framework", requireAuth, (req, res) => {
   try {
     const { framework } = req.params;
@@ -265,7 +348,7 @@ router.get("/report/:framework", requireAuth, (req, res) => {
     const report = genReport(framework as 'SOC2' | 'GDPR' | 'HIPAA' | 'ISO27001');
     const controls = checkSecurityControls();
     const activeControls = controls.filter((c: any) => c.status === 'active').length;
-    
+
     res.json({
       framework,
       status: activeControls >= controls.length * 0.8 ? 'compliant' : 'pending',

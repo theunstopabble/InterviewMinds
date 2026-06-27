@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { logger } from '../lib/logger';
-import { 
-  enrollFace, 
-  enrollVoice, 
+import {
+  enrollFace,
+  enrollVoice,
   enrollFingerprint,
-  verifyFace, 
-  verifyVoice, 
+  verifyFace,
+  verifyVoice,
   verifyFingerprint,
   getEnrollmentStatus,
   removeBiometricEnrollment,
@@ -56,13 +56,13 @@ router.post('/enroll', async (req, res) => {
     let template;
     switch (body.type) {
       case 'face':
-        template = enrollFace(body.userId, body.data);
+        template = await enrollFace(body.userId, body.data);
         break;
       case 'voice':
-        template = enrollVoice(body.userId, body.data);
+        template = await enrollVoice(body.userId, body.data);
         break;
       case 'fingerprint':
-        template = enrollFingerprint(body.userId, body.data);
+        template = await enrollFingerprint(body.userId, body.data);
         break;
     }
 
@@ -90,13 +90,13 @@ router.post('/verify', async (req, res) => {
     let result;
     switch (body.type) {
       case 'face':
-        result = verifyFace(body.userId, body.data, body.sessionData);
+        result = await verifyFace(body.userId, body.data, body.sessionData);
         break;
       case 'voice':
-        result = verifyVoice(body.userId, body.data);
+        result = await verifyVoice(body.userId, body.data);
         break;
       case 'fingerprint':
-        result = verifyFingerprint(body.userId, body.data);
+        result = await verifyFingerprint(body.userId, body.data);
         break;
     }
 
@@ -110,7 +110,7 @@ router.post('/verify', async (req, res) => {
 router.get('/status/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const status = getEnrollmentStatus(userId);
+    const status = await getEnrollmentStatus(userId);
 
     if (!status) {
       res.json({ userId, enrolled: false });
@@ -143,7 +143,7 @@ router.delete('/enrollment/:userId', async (req, res) => {
       return;
     }
 
-    const success = removeBiometricEnrollment(userId, type);
+    const success = await removeBiometricEnrollment(userId, type);
 
     if (!success) {
       res.status(404).json({ error: 'Enrollment not found' });

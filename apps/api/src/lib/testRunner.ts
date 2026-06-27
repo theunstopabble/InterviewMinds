@@ -61,7 +61,7 @@ const runtimeVersions: Record<string, string> = {
   rust: "1.68.2",
 };
 
-let fetchedVersions: Record<string, string> = {};
+const fetchedVersions: Record<string, string> = {};
 
 async function fetchRuntimes(): Promise<void> {
   try {

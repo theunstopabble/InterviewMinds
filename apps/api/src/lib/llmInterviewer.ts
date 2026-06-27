@@ -1,10 +1,11 @@
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
 import { logger } from "./logger";
+import { ConversationMemoryModel } from "../models/ConversationMemory";
 
 dotenv.config();
 
-interface ConversationMemory {
+export interface ConversationMemory {
   messages: Array<{
     role: "user" | "assistant" | "system";
     content: string;
@@ -28,7 +29,7 @@ interface ConversationMemory {
   };
 }
 
-interface InterviewConfig {
+export interface InterviewConfig {
   jobRole: string;
   experienceLevel: string;
   requiredSkills: string[];
@@ -52,69 +53,79 @@ function getGroqClient(): Groq {
 const MAX_MEMORY_LENGTH = 20;
 
 export class LLMInterviewer {
-  private memory: ConversationMemory;
+  private sessionId: string;
   private config: InterviewConfig;
 
-  constructor(config: InterviewConfig) {
+  constructor(sessionId: string, config: InterviewConfig) {
+    this.sessionId = sessionId;
     this.config = config;
-    this.memory = {
-      messages: [],
-      context: {
-        jobRole: config.jobRole,
-        difficulty: config.difficulty,
-        competencies: config.competencies,
-      },
-      metrics: {
-        totalQuestions: 0,
-        correctAnswers: 0,
-        topicCoverage: [],
-        startTime: Date.now(),
-      },
-    };
   }
 
-  addUserMessage(content: string): void {
-    this.memory.messages.push({
-      role: "user",
-      content,
-      timestamp: Date.now(),
-    });
-    this.trimMemory();
+  async addUserMessage(content: string): Promise<void> {
+    await ConversationMemoryModel.findOneAndUpdate(
+      { sessionId: this.sessionId },
+      {
+        $push: {
+          messages: { role: "user", content, timestamp: new Date() },
+        },
+      }
+    );
   }
 
-  addAssistantMessage(content: string): void {
-    this.memory.messages.push({
-      role: "assistant",
-      content,
-      timestamp: Date.now(),
-    });
-    this.memory.metrics.totalQuestions++;
-    this.trimMemory();
+  async addAssistantMessage(content: string): Promise<void> {
+    await ConversationMemoryModel.findOneAndUpdate(
+      { sessionId: this.sessionId },
+      {
+        $push: {
+          messages: { role: "assistant", content, timestamp: new Date() },
+        },
+      }
+    );
+    await this.trimMemory();
   }
 
-  setResumeEntities(entities: {
+  async setResumeEntities(entities: {
     skills: string[];
     experience: string[];
     education: string[];
-  }): void {
-    this.memory.context.resumeEntities = entities;
-  }
-
-  private trimMemory(): void {
-    if (this.memory.messages.length > MAX_MEMORY_LENGTH) {
-      const systemMsg = this.memory.messages.find(m => m.role === "system");
-      this.memory.messages = [
-        ...(systemMsg ? [systemMsg] : []),
-        ...this.memory.messages.slice(-MAX_MEMORY_LENGTH),
-      ];
+  }): Promise<void> {
+    const doc = await ConversationMemoryModel.findOne({ sessionId: this.sessionId });
+    if (doc) {
+      const config = { ...(doc.config || {}), resumeEntities: entities };
+      await ConversationMemoryModel.findOneAndUpdate(
+        { sessionId: this.sessionId },
+        { config }
+      );
     }
   }
 
-  private buildSystemPrompt(): string {
+  private async trimMemory(): Promise<void> {
+    const doc = await ConversationMemoryModel.findOne({ sessionId: this.sessionId });
+    if (doc && doc.messages.length > MAX_MEMORY_LENGTH) {
+      const systemMsgs = doc.messages.filter(m => m.role === "system");
+      const trimmed = [
+        ...systemMsgs,
+        ...doc.messages.slice(-MAX_MEMORY_LENGTH),
+      ];
+      await ConversationMemoryModel.findOneAndUpdate(
+        { sessionId: this.sessionId },
+        { messages: trimmed }
+      );
+    }
+  }
+
+  async buildSystemPrompt(): Promise<string> {
+    const doc = await ConversationMemoryModel.findOne({ sessionId: this.sessionId });
+    if (!doc) throw new Error(`Session ${this.sessionId} not found`);
+
+    const c = (doc.config || {}) as any;
     const personaPrompt = PERSONA_PROMPTS[this.config.persona];
-    const skillsPrompt = this.memory.context.resumeEntities?.skills.length
-      ? `Candidate skills: ${this.memory.context.resumeEntities.skills.join(", ")}`
+    const skillsPrompt = c.resumeEntities?.skills?.length
+      ? `Candidate skills: ${c.resumeEntities.skills.join(", ")}`
       : "";
+
+    const totalQuestions = doc.messages.filter(m => m.role === "assistant").length;
+    const startTime = doc.createdAt?.getTime() || Date.now();
 
     return `${personaPrompt}
 
@@ -124,20 +135,22 @@ Required Skills: ${this.config.requiredSkills.join(", ")}
 Difficulty: ${this.config.difficulty}
 ${skillsPrompt}
 
-Interview Duration: ${Math.floor((Date.now() - this.memory.metrics.startTime) / 60000)} minutes
-Questions Asked: ${this.memory.metrics.totalQuestions}
-Topics Covered: ${this.memory.metrics.topicCoverage.join(", ") || "None yet"}
+Interview Duration: ${Math.floor((Date.now() - startTime) / 60000)} minutes
+Questions Asked: ${totalQuestions}
+Topics Covered: ${c.topicCoverage?.join(", ") || "None yet"}
 
 Provide a realistic interview experience. Ask follow-up questions based on candidate responses.`;
   }
 
   async generateResponse(userInput: string): Promise<string> {
-    this.addUserMessage(userInput);
+    await this.addUserMessage(userInput);
 
     const groq = getGroqClient();
-    const systemPrompt = this.buildSystemPrompt();
+    const systemPrompt = await this.buildSystemPrompt();
+    const doc = await ConversationMemoryModel.findOne({ sessionId: this.sessionId });
+    if (!doc) throw new Error(`Session ${this.sessionId} not found`);
 
-    const recentMessages = this.memory.messages.slice(-10).map(m => ({
+    const recentMessages = doc.messages.slice(-10).map(m => ({
       role: m.role === "assistant" ? "assistant" : "user",
       content: m.content,
     }));
@@ -153,7 +166,7 @@ Provide a realistic interview experience. Ask follow-up questions based on candi
     });
 
     const response = completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
-    this.addAssistantMessage(response);
+    await this.addAssistantMessage(response);
 
     return response;
   }
@@ -178,21 +191,77 @@ Return ONLY the question, nothing else.`;
     return completion.choices[0]?.message?.content || "Can you elaborate more on that?";
   }
 
-  getMemory(): ConversationMemory {
-    return { ...this.memory };
+  async getMemory(): Promise<ConversationMemory> {
+    const doc = await ConversationMemoryModel.findOne({ sessionId: this.sessionId });
+    if (!doc) throw new Error(`Session ${this.sessionId} not found`);
+
+    const c = (doc.config || {}) as any;
+    const totalQuestions = doc.messages.filter(m => m.role === "assistant").length;
+    const startTime = doc.createdAt?.getTime() || Date.now();
+
+    return {
+      messages: doc.messages.map(m => ({
+        role: m.role as "user" | "assistant" | "system",
+        content: m.content,
+        timestamp: m.timestamp?.getTime?.() || Date.now(),
+      })),
+      context: {
+        resumeEntities: c.resumeEntities,
+        jobRole: this.config.jobRole,
+        difficulty: this.config.difficulty,
+        competencies: this.config.competencies,
+      },
+      metrics: {
+        totalQuestions,
+        correctAnswers: 0,
+        topicCoverage: c.topicCoverage || [],
+        startTime,
+      },
+    };
   }
 
-  getMetrics() {
+  async getMetrics(): Promise<{
+    totalQuestions: number;
+    correctAnswers: number;
+    topicCoverage: string[];
+    startTime: number;
+    duration: number;
+    messageCount: number;
+  }> {
+    const doc = await ConversationMemoryModel.findOne({ sessionId: this.sessionId });
+    if (!doc) throw new Error(`Session ${this.sessionId} not found`);
+
+    const c = (doc.config || {}) as any;
+    const totalQuestions = doc.messages.filter(m => m.role === "assistant").length;
+    const startTime = doc.createdAt?.getTime() || Date.now();
+
     return {
-      ...this.memory.metrics,
-      duration: Date.now() - this.memory.metrics.startTime,
-      messageCount: this.memory.messages.length,
+      totalQuestions,
+      correctAnswers: 0,
+      topicCoverage: c.topicCoverage || [],
+      startTime,
+      duration: Date.now() - startTime,
+      messageCount: doc.messages.length,
     };
   }
 }
 
-export async function createLLMInterviewer(config: InterviewConfig): Promise<LLMInterviewer> {
-  return new LLMInterviewer(config);
+export async function createLLMInterviewer(sessionId: string, config: InterviewConfig): Promise<LLMInterviewer> {
+  await ConversationMemoryModel.create({
+    sessionId,
+    interviewId: sessionId,
+    messages: [],
+    config: {
+      jobRole: config.jobRole,
+      experienceLevel: config.experienceLevel,
+      requiredSkills: config.requiredSkills,
+      competencies: config.competencies,
+      difficulty: config.difficulty,
+      persona: config.persona,
+      topicCoverage: [],
+    },
+  });
+  return new LLMInterviewer(sessionId, config);
 }
 
 export async function generateInterviewSummary(

@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { DeviceRegistrationModel, IDeviceRegistration } from "../models/DeviceRegistration";
 
 export interface PushNotification {
   title: string;
@@ -26,21 +27,41 @@ export interface NotificationPayload {
   ttl?: number;
 }
 
-const registeredDevices: DeviceRegistration[] = [];
+function toDeviceRegistration(doc: IDeviceRegistration): DeviceRegistration {
+  return {
+    userId: doc.userId,
+    deviceId: (doc.deviceInfo as any)?.deviceId || doc.id,
+    platform: doc.platform as "ios" | "android" | "web",
+    pushToken: doc.deviceToken,
+    notificationEnabled: doc.isActive,
+    lastActive: doc.lastUsedAt || doc.createdAt,
+  };
+}
 
 export async function registerDevice(registration: DeviceRegistration): Promise<{ deviceId: string; status: string }> {
-  const existing = registeredDevices.find(d => d.deviceId === registration.deviceId);
-  
+  const existing = await DeviceRegistrationModel.findOne({
+    userId: registration.userId,
+    "deviceInfo.deviceId": registration.deviceId,
+  });
+
   if (existing) {
-    existing.pushToken = registration.pushToken;
-    existing.lastActive = new Date();
-    existing.notificationEnabled = registration.notificationEnabled;
+    existing.deviceToken = registration.pushToken;
+    existing.lastUsedAt = new Date();
+    existing.isActive = registration.notificationEnabled;
+    await existing.save();
   } else {
-    registeredDevices.push(registration);
+    await DeviceRegistrationModel.create({
+      userId: registration.userId,
+      deviceToken: registration.pushToken,
+      platform: registration.platform,
+      deviceInfo: { deviceId: registration.deviceId },
+      isActive: registration.notificationEnabled,
+      lastUsedAt: new Date(),
+    });
   }
-  
+
   logger.info(`Device registered: ${registration.deviceId} for user ${registration.userId}`);
-  
+
   return {
     deviceId: registration.deviceId,
     status: "registered",
@@ -48,9 +69,8 @@ export async function registerDevice(registration: DeviceRegistration): Promise<
 }
 
 export async function unregisterDevice(deviceId: string): Promise<boolean> {
-  const idx = registeredDevices.findIndex(d => d.deviceId === deviceId);
-  if (idx !== -1) {
-    registeredDevices.splice(idx, 1);
+  const result = await DeviceRegistrationModel.deleteOne({ "deviceInfo.deviceId": deviceId });
+  if (result.deletedCount > 0) {
     logger.info(`Device unregistered: ${deviceId}`);
     return true;
   }
@@ -62,35 +82,35 @@ export async function sendPushNotification(
   notification: PushNotification,
   options?: { priority?: "high" | "normal"; ttl?: number }
 ): Promise<{ sent: number; failed: number; results: unknown[] }> {
-  const userDevices = registeredDevices.filter(d => d.userId === userId && d.notificationEnabled);
-  
+  const devices = await DeviceRegistrationModel.find({ userId, isActive: true });
+
   const results: unknown[] = [];
   let failed = 0;
-  
-  for (const device of userDevices) {
+
+  for (const device of devices) {
     try {
       const payload: NotificationPayload = {
-        to: device.pushToken,
+        to: device.deviceToken,
         notification,
         priority: options?.priority || "normal",
         ttl: options?.ttl || 3600,
       };
-      
+
       if (device.platform === "web") {
         payload.data = { ...notification.data, "mutable-content": true };
       }
-      
-      results.push({ deviceId: device.deviceId, platform: device.platform, success: true });
+
+      results.push({ deviceId: (device.deviceInfo as any)?.deviceId || device.id, platform: device.platform, success: true });
     } catch (error) {
       failed++;
-      results.push({ deviceId: device.deviceId, platform: device.platform, success: false, error: String(error) });
+      results.push({ deviceId: (device.deviceInfo as any)?.deviceId || device.id, platform: device.platform, success: false, error: String(error) });
     }
   }
-  
-  logger.info(`Push notification sent to user ${userId}: ${userDevices.length - failed}/${userDevices.length} successful`);
-  
+
+  logger.info(`Push notification sent to user ${userId}: ${devices.length - failed}/${devices.length} successful`);
+
   return {
-    sent: userDevices.length - failed,
+    sent: devices.length - failed,
     failed,
     results,
   };
@@ -101,32 +121,35 @@ export async function sendBatchNotifications(
 ): Promise<{ total: number; sent: number; failed: number }> {
   let sent = 0;
   let failed = 0;
-  
+
   for (const { userId, notification } of notifications) {
     const result = await sendPushNotification(userId, notification);
     sent += result.sent;
     failed += result.failed;
   }
-  
+
   return { total: notifications.length, sent, failed };
 }
 
 export async function getUserDevices(userId: string): Promise<DeviceRegistration[]> {
-  return registeredDevices.filter(d => d.userId === userId);
+  const docs = await DeviceRegistrationModel.find({ userId }).lean();
+  return docs.map(toDeviceRegistration);
 }
 
 export async function updateDeviceSettings(
   deviceId: string,
   settings: { notificationEnabled?: boolean }
 ): Promise<boolean> {
-  const device = registeredDevices.find(d => d.deviceId === deviceId);
-  if (device) {
-    if (settings.notificationEnabled !== undefined) {
-      device.notificationEnabled = settings.notificationEnabled;
-    }
-    return true;
+  const update: Record<string, unknown> = {};
+  if (settings.notificationEnabled !== undefined) {
+    update.isActive = settings.notificationEnabled;
+    update.lastUsedAt = new Date();
   }
-  return false;
+  const result = await DeviceRegistrationModel.findOneAndUpdate(
+    { "deviceInfo.deviceId": deviceId },
+    { $set: update }
+  );
+  return !!result;
 }
 
 export interface NotificationTemplate {
@@ -179,15 +202,15 @@ export function getNotificationTemplates(): NotificationTemplate[] {
 export function renderTemplate(templateId: string, data: Record<string, unknown>): PushNotification | null {
   const template = notificationTemplates.find(t => t.id === templateId);
   if (!template) return null;
-  
+
   let title = template.template.title;
   let body = template.template.body;
-  
+
   for (const [key, value] of Object.entries(data)) {
     title = title.replace(`{{${key}}}`, String(value));
     body = body.replace(`{{${key}}}`, String(value));
   }
-  
+
   return { ...template.template, title, body };
 }
 
@@ -198,9 +221,9 @@ export async function scheduleNotification(
   scheduledTime: Date
 ): Promise<{ scheduledId: string; scheduledAt: Date }> {
   const scheduledId = `sched_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
   logger.info(`Notification scheduled: ${scheduledId} for user ${userId} at ${scheduledTime}`);
-  
+
   return {
     scheduledId,
     scheduledAt: scheduledTime,

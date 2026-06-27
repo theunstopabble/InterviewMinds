@@ -27,8 +27,8 @@ router.post('/create', requireAuth, async (req, res) => {
   try {
     const config = req.body as InterviewConfig;
     const sessionId = `interview_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    
-    const interviewer = await createLLMInterviewer(config);
+
+    const interviewer = await createLLMInterviewer(sessionId, config);
     interviewers.set(sessionId, interviewer);
 
     res.json({
@@ -53,7 +53,7 @@ router.post('/chat', requireAuth, async (req, res) => {
     }
 
     const response = await interviewer.generateResponse(message);
-    const metrics = interviewer.getMetrics();
+    const metrics = await interviewer.getMetrics();
 
     res.json({
       response,
@@ -93,7 +93,7 @@ router.post('/summary', requireAuth, async (req, res) => {
       return;
     }
 
-    const memory = interviewer.getMemory();
+    const memory = await interviewer.getMemory();
     const summary = await generateInterviewSummary(memory, finalScore);
 
     res.json({ summary });
@@ -113,7 +113,7 @@ router.post('/feedback', requireAuth, async (req, res) => {
       return;
     }
 
-    const memory = interviewer.getMemory();
+    const memory = await interviewer.getMemory();
     const feedback = await generateCandidateFeedback(memory, score);
 
     res.json(feedback);
@@ -145,7 +145,8 @@ router.get('/metrics/:sessionId', requireAuth, async (req, res) => {
       return;
     }
 
-    res.json(interviewer.getMetrics());
+    const metrics = await interviewer.getMetrics();
+    res.json(metrics);
   } catch (error) {
     logger.error({ err: error }, 'Error getting metrics:');
     res.status(500).json({ error: 'Failed to get metrics' });

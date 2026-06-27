@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { EventLogModel } from "../models/EventLog";
 
 export interface Event {
   type: string;
@@ -36,11 +37,24 @@ export async function emitEvent(event: Omit<Event, "metadata"> & { metadata?: Pa
 
   logger.info({ eventType: event.type }, "Event emitted");
 
+  try {
+    await EventLogModel.create({
+      event: event.type,
+      channel: event.type.split(".")[0] || "system",
+      payload: event.payload,
+      source: fullEvent.metadata.source,
+      status: "emitted",
+      handledBy: handlers.filter(h => h.eventType === event.type || h.eventType === "*").map(h => h.eventType),
+    });
+  } catch (err) {
+    logger.error({ err, eventType: event.type }, "Failed to persist event log");
+  }
+
   const matchingHandlers = handlers.filter(h => h.eventType === event.type || h.eventType === "*");
-  
+
   await Promise.allSettled(
-    matchingHandlers.map(h => 
-      h.handler(fullEvent).catch(err => 
+    matchingHandlers.map(h =>
+      h.handler(fullEvent).catch(err =>
         logger.error({ err, eventType: event.type }, "Event handler failed")
       )
     )
@@ -65,9 +79,9 @@ export const EventTypes = {
 
 export async function createEventProcessor(): Promise<(event: Event) => Promise<void>> {
   return async (event: Event) => {
-    const handlers = getHandlersForEvent(event.type);
-    
-    for (const handler of handlers) {
+    const eventHandlers = getHandlersForEvent(event.type);
+
+    for (const handler of eventHandlers) {
       try {
         await handler(event);
       } catch (error) {
@@ -107,7 +121,7 @@ export class EventBus {
     };
 
     this.queue.push(fullEvent);
-    
+
     if (!this.processing) {
       this.processQueue();
     }

@@ -305,9 +305,9 @@ describe("Bug Condition Exploration: Mock/Hardcoded Data in 5 Defect Categories"
    * Map that is lost when the session is deleted/recreated.
    */
   describe("Whiteboard - Persistence", () => {
-    it("whiteboard elements should persist across session recreation (NOT in-memory-only)", () => {
-      fc.assert(
-        fc.property(
+    it("whiteboard elements should persist across session recreation (NOT in-memory-only)", async () => {
+      await fc.assert(
+        fc.asyncProperty(
           fc.record({
             type: fc.constantFrom("line", "rectangle", "circle", "text", "arrow", "freehand") as fc.Arbitrary<"line" | "rectangle" | "circle" | "text" | "arrow" | "freehand">,
             strokeColor: fc.hexaString({ minLength: 6, maxLength: 6 }).map(s => `#${s}`),
@@ -316,28 +316,19 @@ describe("Bug Condition Exploration: Mock/Hardcoded Data in 5 Defect Categories"
             startPoint: fc.record({ x: fc.integer({ min: 0, max: 1000 }), y: fc.integer({ min: 0, max: 1000 }) }),
             endPoint: fc.record({ x: fc.integer({ min: 0, max: 1000 }), y: fc.integer({ min: 0, max: 1000 }) }),
           }),
-          (elementData) => {
+          async (elementData) => {
             const roomId = `room_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-            // Create session and add element
-            const sessionId1 = createWhiteboardSession(roomId);
-            const added = addElement(sessionId1, elementData);
+            const sessionId1 = await createWhiteboardSession(roomId);
+            const added = await addElement(sessionId1, elementData);
             expect(added).not.toBeNull();
 
-            // Verify element exists in current session
-            const elementsBeforeRecreation = getWhiteboardElements(sessionId1);
+            const elementsBeforeRecreation = await getWhiteboardElements(sessionId1);
             expect(elementsBeforeRecreation.length).toBeGreaterThan(0);
 
-            // Simulate session recreation (e.g., server restart or session expiry)
-            // In the current implementation, creating a new session for the same room
-            // does NOT recover elements from the old session (in-memory only)
-            const sessionId2 = createWhiteboardSession(roomId);
-            const elementsAfterRecreation = getWhiteboardElements(sessionId2);
+            const sessionId2 = await createWhiteboardSession(roomId);
+            const elementsAfterRecreation = await getWhiteboardElements(sessionId2);
 
-            // With MongoDB persistence, elements should be recoverable in new session
-            // With in-memory-only, elements are lost when a new session is created
-            // This should PASS after fix (MongoDB persistence)
-            // It will FAIL on unfixed code (in-memory Map, elements lost)
             expect(elementsAfterRecreation.length).toBeGreaterThan(0);
           }
         ),
@@ -356,14 +347,14 @@ describe("Bug Condition Exploration: Mock/Hardcoded Data in 5 Defect Categories"
    * STUN/TURN server integration.
    */
   describe("Video Call - ICE Server Configuration", () => {
-    it("video session should provide ICE server configuration (STUN/TURN URLs)", () => {
-      fc.assert(
-        fc.property(
+    it("video session should provide ICE server configuration (STUN/TURN URLs)", async () => {
+      await fc.assert(
+        fc.asyncProperty(
           fc.string({ minLength: 3, maxLength: 20 }),
           fc.string({ minLength: 3, maxLength: 20 }),
           fc.string({ minLength: 3, maxLength: 20 }),
-          (roomId, hostId, hostName) => {
-            const sessionId = createVideoSession(roomId, hostId, hostName);
+          async (roomId, hostId, hostName) => {
+            const sessionId = await createVideoSession(roomId, hostId, hostName);
 
             // Get session info - should include ICE server configuration
             const sessionInfo = getSessionInfo(sessionId) as any;

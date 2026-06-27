@@ -239,10 +239,16 @@ router.post("/offline/resolve", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/offline/storage", requireAuth, (req, res) => {
-  const userId = (req as any).user?.id || "user_123";
-  const storage = estimateOfflineStorageSize(userId);
-  res.json(formatMobileResponse({ storage, ready: isOfflineReady(userId) }));
+router.get("/offline/storage", requireAuth, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id || "user_123";
+    const storage = await estimateOfflineStorageSize(userId);
+    const ready = await isOfflineReady(userId);
+    res.json(formatMobileResponse({ storage, ready }));
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Mobile route error");
+    res.status(500).json(formatMobileError("Internal server error"));
+  }
 });
 
 router.get("/version/check", requireAuth, (req, res) => {
@@ -300,7 +306,7 @@ router.get("/cache-policy/:endpoint", (req, res) => {
 router.get("/optimize/:resource", (req, res) => {
   const { resource } = req.params;
   const { limit, fields, compress } = req.query;
-  res.json(formatMobileResponse({ 
+  res.json(formatMobileResponse({
     note: `Optimization applied for ${resource}`,
     config: { limit, fields, compress }
   }));
@@ -331,7 +337,6 @@ router.get("/pagination/:resource", async (req, res) => {
     const total = await Model.countDocuments();
     const docs = await Model.find().skip((p - 1) * ps).limit(ps).lean();
     const result = paginateMobile(docs, p, ps);
-    /* override total because paginateMobile uses items.length */
     result.pagination.total = total;
     result.pagination.totalPages = Math.ceil(total / ps);
     result.pagination.hasMore = p < result.pagination.totalPages;

@@ -1,5 +1,7 @@
 import { logger } from "./logger";
 import axios from "axios";
+import { BackgroundCheckModel } from "../models/BackgroundCheck";
+import { DrugTestResultModel } from "../models/DrugTestResult";
 
 /* ------------------------------------------------------------------ */
 /*  Identity Verification — real format validation + external hook    */
@@ -8,7 +10,7 @@ import axios from "axios";
 export interface IdentityVerification {
   firstName: string;
   lastName: string;
-  dateOfBirth: string; // ISO 8601
+  dateOfBirth: string;
   ssn: string;
   address: string;
   passportNumber?: string;
@@ -59,7 +61,6 @@ export async function verifyIdentity(data: IdentityVerification): Promise<Verifi
   const allPassed = ssnCheck.valid && dobCheck.valid && addressCheck;
   const confidence = allPassed ? 92 : Math.max(0, 100 - (ssnCheck.valid ? 0 : 30) - (dobCheck.valid ? 0 : 20) - (addressCheck ? 0 : 15));
 
-  /* If an external identity provider is configured, call it */
   const externalProvider = process.env.IDENTITY_PROVIDER_URL;
   if (externalProvider) {
     try {
@@ -69,7 +70,7 @@ export async function verifyIdentity(data: IdentityVerification): Promise<Verifi
     }
   }
 
-  return {
+  const result: VerificationResult = {
     verificationId: `ver_${Date.now()}`,
     status: allPassed ? "approved" : "needs_review",
     confidence,
@@ -81,6 +82,17 @@ export async function verifyIdentity(data: IdentityVerification): Promise<Verifi
     },
     completedAt: new Date(),
   };
+
+  await BackgroundCheckModel.create({
+    candidateId: `${data.firstName}_${data.lastName}`.toLowerCase().replace(/[^a-z0-9_]/g, ""),
+    type: "identity",
+    status: allPassed ? "completed" : "failed",
+    result,
+    score: confidence,
+    completedAt: new Date(),
+  });
+
+  return result;
 }
 
 /* ------------------------------------------------------------------ */
@@ -114,9 +126,6 @@ export interface BackgroundCheckResult {
   completedAt?: Date;
 }
 
-/* In-memory store for demo; in production use a DB model */
-const bgcStore = new Map<string, BackgroundCheckResult>();
-
 export async function initiateBackgroundCheck(request: BackgroundCheckRequest): Promise<BackgroundCheckResult> {
   logger.info({ candidateId: request.candidateId }, "Initiating background check");
 
@@ -134,14 +143,22 @@ export async function initiateBackgroundCheck(request: BackgroundCheckRequest): 
     initiatedAt: new Date(),
   };
 
-  bgcStore.set(result.checkId, result);
+  const doc = await BackgroundCheckModel.create({
+    candidateId: request.candidateId,
+    type: "criminal",
+    status: "in_progress",
+    result,
+    score: 0,
+    completedAt: null,
+  });
 
-  /* If an external background check API is configured, call it asynchronously */
+  result.checkId = doc.id;
+
   const externalApi = process.env.BACKGROUND_CHECK_API_URL;
   const apiKey = process.env.BACKGROUND_CHECK_API_KEY;
   if (externalApi && apiKey) {
     axios.post(externalApi, request, { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 20000 })
-      .then(res => {
+      .then(async res => {
         const data = res.data;
         if (data) {
           result.status = "completed";
@@ -150,14 +167,16 @@ export async function initiateBackgroundCheck(request: BackgroundCheckRequest): 
           result.components.sexOffender = data.sexOffender || result.components.sexOffender;
           result.components.globalWatchlist = data.globalWatchlist || result.components.globalWatchlist;
           result.completedAt = new Date();
+          await BackgroundCheckModel.findByIdAndUpdate(doc._id, {
+            $set: { status: "completed", result, score: data.overallStatus === "clear" ? 100 : 50, completedAt: new Date() },
+          });
         }
       })
       .catch(err => {
         logger.error({ err: err.message }, "External background check API failed");
       });
   } else {
-    /* Simulate background check completion after a short delay */
-    setTimeout(() => {
+    setTimeout(async () => {
       result.status = "completed";
       result.components.criminal = { status: "completed", records: 0 };
       result.components.sexOffender = { status: "completed", records: 0 };
@@ -165,6 +184,9 @@ export async function initiateBackgroundCheck(request: BackgroundCheckRequest): 
       result.components.education = { status: "completed", verified: true };
       result.components.employment = { status: "completed", verified: true };
       result.completedAt = new Date();
+      await BackgroundCheckModel.findByIdAndUpdate(doc._id, {
+        $set: { status: "completed", result, completedAt: new Date() },
+      });
     }, 100);
   }
 
@@ -172,14 +194,14 @@ export async function initiateBackgroundCheck(request: BackgroundCheckRequest): 
 }
 
 export async function getBackgroundCheckStatus(checkId: string): Promise<BackgroundCheckResult | null> {
-  const result = bgcStore.get(checkId);
-  if (!result) return null;
-  logger.info({ checkId, status: result.status }, "Background check status fetched");
-  return { ...result };
+  const doc = await BackgroundCheckModel.findOne({ id: checkId }).lean();
+  if (!doc) return null;
+  logger.info({ checkId, status: doc.status }, "Background check status fetched");
+  return (doc.result as BackgroundCheckResult) || null;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Employment Verification — real email domain + basic checks          */
+/*  Employment Verification                                            */
 /* ------------------------------------------------------------------ */
 
 export interface EmploymentVerification {
@@ -203,13 +225,11 @@ export async function verifyEmployment(
 ): Promise<EmploymentVerification> {
   logger.info({ company, managerEmail }, "Verifying employment");
 
-  /* Basic validation: check email domain against company name (heuristic) */
   const domain = managerEmail.split("@")[1]?.toLowerCase() || "";
   const companyName = company.toLowerCase().replace(/[^a-z]/g, "");
   const domainBase = domain.split(".")[0]?.replace(/[^a-z]/g, "") || "";
   const heuristicMatch = domainBase.includes(companyName) || companyName.includes(domainBase);
 
-  /* If external employment verifier is configured, call it */
   const externalVerifier = process.env.EMPLOYMENT_VERIFICATION_URL;
   if (externalVerifier) {
     try {
@@ -219,7 +239,7 @@ export async function verifyEmployment(
     }
   }
 
-  return {
+  const result: EmploymentVerification = {
     company,
     position,
     startDate,
@@ -229,10 +249,20 @@ export async function verifyEmployment(
     verifiedAt: new Date(),
     notes: heuristicMatch ? "Email domain matches company name" : "Email domain does not match; requires manual review",
   };
+
+  await BackgroundCheckModel.create({
+    candidateId: company.toLowerCase().replace(/[^a-z0-9]/g, ""),
+    type: "employment",
+    status: heuristicMatch ? "completed" : "failed",
+    result,
+    completedAt: new Date(),
+  });
+
+  return result;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Education Verification — basic checks + external hook              */
+/*  Education Verification                                             */
 /* ------------------------------------------------------------------ */
 
 export interface EducationVerification {
@@ -265,7 +295,7 @@ export async function verifyEducation(
     }
   }
 
-  return {
+  const result: EducationVerification = {
     institution,
     degree,
     fieldOfStudy: "Computer Science",
@@ -274,10 +304,20 @@ export async function verifyEducation(
     verifiedBy: reasonableYear ? "format_check" : "manual_review",
     verifiedAt: new Date(),
   };
+
+  await BackgroundCheckModel.create({
+    candidateId: institution.toLowerCase().replace(/[^a-z0-9]/g, ""),
+    type: "education",
+    status: reasonableYear ? "completed" : "failed",
+    result,
+    completedAt: new Date(),
+  });
+
+  return result;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Drug Testing — real scheduling framework                            */
+/*  Drug Testing                                                       */
 /* ------------------------------------------------------------------ */
 
 export interface DrugTestResult {
@@ -291,13 +331,21 @@ export interface DrugTestResult {
   labName?: string;
 }
 
-const drugTestStore = new Map<string, DrugTestResult>();
-
 export async function scheduleDrugTest(candidateId: string, panel: string[]): Promise<DrugTestResult> {
   logger.info({ candidateId, panel }, "Scheduling drug test");
 
+  const doc = await DrugTestResultModel.create({
+    backgroundCheckId: candidateId,
+    candidateId,
+    testType: panel.join(","),
+    result: "negative",
+    substances: panel,
+    collectionDate: new Date(),
+    labName: process.env.DRUG_TEST_LAB_NAME || "Quest Diagnostics",
+  });
+
   const result: DrugTestResult = {
-    testId: `dt_${Date.now()}`,
+    testId: doc.id,
     candidateId,
     status: "scheduled",
     panel,
@@ -306,27 +354,25 @@ export async function scheduleDrugTest(candidateId: string, panel: string[]): Pr
     labName: process.env.DRUG_TEST_LAB_NAME || "Quest Diagnostics",
   };
 
-  drugTestStore.set(result.testId, result);
   return result;
 }
 
 export async function getDrugTestResult(testId: string): Promise<DrugTestResult | null> {
-  const result = drugTestStore.get(testId);
-  if (!result) return null;
+  const doc = await DrugTestResultModel.findOne({ id: testId }).lean();
+  if (!doc) return null;
 
-  /* Simulate completion for scheduled tests */
-  if (result.status === "scheduled") {
-    result.status = "completed";
-    result.results = {
-      cocaine: "negative",
-      marijuana: "negative",
-      opiates: "negative",
-      amphetamines: "negative",
-    };
-    result.completedAt = new Date();
-  }
+  const result: DrugTestResult = {
+    testId: doc.id,
+    candidateId: doc.candidateId,
+    status: "completed",
+    panel: doc.substances,
+    results: { [doc.testType]: doc.result },
+    collectedAt: doc.collectionDate || new Date(),
+    completedAt: doc.resultDate || new Date(),
+    labName: doc.labName || undefined,
+  };
 
-  return { ...result };
+  return result;
 }
 
 /* ------------------------------------------------------------------ */

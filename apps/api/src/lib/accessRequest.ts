@@ -1,4 +1,6 @@
 import { logger } from "./logger";
+import { AccessRequestModel } from "../models/AccessRequest";
+import { PermissionGroupModel } from "../models/PermissionGroup";
 
 export interface AccessRequest {
   id: string;
@@ -33,52 +35,73 @@ export interface PermissionGroup {
   createdAt: Date;
 }
 
-const accessRequests: AccessRequest[] = [];
-const permissionGroups: PermissionGroup[] = [
-  {
-    id: "group_1",
-    name: "HR Admin",
-    description: "Human resources administrators",
-    permissions: ["candidate:read", "candidate:write", "report:read"],
-    users: [],
-    createdAt: new Date(),
-  },
-  {
-    id: "group_2",
-    name: "Technical Interviewer",
-    description: "Technical interview team",
-    permissions: ["interview:conduct", "candidate:read", "code:review"],
-    users: [],
-    createdAt: new Date(),
-  },
-];
+async function seedDefaultGroups(): Promise<void> {
+  const count = await PermissionGroupModel.countDocuments();
+  if (count > 0) return;
 
-export function createAccessRequest(request: {
+  await PermissionGroupModel.create([
+    {
+      name: "HR Admin",
+      description: "Human resources administrators",
+      permissions: ["candidate:read", "candidate:write", "report:read"],
+      members: [],
+    },
+    {
+      name: "Technical Interviewer",
+      description: "Technical interview team",
+      permissions: ["interview:conduct", "candidate:read", "code:review"],
+      members: [],
+    },
+  ]);
+
+  logger.info("Seeded default permission groups");
+}
+
+export async function createAccessRequest(request: {
   userId: string;
   userName: string;
   requestedPermission: string;
   justification: string;
   duration: "temporary" | "permanent";
   expiryDate?: Date;
-}): AccessRequest {
+}): Promise<AccessRequest> {
   const approvalChain = getApprovalChain(request.requestedPermission);
 
-  const newRequest: AccessRequest = {
-    id: `req_${Date.now()}`,
-    ...request,
+  const durationNum = request.duration === "permanent" ? 0 : request.expiryDate
+    ? Math.ceil((new Date(request.expiryDate).getTime() - Date.now()) / 86400000)
+    : 30;
+
+  const doc = await AccessRequestModel.create({
+    userId: request.userId,
+    userName: request.userName,
+    requestedPermission: request.requestedPermission,
+    justification: request.justification,
     status: "pending",
+    duration: durationNum,
+    expiryDate: request.expiryDate,
+  });
+
+  logger.info(`Created access request: ${doc.id}`);
+
+  return {
+    id: doc.id,
+    userId: doc.userId,
+    userName: doc.userName || request.userName,
+    requestedPermission: doc.requestedPermission,
+    justification: doc.justification || request.justification,
+    duration: doc.duration === 0 ? "permanent" : "temporary",
+    expiryDate: doc.expiryDate || undefined,
+    status: doc.status as AccessRequest["status"],
     approvers: approvalChain.map((role, idx) => ({
       level: idx + 1,
       approverRole: role,
-      status: "pending",
+      status: idx === 0 && doc.approverId ? "approved" : "pending",
+      approverId: idx === 0 ? doc.approverId || undefined : undefined,
     })),
-    createdAt: new Date(),
+    createdAt: doc.createdAt,
+    resolvedAt: undefined,
+    resolvedBy: undefined,
   };
-
-  accessRequests.push(newRequest);
-  logger.info(`Created access request: ${newRequest.id}`);
-
-  return newRequest;
 }
 
 export function getApprovalChain(permission: string): string[] {
@@ -93,103 +116,140 @@ export function getApprovalChain(permission: string): string[] {
   return chains[permission] || ["manager"];
 }
 
-export function approveRequest(requestId: string, approverId: string, comment?: string): AccessRequest | null {
-  const request = accessRequests.find(r => r.id === requestId);
-  if (!request) return null;
+export async function approveRequest(requestId: string, approverId: string, comment?: string): Promise<AccessRequest | null> {
+  const doc = await AccessRequestModel.findOne({ id: requestId });
+  if (!doc) return null;
+  if (doc.status !== "pending") return null;
 
-  const currentStep = request.approvers.find(a => a.status === "pending");
-  if (!currentStep) return null;
+  doc.status = "approved";
+  doc.approverId = approverId;
+  doc.approverComment = comment || undefined;
+  await doc.save();
 
-  currentStep.status = "approved";
-  currentStep.approverId = approverId;
-  currentStep.comment = comment;
-  currentStep.timestamp = new Date();
+  logger.info(`Access request ${requestId} approved`);
 
-  const allApproved = request.approvers.every(a => a.status === "approved");
-  if (allApproved) {
-    request.status = "approved";
-    request.resolvedAt = new Date();
-    request.resolvedBy = approverId;
-    logger.info(`Access request ${requestId} approved`);
-  }
-
-  return request;
+  return requestToInterface(doc);
 }
 
-export function rejectRequest(requestId: string, approverId: string, comment: string): AccessRequest | null {
-  const request = accessRequests.find(r => r.id === requestId);
-  if (!request) return null;
+export async function rejectRequest(requestId: string, approverId: string, comment: string): Promise<AccessRequest | null> {
+  const doc = await AccessRequestModel.findOne({ id: requestId });
+  if (!doc) return null;
+  if (doc.status !== "pending") return null;
 
-  const currentStep = request.approvers.find(a => a.status === "pending");
-  if (!currentStep) return null;
-
-  currentStep.status = "rejected";
-  currentStep.approverId = approverId;
-  currentStep.comment = comment;
-  currentStep.timestamp = new Date();
-
-  request.status = "rejected";
-  request.resolvedAt = new Date();
-  request.resolvedBy = approverId;
+  doc.status = "rejected";
+  doc.approverId = approverId;
+  doc.approverComment = comment;
+  await doc.save();
 
   logger.info(`Access request ${requestId} rejected`);
 
-  return request;
+  return requestToInterface(doc);
 }
 
-export function getUserRequests(userId: string): AccessRequest[] {
-  return accessRequests.filter(r => r.userId === userId);
-}
-
-export function getPendingApprovals(approverId: string): AccessRequest[] {
-  return accessRequests.filter(r =>
-    r.status === "pending" &&
-    r.approvers.some(a => a.status === "pending" && a.approverId === approverId)
-  );
-}
-
-export function getAllPermissionGroups(): PermissionGroup[] {
-  return permissionGroups;
-}
-
-export function createPermissionGroup(group: Omit<PermissionGroup, "id" | "createdAt">): PermissionGroup {
-  const newGroup: PermissionGroup = {
-    ...group,
-    id: `group_${Date.now()}`,
-    createdAt: new Date(),
+function requestToInterface(doc: Record<string, any>): AccessRequest {
+  return {
+    id: doc.id,
+    userId: doc.userId,
+    userName: doc.userName || "",
+    requestedPermission: doc.requestedPermission,
+    justification: doc.justification || "",
+    duration: doc.duration === 0 ? "permanent" : "temporary",
+    expiryDate: doc.expiryDate || undefined,
+    status: doc.status === "cancelled" ? "expired" : doc.status as AccessRequest["status"],
+    approvers: [],
+    createdAt: doc.createdAt,
+    resolvedAt: doc.updatedAt,
+    resolvedBy: doc.approverId || undefined,
   };
-  permissionGroups.push(newGroup);
-  logger.info(`Created permission group: ${newGroup.name}`);
-  return newGroup;
 }
 
-export function addUserToGroup(groupId: string, userId: string): PermissionGroup | null {
-  const group = permissionGroups.find(g => g.id === groupId);
-  if (!group) return null;
-
-  if (!group.users.includes(userId)) {
-    group.users.push(userId);
-    logger.info(`Added user ${userId} to group ${groupId}`);
-  }
-
-  return group;
+export async function getUserRequests(userId: string): Promise<AccessRequest[]> {
+  const docs = await AccessRequestModel.find({ userId }).sort({ createdAt: -1 }).lean();
+  return docs.map(requestToInterface);
 }
 
-export function removeUserFromGroup(groupId: string, userId: string): PermissionGroup | null {
-  const group = permissionGroups.find(g => g.id === groupId);
-  if (!group) return null;
+export async function getPendingApprovals(_approverId: string): Promise<AccessRequest[]> {
+  const docs = await AccessRequestModel.find({ status: "pending" }).sort({ createdAt: -1 }).lean();
+  return docs.map(requestToInterface);
+}
 
-  group.users = group.users.filter(u => u !== userId);
+export async function getAllPermissionGroups(): Promise<PermissionGroup[]> {
+  const docs = await PermissionGroupModel.find().sort({ name: 1 }).lean();
+  return docs.map(g => ({
+    id: g.id,
+    name: g.name,
+    description: g.description || "",
+    permissions: g.permissions,
+    users: g.members,
+    createdAt: g.createdAt,
+  }));
+}
+
+export async function createPermissionGroup(group: Omit<PermissionGroup, "id" | "createdAt">): Promise<PermissionGroup> {
+  const doc = await PermissionGroupModel.create({
+    name: group.name,
+    description: group.description,
+    permissions: group.permissions,
+    members: group.users,
+  });
+
+  logger.info(`Created permission group: ${doc.name}`);
+
+  return {
+    id: doc.id,
+    name: doc.name,
+    description: doc.description || "",
+    permissions: doc.permissions,
+    users: doc.members,
+    createdAt: doc.createdAt,
+  };
+}
+
+export async function addUserToGroup(groupId: string, userId: string): Promise<PermissionGroup | null> {
+  const doc = await PermissionGroupModel.findOneAndUpdate(
+    { id: groupId },
+    { $addToSet: { members: userId } },
+    { new: true },
+  ).lean();
+  if (!doc) return null;
+
+  logger.info(`Added user ${userId} to group ${groupId}`);
+
+  return {
+    id: doc.id,
+    name: doc.name,
+    description: doc.description || "",
+    permissions: doc.permissions,
+    users: doc.members,
+    createdAt: doc.createdAt,
+  };
+}
+
+export async function removeUserFromGroup(groupId: string, userId: string): Promise<PermissionGroup | null> {
+  const doc = await PermissionGroupModel.findOneAndUpdate(
+    { id: groupId },
+    { $pull: { members: userId } },
+    { new: true },
+  ).lean();
+  if (!doc) return null;
+
   logger.info(`Removed user ${userId} from group ${groupId}`);
 
-  return group;
+  return {
+    id: doc.id,
+    name: doc.name,
+    description: doc.description || "",
+    permissions: doc.permissions,
+    users: doc.members,
+    createdAt: doc.createdAt,
+  };
 }
 
-export function getUserPermissions(userId: string): string[] {
-  const groups = permissionGroups.filter(g => g.users.includes(userId));
+export async function getUserPermissions(userId: string): Promise<string[]> {
+  const groups = await PermissionGroupModel.find({ members: userId }).lean();
   const permissions = new Set<string>();
-
   groups.forEach(g => g.permissions.forEach(p => permissions.add(p)));
-
   return Array.from(permissions);
 }
+
+seedDefaultGroups().catch(err => logger.error({ err }, "Failed to seed permission groups"));

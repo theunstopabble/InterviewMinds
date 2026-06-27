@@ -1,5 +1,6 @@
 import { logger } from "./logger";
 import axios from "axios";
+import { SandboxModel } from "../models/Sandbox";
 
 export interface SandboxConfig {
   language: string;
@@ -35,7 +36,6 @@ const defaultConfig: SandboxConfig = {
   maxProcesses: 5,
 };
 
-/* Piston language → version mapping (same as compiler.ts) */
 const PISTON_VERSIONS: Record<string, string> = {
   javascript: "18.15.0",
   typescript: "5.0.3",
@@ -47,34 +47,24 @@ const PISTON_VERSIONS: Record<string, string> = {
   rust: "1.68.2",
 };
 
-const sandboxStore = new Map<string, {
-  config: SandboxConfig;
-  code: string;
-  status: "created" | "running" | "completed" | "terminated" | "error";
-  startedAt: Date;
-  completedAt?: Date;
-  result?: ExecutionResult;
-}>();
-
-export function createSandbox(code: string, config: Partial<SandboxConfig> = {}): {
+export async function createSandbox(code: string, config: Partial<SandboxConfig> = {}): Promise<{
   id: string;
   config: SandboxConfig;
   code: string;
-} {
+}> {
   const mergedConfig = { ...defaultConfig, ...config };
-  const sandboxId = `sandbox_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-  sandboxStore.set(sandboxId, {
-    config: mergedConfig,
+  const doc = await SandboxModel.create({
     code,
+    language: mergedConfig.language,
     status: "created",
-    startedAt: new Date(),
+    timeout: mergedConfig.timeout,
   });
 
-  logger.info({ sandboxId, language: mergedConfig.language }, "Sandbox created");
+  logger.info({ sandboxId: doc.id, language: mergedConfig.language }, "Sandbox created");
 
   return {
-    id: sandboxId,
+    id: doc.id,
     config: mergedConfig,
     code,
   };
@@ -84,25 +74,24 @@ export async function executeInSandbox(
   sandboxId: string,
   input?: string
 ): Promise<ExecutionResult> {
-  const record = sandboxStore.get(sandboxId);
-  if (!record) throw new Error(`Sandbox ${sandboxId} not found`);
+  const doc = await SandboxModel.findOne({ id: sandboxId });
+  if (!doc) throw new Error(`Sandbox ${sandboxId} not found`);
 
-  const { config, code } = record;
-  record.status = "running";
+  await SandboxModel.findOneAndUpdate({ id: sandboxId }, { status: "running" });
 
   const startTime = Date.now();
-  const version = PISTON_VERSIONS[config.language] || "18.15.0";
+  const version = PISTON_VERSIONS[doc.language] || "18.15.0";
 
   try {
     const response = await axios.post(
       "https://emkc.org/api/v2/piston/execute",
       {
-        language: config.language,
+        language: doc.language,
         version,
-        files: [{ content: code }],
+        files: [{ content: doc.code }],
         stdin: input || "",
       },
-      { timeout: config.timeout + 2000 }
+      { timeout: (doc.timeout || 5000) + 2000 }
     );
 
     const run = response.data?.run || {};
@@ -124,9 +113,19 @@ export async function executeInSandbox(
       exitCode,
     };
 
-    record.status = exitCode === 0 ? "completed" : "error";
-    record.completedAt = new Date();
-    record.result = result;
+    const status = exitCode === 0 ? "completed" : "failed";
+
+    await SandboxModel.findOneAndUpdate(
+      { id: sandboxId },
+      {
+        status,
+        output: result.output,
+        error: result.error,
+        executionTime: result.executionTime,
+        memoryUsage: result.memoryUsed,
+        input: input || undefined,
+      }
+    );
 
     logger.info({ sandboxId, exitCode, duration: result.executionTime }, "Sandbox execution finished");
     return result;
@@ -138,9 +137,17 @@ export async function executeInSandbox(
       executionTime: Date.now() - startTime,
       exitCode: 1,
     };
-    record.status = "error";
-    record.completedAt = new Date();
-    record.result = errorResult;
+
+    await SandboxModel.findOneAndUpdate(
+      { id: sandboxId },
+      {
+        status: "failed",
+        error: errorResult.error,
+        executionTime: errorResult.executionTime,
+        input: input || undefined,
+      }
+    );
+
     logger.error({ sandboxId, err: err.message }, "Sandbox execution error");
     return errorResult;
   }
@@ -171,9 +178,12 @@ export function checkResourceLimits(usage: ResourceUsage, config: SandboxConfig)
 }
 
 export async function terminateSandbox(sandboxId: string): Promise<boolean> {
-  const record = sandboxStore.get(sandboxId);
-  if (!record) return false;
-  record.status = "terminated";
+  const doc = await SandboxModel.findOneAndUpdate(
+    { id: sandboxId },
+    { status: "terminated" },
+    { new: true }
+  );
+  if (!doc) return false;
   logger.info({ sandboxId }, "Sandbox terminated");
   return true;
 }
@@ -199,15 +209,15 @@ export function estimateExecutionTime(
   return Math.round(baseTime * complexityMultiplier * sizeMultiplier);
 }
 
-export function getSandboxStatus(sandboxId: string): {
+export async function getSandboxStatus(sandboxId: string): Promise<{
   id: string;
   status: "created" | "running" | "completed" | "terminated" | "error";
   resourceUsage: ResourceUsage;
   startedAt: Date;
   completedAt?: Date;
-} {
-  const record = sandboxStore.get(sandboxId);
-  if (!record) {
+}> {
+  const doc = await SandboxModel.findOne({ id: sandboxId });
+  if (!doc) {
     return {
       id: sandboxId,
       status: "error",
@@ -216,18 +226,19 @@ export function getSandboxStatus(sandboxId: string): {
     };
   }
 
-  const result = record.result;
+  const mappedStatus = doc.status === "failed" ? "error" : doc.status as any;
+
   return {
-    id: sandboxId,
-    status: record.status,
+    id: doc.id,
+    status: mappedStatus,
     resourceUsage: {
-      cpuTime: result?.executionTime || 0,
-      memoryBytes: result?.memoryUsed || 0,
-      processes: record.status === "running" ? 1 : 0,
+      cpuTime: doc.executionTime || 0,
+      memoryBytes: doc.memoryUsage || 0,
+      processes: doc.status === "running" ? 1 : 0,
       networkCalls: 0,
     },
-    startedAt: record.startedAt,
-    completedAt: record.completedAt,
+    startedAt: doc.createdAt,
+    completedAt: doc.updatedAt,
   };
 }
 

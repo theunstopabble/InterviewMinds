@@ -150,28 +150,44 @@ router.post("/test/generate", requireAuth, (req, res) => {
   res.json({ success: true, data: testCases });
 });
 
-router.post("/sandbox/create", requireAuth, (req, res) => {
-  const { code, language, timeout, memoryLimit, networkAccess } = req.body;
-  const sandbox = createSandbox(code, { language, timeout, memoryLimit, networkAccess });
-  res.json({ success: true, data: sandbox });
+router.post("/sandbox/create", requireAuth, async (req, res) => {
+  try {
+    const { code, language, timeout, memoryLimit, networkAccess } = req.body;
+    const sandbox = await createSandbox(code, { language, timeout, memoryLimit, networkAccess });
+    res.json({ success: true, data: sandbox });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 router.post("/sandbox/execute", requireAuth, async (req, res) => {
-  const { sandboxId, input } = req.body;
-  const result = await executeInSandbox(sandboxId, input);
-  res.json({ success: true, data: result });
+  try {
+    const { sandboxId, input } = req.body;
+    const result = await executeInSandbox(sandboxId, input);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(404).json({ success: false, error: err.message });
+  }
 });
 
 router.post("/sandbox/terminate", requireAuth, async (req, res) => {
-  const { sandboxId } = req.body;
-  const terminated = await terminateSandbox(sandboxId);
-  res.json({ success: terminated, data: { sandboxId } });
+  try {
+    const { sandboxId } = req.body;
+    const terminated = await terminateSandbox(sandboxId);
+    res.json({ success: terminated, data: { sandboxId } });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-router.get("/sandbox/status/:sandboxId", requireAuth, (req, res) => {
-  const { sandboxId } = req.params;
-  const status = getSandboxStatus(sandboxId);
-  res.json({ success: true, data: status });
+router.get("/sandbox/status/:sandboxId", requireAuth, async (req, res) => {
+  try {
+    const { sandboxId } = req.params;
+    const status = await getSandboxStatus(sandboxId);
+    res.json({ success: true, data: status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 router.post("/sandbox/validate", requireAuth, (req, res) => {

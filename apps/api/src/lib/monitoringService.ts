@@ -1,5 +1,6 @@
 import axios from "axios";
 import { logger } from "./logger";
+import { AlertRuleModel, IAlertRule } from "../models/AlertRule";
 
 export interface MetricData {
   name: string;
@@ -13,7 +14,7 @@ export interface AlertRule {
   name: string;
   condition: {
     metric: string;
-    operator: "gt" | "lt" | "eq" | "gte" | "lte";
+    operator: "gt" | "lt" | "eq" | "gte" | "lte" | "ne";
     threshold: number;
     duration?: number;
   };
@@ -45,73 +46,85 @@ export interface UptimeCheck {
   uptimePercentage: number;
 }
 
-const alertRules: AlertRule[] = [
-  {
-    id: "rule_001",
-    name: "High Error Rate",
-    condition: { metric: "error_rate", operator: "gt", threshold: 5 },
-    severity: "critical",
-    enabled: true,
-    channels: ["email", "slack"],
-    createdAt: new Date(),
-  },
-  {
-    id: "rule_002",
-    name: "High Latency",
-    condition: { metric: "latency_p99", operator: "gt", threshold: 2000, duration: 300 },
-    severity: "warning",
-    enabled: true,
-    channels: ["slack"],
-    createdAt: new Date(),
-  },
-];
+function toAlertRule(doc: IAlertRule): AlertRule {
+  return {
+    id: doc.id,
+    name: doc.name,
+    condition: {
+      metric: doc.metric,
+      operator: doc.condition,
+      threshold: doc.threshold,
+      duration: doc.duration || undefined,
+    },
+    severity: doc.severity,
+    enabled: doc.isActive,
+    channels: doc.channels,
+    createdAt: doc.createdAt,
+  };
+}
 
 const activeAlerts: Alert[] = [];
-
 const uptimeChecks: UptimeCheck[] = [];
 
-export function createAlertRule(rule: Omit<AlertRule, "id" | "createdAt">): AlertRule {
-  const newRule: AlertRule = {
-    ...rule,
-    id: `rule_${Date.now()}`,
-    createdAt: new Date(),
-  };
-  alertRules.push(newRule);
-  logger.info(`Alert rule created: ${newRule.name}`);
-  return newRule;
+export async function createAlertRule(rule: Omit<AlertRule, "id" | "createdAt">): Promise<AlertRule> {
+  const doc = await AlertRuleModel.create({
+    name: rule.name,
+    description: `${rule.severity} alert`,
+    metric: rule.condition.metric,
+    condition: rule.condition.operator,
+    threshold: rule.condition.threshold,
+    duration: rule.condition.duration || 0,
+    severity: rule.severity,
+    channels: rule.channels,
+    isActive: rule.enabled,
+  });
+  logger.info(`Alert rule created: ${doc.name}`);
+  return toAlertRule(doc);
 }
 
-export function getAlertRules(): AlertRule[] {
-  return alertRules;
+export async function getAlertRules(): Promise<AlertRule[]> {
+  const docs = await AlertRuleModel.find().lean();
+  return docs.map(toAlertRule);
 }
 
-export function updateAlertRule(id: string, updates: Partial<AlertRule>): AlertRule | null {
-  const rule = alertRules.find(r => r.id === id);
-  if (!rule) return null;
-  Object.assign(rule, updates);
-  return rule;
-}
-
-export function deleteAlertRule(id: string): boolean {
-  const idx = alertRules.findIndex(r => r.id === id);
-  if (idx !== -1) {
-    alertRules.splice(idx, 1);
-    return true;
+export async function updateAlertRule(id: string, updates: Partial<AlertRule>): Promise<AlertRule | null> {
+  const setFields: Record<string, unknown> = {};
+  if (updates.name !== undefined) setFields.name = updates.name;
+  if (updates.severity !== undefined) setFields.severity = updates.severity;
+  if (updates.enabled !== undefined) setFields.isActive = updates.enabled;
+  if (updates.channels !== undefined) setFields.channels = updates.channels;
+  if (updates.condition) {
+    if (updates.condition.metric !== undefined) setFields.metric = updates.condition.metric;
+    if (updates.condition.operator !== undefined) setFields.condition = updates.condition.operator;
+    if (updates.condition.threshold !== undefined) setFields.threshold = updates.condition.threshold;
+    if (updates.condition.duration !== undefined) setFields.duration = updates.condition.duration;
   }
-  return false;
+  const doc = await AlertRuleModel.findOneAndUpdate(
+    { id },
+    { $set: setFields },
+    { new: true }
+  );
+  if (!doc) return null;
+  return toAlertRule(doc);
 }
 
-export function checkAlertConditions(metrics: MetricData[]): Alert[] {
+export async function deleteAlertRule(id: string): Promise<boolean> {
+  const result = await AlertRuleModel.deleteOne({ id });
+  return result.deletedCount > 0;
+}
+
+export async function checkAlertConditions(metrics: MetricData[]): Promise<Alert[]> {
+  const rules = await AlertRuleModel.find({ isActive: true }).lean();
   const triggeredAlerts: Alert[] = [];
 
-  for (const rule of alertRules.filter(r => r.enabled)) {
-    const metric = metrics.find(m => m.name === rule.condition.metric);
+  for (const rule of rules) {
+    const metric = metrics.find(m => m.name === rule.metric);
     if (!metric) continue;
 
     let triggered = false;
-    const { operator, threshold } = rule.condition;
+    const { condition, threshold } = rule;
 
-    switch (operator) {
+    switch (condition) {
       case "gt": triggered = metric.value > threshold; break;
       case "lt": triggered = metric.value < threshold; break;
       case "eq": triggered = metric.value === threshold; break;
@@ -125,7 +138,7 @@ export function checkAlertConditions(metrics: MetricData[]): Alert[] {
         ruleId: rule.id,
         ruleName: rule.name,
         severity: rule.severity,
-        message: `${rule.name}: ${metric.value} ${rule.condition.operator} ${threshold}`,
+        message: `${rule.name}: ${metric.value} ${rule.condition} ${threshold}`,
         status: "firing",
         firedAt: new Date(),
       };
@@ -184,7 +197,6 @@ export async function runUptimeCheck(checkId: string): Promise<UptimeCheck | nul
     check.status = "down";
   }
 
-  /* Simple exponential moving average for uptime percentage */
   const alpha = 0.1;
   const upValue = check.status === "up" ? 100 : 0;
   check.uptimePercentage = check.uptimePercentage * (1 - alpha) + upValue * alpha;
@@ -212,8 +224,6 @@ export function getSystemMetrics(): {
 } {
   const memUsage = process.memoryUsage();
   const cpuUsage = process.cpuUsage();
-  /* cpuUsage.user + system in microseconds; rough % over 1s sample would need history.
-     Here we report raw derived value scaled to approximate percentage. */
   const cpuPercent = Math.min(100, Math.round(((cpuUsage.user + cpuUsage.system) / 1_000_000) % 100));
   const memPercent = Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100);
 

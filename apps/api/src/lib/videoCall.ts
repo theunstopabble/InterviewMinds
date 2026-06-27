@@ -1,9 +1,6 @@
 import { logger } from "./logger";
 import type { Server as SocketServer } from "socket.io";
-
-// ============================================================================
-// ICE Server Configuration
-// ============================================================================
+import { VideoSessionModel } from "../models/VideoSession";
 
 export interface IceServer {
   urls: string;
@@ -11,25 +8,12 @@ export interface IceServer {
   credential?: string;
 }
 
-/**
- * Get ICE server configuration from environment variables.
- * Defaults to public Google STUN servers when no TURN is configured.
- * 
- * Environment variables:
- * - STUN_SERVER_URL: Custom STUN server URL (default: stun:stun.l.google.com:19302)
- * - TURN_SERVER_URL: TURN server URL (optional, e.g., turn:turn.example.com:3478)
- * - TURN_USERNAME: TURN server username credential
- * - TURN_CREDENTIAL: TURN server password credential
- * - ADDITIONAL_STUN_URLS: Comma-separated additional STUN URLs
- */
 function getIceServers(): IceServer[] {
   const servers: IceServer[] = [];
 
-  // Primary STUN server (always included)
   const stunUrl = process.env.STUN_SERVER_URL || "stun:stun.l.google.com:19302";
   servers.push({ urls: stunUrl });
 
-  // Additional public STUN servers for redundancy
   const additionalStunUrls = process.env.ADDITIONAL_STUN_URLS;
   if (additionalStunUrls) {
     for (const url of additionalStunUrls.split(",")) {
@@ -39,12 +23,10 @@ function getIceServers(): IceServer[] {
       }
     }
   } else {
-    // Default additional STUN servers for reliability
     servers.push({ urls: "stun:stun1.l.google.com:19302" });
     servers.push({ urls: "stun:stun2.l.google.com:19302" });
   }
 
-  // TURN server (if configured via environment variables)
   const turnUrl = process.env.TURN_SERVER_URL;
   const turnUsername = process.env.TURN_USERNAME;
   const turnCredential = process.env.TURN_CREDENTIAL;
@@ -60,32 +42,15 @@ function getIceServers(): IceServer[] {
   return servers;
 }
 
-// ============================================================================
-// SFU (Selective Forwarding Unit) Integration
-// ============================================================================
-
 export interface SFUConfig {
   enabled: boolean;
   provider: "mediasoup" | "livekit" | "none";
   endpoint?: string;
   apiKey?: string;
   apiSecret?: string;
-  /** Participant threshold to switch from mesh to SFU */
   meshToSfuThreshold: number;
 }
 
-/**
- * Get SFU configuration from environment variables.
- * SFU is optional and only used when participant count exceeds mesh threshold.
- * 
- * Environment variables:
- * - SFU_ENABLED: "true" to enable SFU (default: "false")
- * - SFU_PROVIDER: "mediasoup" or "livekit" (default: "none")
- * - SFU_ENDPOINT: SFU server endpoint URL
- * - SFU_API_KEY: SFU API key
- * - SFU_API_SECRET: SFU API secret
- * - SFU_MESH_THRESHOLD: Participant count to switch to SFU (default: 4)
- */
 function getSFUConfig(): SFUConfig {
   return {
     enabled: process.env.SFU_ENABLED === "true",
@@ -97,10 +62,6 @@ function getSFUConfig(): SFUConfig {
   };
 }
 
-// ============================================================================
-// Recording Service Integration
-// ============================================================================
-
 export interface RecordingMetadata {
   recordingId: string;
   sessionId: string;
@@ -108,24 +69,11 @@ export interface RecordingMetadata {
   startedAt: number;
   stoppedAt?: number;
   status: "recording" | "processing" | "completed" | "failed";
-  /** URL to the recorded media file (available after processing) */
   mediaUrl?: string;
-  /** Recording format */
   format: "webm" | "mp4";
-  /** Recording service provider */
   provider: "local" | "cloud";
 }
 
-/**
- * Recording service that manages media recording lifecycle.
- * In production, this integrates with a media recording service
- * (e.g., MediaSoup recording, LiveKit Egress, or cloud recording API).
- * 
- * Environment variables:
- * - RECORDING_SERVICE_URL: URL of the recording service endpoint
- * - RECORDING_STORAGE_PATH: Path for storing recordings
- * - RECORDING_FORMAT: "webm" or "mp4" (default: "webm")
- */
 class RecordingService {
   private activeRecordings: Map<string, RecordingMetadata> = new Map();
 
@@ -145,9 +93,6 @@ class RecordingService {
 
     this.activeRecordings.set(sessionId, metadata);
 
-    // Persist recording metadata to database
-    videoSessionDB.saveRecordingMetadata(metadata);
-
     logger.info(
       { recordingId, sessionId, roomId, format, provider: metadata.provider },
       "Media recording started via recording service"
@@ -163,16 +108,10 @@ class RecordingService {
     recording.stoppedAt = Date.now();
     recording.status = "processing";
 
-    // Update persistence
-    videoSessionDB.saveRecordingMetadata(recording);
-
-    // In production, this would trigger the recording service to finalize the file
-    // and provide a download URL. For now, we mark it as completed with a path.
     const storagePath = process.env.RECORDING_STORAGE_PATH || "./recordings";
     recording.mediaUrl = `${storagePath}/${recording.recordingId}.${recording.format}`;
     recording.status = "completed";
 
-    videoSessionDB.saveRecordingMetadata(recording);
     this.activeRecordings.delete(sessionId);
 
     logger.info(
@@ -190,109 +129,6 @@ class RecordingService {
 
 const recordingService = new RecordingService();
 
-// ============================================================================
-// Session Persistence (MongoDB simulation - same pattern as whiteboard)
-// ============================================================================
-
-export interface VideoSessionMetadata {
-  sessionId: string;
-  roomId: string;
-  hostId: string;
-  hostName: string;
-  startedAt: number;
-  endedAt?: number;
-  maxParticipants: number;
-  recording: boolean;
-  iceServers: IceServer[];
-  sfuConfig: SFUConfig;
-  topology: "mesh" | "sfu";
-}
-
-/**
- * VideoSessionPersistence - In-memory persistence layer simulating MongoDB behavior.
- * 
- * Stores session metadata keyed by sessionId so they persist across server restarts.
- * In production, this would be backed by a real MongoDB collection with schema:
- * {
- *   sessionId: String (unique, indexed),
- *   roomId: String (indexed),
- *   hostId: String,
- *   hostName: String,
- *   startedAt: Number,
- *   endedAt: Number,
- *   maxParticipants: Number,
- *   recording: Boolean,
- *   iceServers: [{ urls: String, username: String, credential: String }],
- *   sfuConfig: Object,
- *   topology: String (enum: "mesh", "sfu"),
- *   participants: [{ id: String, name: String, role: String, joinedAt: Number }],
- * }
- */
-class VideoSessionPersistence {
-  private sessions: Map<string, VideoSessionMetadata> = new Map();
-  private recordings: Map<string, RecordingMetadata> = new Map();
-  /** Room-level session lookup: roomId -> sessionId[] */
-  private roomSessions: Map<string, string[]> = new Map();
-
-  saveSession(metadata: VideoSessionMetadata): void {
-    this.sessions.set(metadata.sessionId, { ...metadata });
-
-    // Track room -> session mapping
-    const roomSessions = this.roomSessions.get(metadata.roomId) || [];
-    if (!roomSessions.includes(metadata.sessionId)) {
-      roomSessions.push(metadata.sessionId);
-      this.roomSessions.set(metadata.roomId, roomSessions);
-    }
-  }
-
-  getSession(sessionId: string): VideoSessionMetadata | null {
-    return this.sessions.get(sessionId) || null;
-  }
-
-  getSessionsByRoom(roomId: string): VideoSessionMetadata[] {
-    const sessionIds = this.roomSessions.get(roomId) || [];
-    return sessionIds
-      .map(id => this.sessions.get(id))
-      .filter((s): s is VideoSessionMetadata => s !== undefined);
-  }
-
-  updateSession(sessionId: string, updates: Partial<VideoSessionMetadata>): boolean {
-    const existing = this.sessions.get(sessionId);
-    if (!existing) return false;
-    this.sessions.set(sessionId, { ...existing, ...updates });
-    return true;
-  }
-
-  deleteSession(sessionId: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) return false;
-
-    // Remove from room mapping
-    const roomSessions = this.roomSessions.get(session.roomId);
-    if (roomSessions) {
-      const idx = roomSessions.indexOf(sessionId);
-      if (idx >= 0) roomSessions.splice(idx, 1);
-    }
-
-    return this.sessions.delete(sessionId);
-  }
-
-  saveRecordingMetadata(metadata: RecordingMetadata): void {
-    this.recordings.set(metadata.recordingId, { ...metadata });
-  }
-
-  getRecordingMetadata(recordingId: string): RecordingMetadata | null {
-    return this.recordings.get(recordingId) || null;
-  }
-}
-
-/** Singleton persistence instance (simulates MongoDB VideoSessionModel) */
-const videoSessionDB = new VideoSessionPersistence();
-
-// ============================================================================
-// Video Session Core (preserves existing Socket.IO signaling)
-// ============================================================================
-
 export interface VideoSession {
   sessionId: string;
   roomId: string;
@@ -307,11 +143,8 @@ export interface VideoSession {
   startedAt: number;
   recording: boolean;
   maxParticipants: number;
-  /** ICE server configuration for WebRTC peer connections */
   iceServers: IceServer[];
-  /** SFU configuration for scalability */
   sfuConfig: SFUConfig;
-  /** Current network topology */
   topology: "mesh" | "sfu";
 }
 
@@ -338,21 +171,16 @@ function broadcastToRoom(roomId: string, event: string, payload: unknown, exclud
   }
 }
 
-export function createVideoSession(
+export async function createVideoSession(
   roomId: string,
   hostId: string,
   hostName: string,
   maxParticipants: number = 4
-): string {
+): Promise<string> {
   const sessionId = `video_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-  // Get ICE server configuration (STUN/TURN) for WebRTC
   const iceServers = getIceServers();
-
-  // Get SFU configuration for scalability
   const sfuConfig = getSFUConfig();
-
-  // Determine initial topology (mesh for small groups, SFU for larger)
   const topology: "mesh" | "sfu" = sfuConfig.enabled && maxParticipants > sfuConfig.meshToSfuThreshold
     ? "sfu"
     : "mesh";
@@ -375,21 +203,22 @@ export function createVideoSession(
     topology,
   };
 
-  // Store in active sessions (in-memory for real-time access)
   videoSessions.set(sessionId, session);
 
-  // Persist session metadata to database (MongoDB) for durability
-  videoSessionDB.saveSession({
-    sessionId,
+  await VideoSessionModel.create({
+    id: sessionId,
     roomId,
-    hostId,
-    hostName,
-    startedAt: session.startedAt,
-    maxParticipants,
-    recording: false,
-    iceServers,
-    sfuConfig,
-    topology,
+    creatorId: hostId,
+    participants: [hostId],
+    status: "active",
+    startedAt: new Date(session.startedAt),
+    metadata: {
+      hostName,
+      maxParticipants,
+      iceServers,
+      sfuConfig,
+      topology,
+    },
   });
 
   logger.info(
@@ -407,11 +236,11 @@ export function createVideoSession(
   return sessionId;
 }
 
-export function joinVideoSession(
+export async function joinVideoSession(
   sessionId: string,
   userId: string,
   userName: string
-): VideoSession["participants"] | null {
+): Promise<VideoSession["participants"] | null> {
   const session = videoSessions.get(sessionId);
   if (!session) return null;
 
@@ -427,20 +256,27 @@ export function joinVideoSession(
     role: "participant",
   });
 
-  // Check if we need to switch topology from mesh to SFU
   if (
     session.topology === "mesh" &&
     session.sfuConfig.enabled &&
     session.participants.size > session.sfuConfig.meshToSfuThreshold
   ) {
     session.topology = "sfu";
-    videoSessionDB.updateSession(sessionId, { topology: "sfu" });
+    await VideoSessionModel.findOneAndUpdate(
+      { id: sessionId },
+      { $set: { "metadata.topology": "sfu" } }
+    );
     logger.info(
       { sessionId, participants: session.participants.size, threshold: session.sfuConfig.meshToSfuThreshold },
       "Switching from mesh to SFU topology due to participant count"
     );
     broadcastToRoom(session.roomId, "video:topology-changed", { sessionId, topology: "sfu" });
   }
+
+  await VideoSessionModel.findOneAndUpdate(
+    { id: sessionId },
+    { $addToSet: { participants: userId } }
+  );
 
   logger.info({ sessionId, userId, participants: session.participants.size }, "User joined video");
   broadcastToRoom(
@@ -460,7 +296,7 @@ export function joinVideoSession(
   return session.participants;
 }
 
-export function leaveVideoSession(sessionId: string, userId: string): boolean {
+export async function leaveVideoSession(sessionId: string, userId: string): Promise<boolean> {
   const session = videoSessions.get(sessionId);
   if (!session) return false;
 
@@ -470,8 +306,16 @@ export function leaveVideoSession(sessionId: string, userId: string): boolean {
 
   if (session.participants.size === 0) {
     videoSessions.delete(sessionId);
-    videoSessionDB.updateSession(sessionId, { endedAt: Date.now() });
+    await VideoSessionModel.findOneAndUpdate(
+      { id: sessionId },
+      { $set: { status: "ended", endedAt: new Date() } }
+    );
     logger.info({ sessionId }, "Video session ended");
+  } else {
+    await VideoSessionModel.findOneAndUpdate(
+      { id: sessionId },
+      { $pull: { participants: userId } }
+    );
   }
 
   return wasParticipant;
@@ -501,14 +345,16 @@ export function toggleVideo(sessionId: string, userId: string, enabled: boolean)
   return true;
 }
 
-export function startRecording(sessionId: string): boolean {
+export async function startRecording(sessionId: string): Promise<boolean> {
   const session = videoSessions.get(sessionId);
   if (!session) return false;
 
   session.recording = true;
-  videoSessionDB.updateSession(sessionId, { recording: true });
+  await VideoSessionModel.findOneAndUpdate(
+    { id: sessionId },
+    { $set: { "metadata.recording": true } }
+  );
 
-  // Start actual media recording via recording service
   recordingService.startRecording(sessionId, session.roomId).catch(err => {
     logger.error({ sessionId, error: err }, "Failed to start media recording service");
   });
@@ -518,14 +364,16 @@ export function startRecording(sessionId: string): boolean {
   return true;
 }
 
-export function stopRecording(sessionId: string): string | null {
+export async function stopRecording(sessionId: string): Promise<string | null> {
   const session = videoSessions.get(sessionId);
   if (!session || !session.recording) return null;
 
   session.recording = false;
-  videoSessionDB.updateSession(sessionId, { recording: false });
+  await VideoSessionModel.findOneAndUpdate(
+    { id: sessionId },
+    { $set: { "metadata.recording": false } }
+  );
 
-  // Stop actual media recording via recording service
   let recordingId = `rec_${Date.now()}_${sessionId}`;
   recordingService.stopRecording(sessionId).then(metadata => {
     if (metadata) {

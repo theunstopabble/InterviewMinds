@@ -1,5 +1,6 @@
 import { logger } from "./logger";
 import type { Server as SocketServer } from "socket.io";
+import { DrawElementModel } from "../models/DrawElement";
 
 export interface Point {
   x: number;
@@ -18,11 +19,8 @@ export interface DrawElement {
   fillColor?: string;
   createdBy: string;
   createdAt: number;
-  /** Element-level version for conflict resolution */
   version: number;
-  /** Last modified timestamp for conflict resolution */
   lastModifiedAt: number;
-  /** User who last modified this element */
   lastModifiedBy: string;
 }
 
@@ -35,98 +33,64 @@ export interface WhiteboardSession {
   modifiedAt: number;
 }
 
-/**
- * WhiteboardModel - In-memory persistence layer simulating MongoDB behavior.
- * 
- * Stores elements keyed by roomId so they persist across session recreation.
- * In production, this would be backed by a real MongoDB collection with schema:
- * {
- *   roomId: String (indexed),
- *   elementId: String (unique),
- *   type: String (enum),
- *   startPoint: { x: Number, y: Number },
- *   endPoint: { x: Number, y: Number },
- *   points: [{ x: Number, y: Number }],
- *   text: String,
- *   strokeColor: String,
- *   strokeWidth: Number,
- *   fillColor: String,
- *   createdBy: String,
- *   createdAt: Number,
- *   version: Number,
- *   lastModifiedAt: Number,
- *   lastModifiedBy: String,
- * }
- */
-class WhiteboardPersistence {
-  /** Room-level element storage: roomId -> Map<elementId, DrawElement> */
-  private roomElements: Map<string, Map<string, DrawElement>> = new Map();
+const elementTypeToModel: Record<string, string> = {
+  line: "line",
+  rectangle: "rect",
+  circle: "circle",
+  text: "text",
+  arrow: "line",
+  freehand: "path",
+};
 
-  /**
-   * Save an element to the persistence store for a given room.
-   */
-  saveElement(roomId: string, element: DrawElement): void {
-    let elements = this.roomElements.get(roomId);
-    if (!elements) {
-      elements = new Map();
-      this.roomElements.set(roomId, elements);
-    }
-    elements.set(element.id, { ...element });
-  }
+const modelTypeToElement: Record<string, string> = {
+  line: "line",
+  rect: "rectangle",
+  circle: "circle",
+  text: "text",
+  path: "freehand",
+  image: "line",
+};
 
-  /**
-   * Update an element in the persistence store with conflict resolution.
-   * Uses element-level versioning: only applies update if incoming version >= stored version.
-   */
-  updateElement(roomId: string, elementId: string, updates: Partial<DrawElement>): boolean {
-    const elements = this.roomElements.get(roomId);
-    if (!elements) return false;
+function drawElementToModel(sessionId: string, el: DrawElement): Record<string, unknown> {
+  const points: Point[] = [];
+  if (el.startPoint) points.push(el.startPoint);
+  if (el.endPoint) points.push(el.endPoint);
+  if (el.points) points.push(...el.points);
 
-    const existing = elements.get(elementId);
-    if (!existing) return false;
-
-    // Conflict resolution: check version for concurrent edits
-    if (updates.version !== undefined && updates.version < existing.version) {
-      logger.warn(
-        { roomId, elementId, incomingVersion: updates.version, storedVersion: existing.version },
-        "Whiteboard element update rejected due to version conflict"
-      );
-      return false;
-    }
-
-    const updated = { ...existing, ...updates };
-    elements.set(elementId, updated);
-    return true;
-  }
-
-  /**
-   * Delete an element from the persistence store.
-   */
-  deleteElement(roomId: string, elementId: string): boolean {
-    const elements = this.roomElements.get(roomId);
-    if (!elements) return false;
-    return elements.delete(elementId);
-  }
-
-  /**
-   * Load all elements for a given room from the persistence store.
-   */
-  loadElements(roomId: string): DrawElement[] {
-    const elements = this.roomElements.get(roomId);
-    if (!elements) return [];
-    return Array.from(elements.values()).map(el => ({ ...el }));
-  }
-
-  /**
-   * Clear all elements for a room.
-   */
-  clearRoom(roomId: string): void {
-    this.roomElements.delete(roomId);
-  }
+  return {
+    id: el.id,
+    sessionId,
+    type: elementTypeToModel[el.type] || "line",
+    points: points.length > 0 ? points : undefined,
+    color: el.strokeColor,
+    strokeWidth: el.strokeWidth,
+    fill: el.fillColor,
+    text: el.text,
+    zIndex: 0,
+    createdBy: el.createdBy,
+  };
 }
 
-/** Singleton persistence instance (simulates MongoDB WhiteboardModel) */
-const whiteboardDB = new WhiteboardPersistence();
+function modelToDrawElement(doc: any): DrawElement {
+  const points = (doc.points as Point[]) || [];
+  const now = Date.now();
+  return {
+    id: doc.id as string,
+    type: (modelTypeToElement[(doc.type as string)] || "freehand") as DrawElement["type"],
+    startPoint: points.length > 0 ? points[0] : undefined,
+    endPoint: points.length > 1 ? points[points.length - 1] : undefined,
+    points: points.length > 2 ? points.slice(1, -1) : undefined,
+    text: doc.text as string | undefined,
+    strokeColor: (doc.color as string) || "#000000",
+    strokeWidth: (doc.strokeWidth as number) || 2,
+    fillColor: doc.fill as string | undefined,
+    createdBy: (doc.createdBy as string) || "unknown",
+    createdAt: doc.createdAt ? new Date(doc.createdAt as string).getTime() : now,
+    version: 1,
+    lastModifiedAt: doc.updatedAt ? new Date(doc.updatedAt as string).getTime() : now,
+    lastModifiedBy: (doc.createdBy as string) || "unknown",
+  };
+}
 
 const whiteboardSessions = new Map<string, WhiteboardSession>();
 let ioInstance: SocketServer | null = null;
@@ -141,14 +105,14 @@ function broadcastToRoom(roomId: string, event: string, payload: unknown): void 
   }
 }
 
-export function createWhiteboardSession(roomId: string): string {
+export async function createWhiteboardSession(roomId: string): Promise<string> {
   const sessionId = `wb_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-  // Load existing elements from persistence (MongoDB) for this room
-  const persistedElements = whiteboardDB.loadElements(roomId);
+  const persistedElements = await DrawElementModel.find({ sessionId });
   const elementsMap = new Map<string, DrawElement>();
   for (const el of persistedElements) {
-    elementsMap.set(el.id, el);
+    const de = modelToDrawElement(el.toObject());
+    elementsMap.set(de.id, de);
   }
 
   const session: WhiteboardSession = {
@@ -170,7 +134,7 @@ export function createWhiteboardSession(roomId: string): string {
   return sessionId;
 }
 
-export function joinWhiteboard(sessionId: string, userId: string): boolean {
+export async function joinWhiteboard(sessionId: string, userId: string): Promise<boolean> {
   const session = whiteboardSessions.get(sessionId);
   if (!session) return false;
 
@@ -179,7 +143,7 @@ export function joinWhiteboard(sessionId: string, userId: string): boolean {
   return true;
 }
 
-export function leaveWhiteboard(sessionId: string, userId: string): boolean {
+export async function leaveWhiteboard(sessionId: string, userId: string): Promise<boolean> {
   const session = whiteboardSessions.get(sessionId);
   if (!session) return false;
 
@@ -187,14 +151,13 @@ export function leaveWhiteboard(sessionId: string, userId: string): boolean {
   broadcastToRoom(session.roomId, "whiteboard:user-left", { sessionId, userId, users: Array.from(session.users) });
 
   if (session.users.size === 0) {
-    // Session is cleaned up from active sessions but elements remain in persistence
     whiteboardSessions.delete(sessionId);
   }
 
   return true;
 }
 
-export function addElement(sessionId: string, element: Omit<DrawElement, "id" | "createdAt" | "version" | "lastModifiedAt" | "lastModifiedBy">): DrawElement | null {
+export async function addElement(sessionId: string, element: Omit<DrawElement, "id" | "createdAt" | "version" | "lastModifiedAt" | "lastModifiedBy">): Promise<DrawElement | null> {
   const session = whiteboardSessions.get(sessionId);
   if (!session) return null;
 
@@ -208,19 +171,18 @@ export function addElement(sessionId: string, element: Omit<DrawElement, "id" | 
     lastModifiedBy: element.createdBy,
   };
 
-  // Store in session (in-memory for real-time access)
   session.elements.set(newElement.id, newElement);
   session.modifiedAt = now;
 
-  // Persist to database (MongoDB) for durability across session recreation
-  whiteboardDB.saveElement(session.roomId, newElement);
+  const modelData = drawElementToModel(session.roomId, newElement);
+  await DrawElementModel.create(modelData);
 
   broadcastToRoom(session.roomId, "whiteboard:element-added", { sessionId, element: newElement });
 
   return newElement;
 }
 
-export function updateElement(sessionId: string, elementId: string, updates: Partial<DrawElement>, userId?: string): boolean {
+export async function updateElement(sessionId: string, elementId: string, updates: Partial<DrawElement>, userId?: string): Promise<boolean> {
   const session = whiteboardSessions.get(sessionId);
   if (!session) return false;
 
@@ -235,65 +197,84 @@ export function updateElement(sessionId: string, elementId: string, updates: Par
     lastModifiedBy: userId || element.lastModifiedBy,
   };
 
-  // Update in session
   Object.assign(element, versionedUpdates);
   session.modifiedAt = now;
 
-  // Persist update to database with conflict resolution
-  whiteboardDB.updateElement(session.roomId, elementId, { ...element });
+  const setFields: Record<string, unknown> = {};
+  if (updates.strokeColor !== undefined) setFields.color = updates.strokeColor;
+  if (updates.strokeWidth !== undefined) setFields.strokeWidth = updates.strokeWidth;
+  if (updates.fillColor !== undefined) setFields.fill = updates.fillColor;
+  if (updates.text !== undefined) setFields.text = updates.text;
+  if (updates.type !== undefined) setFields.type = elementTypeToModel[updates.type] || "line";
+  if (updates.points !== undefined) setFields.points = updates.points;
+  if (updates.startPoint !== undefined) {
+    const points: Point[] = [];
+    points.push(updates.startPoint);
+    if (element.endPoint) points.push(element.endPoint);
+    setFields.points = points;
+  }
+  if (updates.endPoint !== undefined) {
+    const points: Point[] = [];
+    if (element.startPoint) points.push(element.startPoint);
+    points.push(updates.endPoint);
+    setFields.points = points;
+  }
+
+  if (Object.keys(setFields).length > 0) {
+    await DrawElementModel.findOneAndUpdate(
+      { id: elementId },
+      { $set: setFields }
+    );
+  }
 
   broadcastToRoom(session.roomId, "whiteboard:element-updated", { sessionId, elementId, updates: versionedUpdates });
 
   return true;
 }
 
-export function deleteElement(sessionId: string, elementId: string): boolean {
+export async function deleteElement(sessionId: string, elementId: string): Promise<boolean> {
   const session = whiteboardSessions.get(sessionId);
   if (!session) return false;
 
   const deleted = session.elements.delete(elementId);
   if (deleted) {
     session.modifiedAt = Date.now();
-
-    // Remove from persistence
-    whiteboardDB.deleteElement(session.roomId, elementId);
-
+    await DrawElementModel.deleteOne({ id: elementId });
     broadcastToRoom(session.roomId, "whiteboard:element-deleted", { sessionId, elementId });
   }
 
   return deleted;
 }
 
-export function getWhiteboardElements(sessionId: string): DrawElement[] {
+export async function getWhiteboardElements(sessionId: string): Promise<DrawElement[]> {
   const session = whiteboardSessions.get(sessionId);
   if (!session) return [];
 
   return Array.from(session.elements.values());
 }
 
-export function clearWhiteboard(sessionId: string): boolean {
+export async function clearWhiteboard(sessionId: string): Promise<boolean> {
   const session = whiteboardSessions.get(sessionId);
   if (!session) return false;
 
   session.elements.clear();
   session.modifiedAt = Date.now();
 
-  // Clear from persistence as well
-  whiteboardDB.clearRoom(session.roomId);
+  await DrawElementModel.deleteMany({ sessionId });
 
   broadcastToRoom(session.roomId, "whiteboard:cleared", { sessionId });
 
   return true;
 }
 
-export function getUsers(sessionId: string): string[] {
+export async function getUsers(sessionId: string): Promise<string[]> {
   const session = whiteboardSessions.get(sessionId);
   if (!session) return [];
 
   return Array.from(session.users);
 }
 
-export function exportWhiteboard(sessionId: string, format: "json" | "svg"): string | null {
+export async function exportWhiteboard(sessionId: string, format: "json" | "svg"): Promise<string | null> {
   const session = whiteboardSessions.get(sessionId);
   if (!session) return null;
 

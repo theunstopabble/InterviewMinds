@@ -3,6 +3,7 @@ import axios from 'axios';
 import nodemailer from 'nodemailer';
 import { logger } from './logger';
 import { renderEmailTemplate } from './emailTemplates';
+import { NotificationModel, INotification } from '../models/Notification';
 
 export type NotificationChannel = 'email' | 'sms' | 'in-app' | 'slack' | 'webhook';
 export type NotificationStatus = 'pending' | 'sent' | 'delivered' | 'failed';
@@ -48,10 +49,7 @@ export interface SlackNotification {
   attachments?: any[];
 }
 
-/* ------------------------------------------------------------------ */
-/*  Environment-based provider config                                    */
-/* ------------------------------------------------------------------ */
-const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'sendgrid'; // sendgrid | smtp | mailgun | brevo
+const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || 'sendgrid';
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
@@ -66,10 +64,29 @@ const TWILIO_SID = process.env.TWILIO_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_PHONE = process.env.TWILIO_PHONE;
 
+function toNotification(doc: Record<string, any>): Notification {
+  return {
+    id: doc._id || doc.id,
+    userId: doc.userId,
+    type: doc.type,
+    channel: doc.channel as NotificationChannel,
+    title: doc.title,
+    message: doc.message,
+    data: {
+      templateId: doc.templateId || undefined,
+      variables: doc.variables ? (doc.variables instanceof Map ? Object.fromEntries(doc.variables) : doc.variables) : undefined,
+      recipientAddress: doc.recipientAddress || undefined,
+    },
+    status: doc.status as NotificationStatus,
+    sentAt: doc.sentAt || undefined,
+    deliveredAt: doc.deliveredAt || undefined,
+    readAt: doc.readAt || undefined,
+    createdAt: doc.createdAt,
+  };
+}
+
 class NotificationService {
-  private notifications: Map<string, Notification> = new Map();
   private templates: Map<string, NotificationTemplate> = new Map();
-  private userNotifications: Map<string, Notification[]> = new Map();
 
   constructor() {
     this.initializeDefaultTemplates();
@@ -180,10 +197,6 @@ class NotificationService {
     defaultTemplates.forEach(t => this.templates.set(t.id, t));
   }
 
-  /* ---------------------------------------------------------------- */
-  /*  Core send logic — delegates to real providers                     */
-  /* ---------------------------------------------------------------- */
-
   async sendNotification(
     userId: string,
     type: string,
@@ -203,6 +216,19 @@ class NotificationService {
       status: 'pending',
       createdAt: new Date(),
     };
+
+    const doc = await NotificationModel.create({
+      _id: notification.id,
+      userId,
+      type,
+      channel,
+      title,
+      message,
+      templateId: data?.templateId || '',
+      variables: data?.variables || {},
+      recipientAddress: data?.to || data?.phone || '',
+      status: 'pending',
+    });
 
     try {
       switch (channel) {
@@ -225,22 +251,24 @@ class NotificationService {
       notification.status = 'sent';
       notification.sentAt = new Date();
       notification.deliveredAt = new Date();
+
+      await NotificationModel.findByIdAndUpdate(doc._id, {
+        status: 'sent',
+        sentAt: new Date(),
+        deliveredAt: new Date(),
+      });
     } catch (error) {
       notification.status = 'failed';
       logger.error({ error, channel, userId }, "Notification delivery failed");
-    }
 
-    this.notifications.set(notification.id, notification);
-    const userNotifs = this.userNotifications.get(userId) || [];
-    userNotifs.push(notification);
-    this.userNotifications.set(userId, userNotifs);
+      await NotificationModel.findByIdAndUpdate(doc._id, {
+        status: 'failed',
+        errorMessage: String(error),
+      });
+    }
 
     return notification;
   }
-
-  /* ---------------------------------------------------------------- */
-  /*  REAL EMAIL — SendGrid / Mailgun / SMTP                            */
-  /* ---------------------------------------------------------------- */
 
   private async sendEmail(to: string, subject: string, body: string): Promise<boolean> {
     if (!to) {
@@ -248,7 +276,6 @@ class NotificationService {
       return false;
     }
 
-    /* Brevo (Sendinblue) */
     if (EMAIL_PROVIDER === 'brevo' && BREVO_API_KEY) {
       await axios.post(
         'https://api.brevo.com/v3/smtp/email',
@@ -264,7 +291,6 @@ class NotificationService {
       return true;
     }
 
-    /* SendGrid */
     if (EMAIL_PROVIDER === 'sendgrid' && SENDGRID_API_KEY) {
       await axios.post(
         'https://api.sendgrid.com/v3/mail/send',
@@ -280,7 +306,6 @@ class NotificationService {
       return true;
     }
 
-    /* Mailgun */
     if (EMAIL_PROVIDER === 'mailgun' && MAILGUN_API_KEY && MAILGUN_DOMAIN) {
       const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
       await axios.post(
@@ -292,7 +317,6 @@ class NotificationService {
       return true;
     }
 
-    /* SMTP via nodemailer — supports Brevo, Gmail, any SMTP relay */
     if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
       const transporter = nodemailer.createTransport({
         host: SMTP_HOST,
@@ -320,10 +344,6 @@ class NotificationService {
     return false;
   }
 
-  /* ---------------------------------------------------------------- */
-  /*  REAL SMS — Twilio via REST API                                    */
-  /* ---------------------------------------------------------------- */
-
   private async sendSMS(phone: string, message: string): Promise<boolean> {
     if (!phone) {
       logger.warn("SMS skipped: no phone number");
@@ -346,10 +366,6 @@ class NotificationService {
     return true;
   }
 
-  /* ---------------------------------------------------------------- */
-  /*  REAL SLACK — POST to incoming webhook URL                       */
-  /* ---------------------------------------------------------------- */
-
   private async sendSlackNotification(webhookUrl: string, text: string, blocks?: any[]): Promise<boolean> {
     if (!webhookUrl) {
       logger.warn("Slack skipped: no webhook URL");
@@ -366,10 +382,6 @@ class NotificationService {
     logger.info({ webhookUrl: webhookUrl.slice(0, 30) }, "Slack notification sent");
     return true;
   }
-
-  /* ---------------------------------------------------------------- */
-  /*  REAL WEBHOOK — POST JSON payload to arbitrary URL               */
-  /* ---------------------------------------------------------------- */
 
   private async sendWebhook(url: string, notification: Notification): Promise<boolean> {
     if (!url) {
@@ -397,10 +409,6 @@ class NotificationService {
     return true;
   }
 
-  /* ---------------------------------------------------------------- */
-  /*  Template helpers                                                  */
-  /* ---------------------------------------------------------------- */
-
   sendTemplatedNotification(
     userId: string,
     templateId: string,
@@ -418,7 +426,6 @@ class NotificationService {
       title = title.replace(new RegExp(`{{${v}}}`, 'g'), value);
     });
 
-    /* For email channels, use HTML templates for interview/result/offer types */
     if (template.channel === 'email' && ['interview', 'results', 'offer'].includes(template.type)) {
       const rendered = renderEmailTemplate(templateId, variables);
       if (rendered) {
@@ -433,7 +440,7 @@ class NotificationService {
       template.channel,
       title,
       message,
-      { to: variables.email, phone: variables.phone, webhookUrl: variables.slackWebhook, url: variables.webhookUrl }
+      { to: variables.email, phone: variables.phone, webhookUrl: variables.slackWebhook, url: variables.webhookUrl, templateId, variables }
     );
   }
 
@@ -462,31 +469,29 @@ class NotificationService {
     return updated;
   }
 
-  /* ---------------------------------------------------------------- */
-  /*  In-memory notification store (kept for runtime speed)             */
-  /* ---------------------------------------------------------------- */
-
-  getUserNotifications(userId: string, unreadOnly = false): Notification[] {
-    const notifs = this.userNotifications.get(userId) || [];
-    if (unreadOnly) return notifs.filter((n: Notification) => !n.readAt);
-    return notifs.sort((a: Notification, b: Notification) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  async getUserNotifications(userId: string, unreadOnly = false): Promise<Notification[]> {
+    const filter: Record<string, any> = { userId };
+    if (unreadOnly) filter.readAt = null;
+    const docs = await NotificationModel.find(filter).sort({ createdAt: -1 }).lean();
+    return docs.map(toNotification);
   }
 
-  markAsRead(notificationId: string): boolean {
-    const notification = this.notifications.get(notificationId);
-    if (!notification) return false;
-    notification.readAt = new Date();
-    this.notifications.set(notificationId, notification);
-    return true;
+  async markAsRead(notificationId: string): Promise<boolean> {
+    const doc = await NotificationModel.findByIdAndUpdate(
+      notificationId,
+      { readAt: new Date() },
+      { new: true }
+    );
+    return !!doc;
   }
 
-  getUnreadCount(userId: string): number {
-    const notifs = this.userNotifications.get(userId) || [];
-    return notifs.filter((n: Notification) => !n.readAt).length;
+  async getUnreadCount(userId: string): Promise<number> {
+    return NotificationModel.countDocuments({ userId, readAt: null });
   }
 
-  deleteNotification(notificationId: string): boolean {
-    return this.notifications.delete(notificationId);
+  async deleteNotification(notificationId: string): Promise<boolean> {
+    const result = await NotificationModel.deleteOne({ _id: notificationId });
+    return result.deletedCount > 0;
   }
 
   sendBulkNotifications(

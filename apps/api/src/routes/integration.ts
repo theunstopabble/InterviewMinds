@@ -348,10 +348,15 @@ router.get("/background/drug-test/:testId", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/compliance/report", requireAuth, (req, res) => {
-  const { candidateId, verifications, backgroundCheck, employment, education } = req.body;
-  const result = generateComplianceReport(candidateId, verifications, backgroundCheck, employment, education);
-  res.json({ success: true, data: result });
+router.post("/compliance/report", requireAuth, async (req, res) => {
+  try {
+    const { candidateId, verifications, backgroundCheck, employment, education } = req.body;
+    const result = generateComplianceReport(candidateId, verifications, backgroundCheck, employment, education);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    logger.error({ err, path: req.path }, "Integration route error");
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 export default router;

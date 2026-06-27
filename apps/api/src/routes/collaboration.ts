@@ -59,7 +59,7 @@ router.get('/editor/users/:sessionId', requireAuth, async (req, res) => {
 router.post('/whiteboard/create', requireAuth, async (req, res) => {
   try {
     const { roomId } = req.body;
-    const sessionId = whiteboard.createWhiteboardSession(roomId);
+    const sessionId = await whiteboard.createWhiteboardSession(roomId);
     res.json({ sessionId });
   } catch (error) {
     res.status(500).json({ error: 'Failed to create whiteboard' });
@@ -70,8 +70,9 @@ router.post('/whiteboard/join', requireAuth, async (req, res) => {
   try {
     const { sessionId } = req.body;
     const userId = (req as any).auth?.userId;
-    whiteboard.joinWhiteboard(sessionId, userId);
-    res.json({ success: true, elements: whiteboard.getWhiteboardElements(sessionId) });
+    await whiteboard.joinWhiteboard(sessionId, userId);
+    const elements = await whiteboard.getWhiteboardElements(sessionId);
+    res.json({ success: true, elements });
   } catch (error) {
     res.status(500).json({ error: 'Failed to join whiteboard' });
   }
@@ -80,7 +81,7 @@ router.post('/whiteboard/join', requireAuth, async (req, res) => {
 router.post('/whiteboard/element', requireAuth, async (req, res) => {
   try {
     const { sessionId, element } = req.body;
-    const newElement = whiteboard.addElement(sessionId, element);
+    const newElement = await whiteboard.addElement(sessionId, element);
     res.json({ element: newElement });
   } catch (error) {
     res.status(500).json({ error: 'Failed to add element' });
@@ -88,21 +89,29 @@ router.post('/whiteboard/element', requireAuth, async (req, res) => {
 });
 
 router.delete('/whiteboard/element/:sessionId/:elementId', requireAuth, async (req, res) => {
-  const { sessionId, elementId } = req.params;
-  const success = whiteboard.deleteElement(sessionId, elementId);
-  res.json({ success });
+  try {
+    const { sessionId, elementId } = req.params;
+    const success = await whiteboard.deleteElement(sessionId, elementId);
+    res.json({ success });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete element' });
+  }
 });
 
 router.get('/whiteboard/:sessionId', requireAuth, async (req, res) => {
-  const elements = whiteboard.getWhiteboardElements(req.params.sessionId);
-  res.json({ elements });
+  try {
+    const elements = await whiteboard.getWhiteboardElements(req.params.sessionId);
+    res.json({ elements });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch whiteboard elements' });
+  }
 });
 
 router.post('/video/create', requireAuth, async (req, res) => {
   try {
     const { roomId, maxParticipants } = req.body;
     const userId = (req as any).auth?.userId;
-    const sessionId = videoCall.createVideoSession(roomId, userId, "Host", maxParticipants || 4);
+    const sessionId = await videoCall.createVideoSession(roomId, userId, "Host", maxParticipants || 4);
     res.json({ sessionId });
   } catch (error) {
     res.status(500).json({ error: 'Failed to create video session' });
@@ -113,7 +122,7 @@ router.post('/video/join', requireAuth, async (req, res) => {
   try {
     const { sessionId, userName } = req.body;
     const userId = (req as any).auth?.userId;
-    const participants = videoCall.joinVideoSession(sessionId, userId, userName);
+    const participants = await videoCall.joinVideoSession(sessionId, userId, userName);
     if (!participants) {
       res.status(404).json({ error: 'Session not found' });
       return;
@@ -128,7 +137,7 @@ router.post('/video/leave', requireAuth, async (req, res) => {
   try {
     const { sessionId } = req.body;
     const userId = (req as any).auth?.userId;
-    videoCall.leaveVideoSession(sessionId, userId);
+    await videoCall.leaveVideoSession(sessionId, userId);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to leave video session' });
@@ -170,7 +179,7 @@ router.post('/note/create', requireAuth, async (req, res) => {
   try {
     const { sessionId, content } = req.body;
     const userId = (req as any).auth?.userId;
-    const note = collabTools.createNote(sessionId, userId, content);
+    const note = await collabTools.createNote(sessionId, userId, content);
     res.json(note);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create note' });
@@ -178,15 +187,19 @@ router.post('/note/create', requireAuth, async (req, res) => {
 });
 
 router.get('/notes/:sessionId', requireAuth, async (req, res) => {
-  const notes = collabTools.getNotes(req.params.sessionId);
-  res.json({ notes });
+  try {
+    const notes = await collabTools.getNotes(req.params.sessionId);
+    res.json({ notes });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch notes' });
+  }
 });
 
 router.post('/vote/create', requireAuth, async (req, res) => {
   try {
     const { sessionId, question, options, expiresIn } = req.body;
     const userId = (req as any).auth?.userId;
-    const vote = collabTools.createVote(sessionId, userId, question, options, expiresIn);
+    const vote = await collabTools.createVote(sessionId, userId, question, options, expiresIn);
     res.json(vote);
   } catch (error) {
     res.status(500).json({ error: 'Failed to create vote' });
@@ -197,7 +210,7 @@ router.post('/vote/cast', requireAuth, async (req, res) => {
   try {
     const { voteId, optionId } = req.body;
     const userId = (req as any).auth?.userId;
-    const success = collabTools.castVote(voteId, userId, optionId);
+    const success = await collabTools.castVote(voteId, userId, optionId);
     res.json({ success });
   } catch (error) {
     res.status(500).json({ error: 'Failed to cast vote' });
@@ -205,8 +218,12 @@ router.post('/vote/cast', requireAuth, async (req, res) => {
 });
 
 router.get('/votes/:sessionId', requireAuth, async (req, res) => {
-  const votes = collabTools.getVotes(req.params.sessionId);
-  res.json({ votes });
+  try {
+    const votes = await collabTools.getVotes(req.params.sessionId);
+    res.json({ votes });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch votes' });
+  }
 });
 
 router.post('/chat/send', requireAuth, async (req, res) => {
@@ -214,7 +231,7 @@ router.post('/chat/send', requireAuth, async (req, res) => {
     const { sessionId, message, isPrivate, toUserId } = req.body;
     const userId = (req as any).auth?.userId;
     const userName = "Interviewer";
-    const messageId = collabTools.sendMessage(sessionId, userId, userName, message, isPrivate, toUserId);
+    const messageId = await collabTools.sendMessage(sessionId, userId, userName, message, isPrivate, toUserId);
     res.json({ messageId });
   } catch (error) {
     res.status(500).json({ error: 'Failed to send message' });
@@ -222,8 +239,12 @@ router.post('/chat/send', requireAuth, async (req, res) => {
 });
 
 router.get('/chat/:sessionId', requireAuth, async (req, res) => {
-  const messages = collabTools.getMessages(req.params.sessionId);
-  res.json({ messages });
+  try {
+    const messages = await collabTools.getMessages(req.params.sessionId);
+    res.json({ messages });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
 });
 
 export default router;
