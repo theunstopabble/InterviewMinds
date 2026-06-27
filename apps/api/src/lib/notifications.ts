@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
+import nodemailer from 'nodemailer';
 import { logger } from './logger';
 import { renderEmailTemplate } from './emailTemplates';
 
@@ -271,16 +272,28 @@ class NotificationService {
       return true;
     }
 
-    /* SMTP via axios to a local relay or configured endpoint */
+    /* SMTP via nodemailer — supports Brevo, Gmail, any SMTP relay */
     if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
-      /* For a true SMTP implementation nodemailer is ideal, but we use a
-         generic HTTP-to-SSMTP bridge or log the attempt so the admin knows
-         to install nodemailer. For now we log a structured message. */
-      logger.warn(
-        { to, subject, smtpHost: SMTP_HOST },
-        "SMTP configured but nodemailer not installed. Run: npm install nodemailer"
-      );
-      return false;
+      const transporter = nodemailer.createTransport({
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+        secure: SMTP_PORT === 465,
+        auth: { user: SMTP_USER, pass: SMTP_PASS },
+        pool: true,
+        maxConnections: 3,
+        maxMessages: 50,
+      });
+
+      await transporter.sendMail({
+        from: FROM_EMAIL,
+        to,
+        subject,
+        html: body,
+      });
+
+      logger.info({ to, subject, smtpHost: SMTP_HOST }, "Email sent via SMTP");
+      transporter.close();
+      return true;
     }
 
     logger.warn({ to, subject }, "Email not sent: no email provider configured");
