@@ -183,9 +183,9 @@ router.get("/access/permissions", requireAuth, (req, res) => {
   res.json({ success: true, data: { permissions } });
 });
 
-router.get("/audit/logs", requireAuth, (req, res) => {
+router.get("/audit/logs", requireAuth, async (req, res) => {
   const { userId, action, resource, startDate, endDate } = req.query;
-  const logs = getAuditLogs({
+  const logs = await getAuditLogs({
     userId: userId as string,
     action: action as string,
     resource: resource as string,
@@ -195,9 +195,9 @@ router.get("/audit/logs", requireAuth, (req, res) => {
   res.json({ success: true, data: logs });
 });
 
-router.post("/audit/export", requireAuth, (req, res) => {
+router.post("/audit/export", requireAuth, async (req, res) => {
   const { startDate, endDate, userId, action, resource, status, format } = req.body;
-  const result = exportAuditTrail({
+  const result = await exportAuditTrail({
     startDate: new Date(startDate),
     endDate: new Date(endDate),
     userId,
@@ -209,27 +209,27 @@ router.post("/audit/export", requireAuth, (req, res) => {
   res.json({ success: true, data: result });
 });
 
-router.get("/audit/stats", requireAuth, (req, res) => {
+router.get("/audit/stats", requireAuth, async (req, res) => {
   const { startDate, endDate } = req.query;
-  const stats = getAuditStats({
+  const stats = await getAuditStats({
     start: new Date(startDate as string || Date.now() - 30 * 86400000),
     end: new Date(endDate as string || Date.now()),
   });
   res.json({ success: true, data: stats });
 });
 
-router.get("/audit/search", requireAuth, (req, res) => {
+router.get("/audit/search", requireAuth, async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ success: false, error: "Query required" });
-  const results = searchAuditLogs(q as string);
+  const results = await searchAuditLogs(q as string);
   res.json({ success: true, data: { results, count: results.length } });
 });
 
-router.post("/audit/log", requireAuth, (req, res) => {
+router.post("/audit/log", requireAuth, async (req, res) => {
   const { action, resource, resourceId, details, status } = req.body;
   const userId = (req as any).user?.id || "system";
   const userRole = (req as any).user?.role || "system";
-  const entry = logAuditEntry({
+  const entry = await logAuditEntry({
     userId,
     userRole,
     action,

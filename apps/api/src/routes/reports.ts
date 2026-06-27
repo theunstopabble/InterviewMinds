@@ -6,10 +6,10 @@ import { requireAuth } from '../middleware/auth';
 const router = Router();
 
 // GET /api/reports/candidate/:candidateId
-router.get('/candidate/:candidateId', requireAuth, (req, res) => {
+router.get('/candidate/:candidateId', requireAuth, async (req, res) => {
   try {
     const { candidateId } = req.params;
-    const reports = reportGeneratorService.getReportsByCandidate(candidateId);
+    const reports = await reportGeneratorService.getReportsByCandidate(candidateId);
     res.json({ reports, count: reports.length });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching reports:');
@@ -18,10 +18,10 @@ router.get('/candidate/:candidateId', requireAuth, (req, res) => {
 });
 
 // GET /api/reports/:reportId
-router.get('/:reportId', requireAuth, (req, res) => {
+router.get('/:reportId', requireAuth, async (req, res) => {
   try {
     const { reportId } = req.params;
-    const report = reportGeneratorService.getReport(reportId);
+    const report = await reportGeneratorService.getReport(reportId);
     if (!report) {
       res.status(404).json({ error: 'Report not found' });
       return;
@@ -34,7 +34,7 @@ router.get('/:reportId', requireAuth, (req, res) => {
 });
 
 // POST /api/reports/generate
-router.post('/generate', requireAuth, (req, res) => {
+router.post('/generate', requireAuth, async (req, res) => {
   try {
     const { candidateId, interviewIds } = req.body;
     const candidate: CandidateInfo = {
@@ -62,7 +62,7 @@ router.post('/generate', requireAuth, (req, res) => {
       { category: 'Problem Solving', score: 75, maxScore: 100, feedback: 'Systematic approach to problems. Could improve on optimization.' },
       { category: 'System Design', score: 70, maxScore: 100, feedback: 'Understands core concepts but needs more depth in distributed systems.' },
     ];
-    const report = reportGeneratorService.createReport(candidate, interviews, detailedScores);
+    const report = await reportGeneratorService.createReport(candidate, interviews, detailedScores);
     res.json({ success: true, report });
   } catch (error) {
     logger.error({ err: error }, 'Error generating report:');
@@ -71,15 +71,16 @@ router.post('/generate', requireAuth, (req, res) => {
 });
 
 // GET /api/reports/:reportId/pdf
-router.get('/:reportId/pdf', requireAuth, (req, res) => {
+router.get('/:reportId/pdf', requireAuth, async (req, res) => {
   try {
     const { reportId } = req.params;
-    const report = reportGeneratorService.getReport(reportId);
+    const report = await reportGeneratorService.getReport(reportId);
     if (!report) {
       res.status(404).json({ error: 'Report not found' });
       return;
     }
-    const template = reportGeneratorService.getTemplates()[0];
+    const templates = await reportGeneratorService.getTemplates();
+    const template = templates[0];
     const pdfContent = reportGeneratorService.generatePDFContent(report, template);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="report-${reportId}.txt"`);
@@ -91,13 +92,14 @@ router.get('/:reportId/pdf', requireAuth, (req, res) => {
 });
 
 // POST /api/reports/export/csv
-router.post('/export/csv', requireAuth, (req, res) => {
+router.post('/export/csv', requireAuth, async (req, res) => {
   try {
     const { reportIds } = req.body;
-    const reports = (reportIds as string[] || [])
-      .map((id: string) => reportGeneratorService.getReport(id))
-      .filter(Boolean);
-    const csvContent = reportGeneratorService.generateCSVExport(reports as any[]);
+    const reports = await Promise.all(
+      (reportIds as string[] || []).map((id: string) => reportGeneratorService.getReport(id))
+    );
+    const validReports = reports.filter(Boolean);
+    const csvContent = reportGeneratorService.generateCSVExport(validReports as any[]);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="reports-export.csv"`);
     res.send(csvContent);
@@ -108,13 +110,14 @@ router.post('/export/csv', requireAuth, (req, res) => {
 });
 
 // POST /api/reports/export/json
-router.post('/export/json', requireAuth, (req, res) => {
+router.post('/export/json', requireAuth, async (req, res) => {
   try {
     const { reportIds } = req.body;
-    const reports = (reportIds as string[] || [])
-      .map((id: string) => reportGeneratorService.getReport(id))
-      .filter(Boolean);
-    const jsonContent = reportGeneratorService.generateJSONExport(reports as any[]);
+    const reports = await Promise.all(
+      (reportIds as string[] || []).map((id: string) => reportGeneratorService.getReport(id))
+    );
+    const validReports = reports.filter(Boolean);
+    const jsonContent = reportGeneratorService.generateJSONExport(validReports as any[]);
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="reports-export.json"`);
     res.send(jsonContent);
@@ -125,9 +128,9 @@ router.post('/export/json', requireAuth, (req, res) => {
 });
 
 // GET /api/reports/templates
-router.get('/templates', (_req, res) => {
+router.get('/templates', async (_req, res) => {
   try {
-    const templates = reportGeneratorService.getTemplates();
+    const templates = await reportGeneratorService.getTemplates();
     res.json({ templates });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching templates:');

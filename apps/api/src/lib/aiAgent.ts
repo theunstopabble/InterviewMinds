@@ -1,14 +1,6 @@
 import { logger } from "./logger";
 import Groq from "groq-sdk";
-
-export interface AgentConfig {
-  name: string;
-  type: "screening" | "scheduling" | "feedback" | "followup" | "custom";
-  enabled: boolean;
-  triggers: string[];
-  actions: string[];
-  schedule?: string;
-}
+import { AgentConfigModel } from "../models/AgentConfig";
 
 export interface AgentTask {
   id: string;
@@ -52,30 +44,6 @@ export interface FeedbackResult {
   detailedFeedback: string;
 }
 
-const agents: AgentConfig[] = [
-  {
-    name: "Resume Screening Agent",
-    type: "screening",
-    enabled: true,
-    triggers: ["resume.uploaded", "candidate.applied"],
-    actions: ["score.resume", "shortlist.candidate", "notify.hr"],
-  },
-  {
-    name: "Scheduling Agent",
-    type: "scheduling",
-    enabled: true,
-    triggers: ["candidate.shortlisted", "interview.approved"],
-    actions: ["find.slot", "send.invite", "create.meeting"],
-  },
-  {
-    name: "Feedback Agent",
-    type: "feedback",
-    enabled: true,
-    triggers: ["interview.completed"],
-    actions: ["analyze.responses", "generate.feedback", "notify.candidate"],
-  },
-];
-
 const tasks: AgentTask[] = [];
 
 function getGroqClient(): Groq {
@@ -84,25 +52,24 @@ function getGroqClient(): Groq {
   return new Groq({ apiKey: key });
 }
 
-export function getAgents(): AgentConfig[] {
-  return agents;
+export async function getAgents() {
+  return AgentConfigModel.find({ isActive: true }).lean();
 }
 
-export function getAgent(name: string): AgentConfig | undefined {
-  return agents.find(a => a.name === name);
+export async function getAgent(name: string) {
+  return AgentConfigModel.findOne({ name }).lean();
 }
 
-export function updateAgent(name: string, updates: Partial<AgentConfig>): AgentConfig | null {
-  const agent = agents.find(a => a.name === name);
-  if (agent) {
-    Object.assign(agent, updates);
-    return agent;
-  }
-  return null;
+export async function updateAgent(name: string, updates: Record<string, unknown>) {
+  return AgentConfigModel.findOneAndUpdate(
+    { name },
+    { $set: updates },
+    { new: true }
+  ).lean();
 }
 
 export async function runAgent(agentName: string, input: Record<string, unknown>): Promise<AgentTask> {
-  const agent = agents.find(a => a.name === agentName);
+  const agent = await AgentConfigModel.findOne({ name: agentName, isActive: true }).lean();
   if (!agent) throw new Error(`Agent ${agentName} not found`);
 
   const task: AgentTask = {
@@ -140,10 +107,6 @@ export async function runAgent(agentName: string, input: Record<string, unknown>
   task.completedAt = new Date();
   return task;
 }
-
-/* ------------------------------------------------------------------ */
-/*  REAL AI AGENTS — Groq-powered                                      */
-/* ------------------------------------------------------------------ */
 
 async function runScreeningAgent(input: Record<string, unknown>): Promise<ResumeScreeningResult> {
   const candidateId = String(input.candidateId || "cand_001");
@@ -205,7 +168,6 @@ async function runSchedulingAgent(input: Record<string, unknown>): Promise<Sched
   const interviewerId = String(input.interviewerId || "interviewer_001");
   const preferredDate = String(input.preferredDate || "");
 
-  /* Use Groq to suggest an optimal time based on context */
   const groq = getGroqClient();
   const prompt = `Suggest an interview schedule. Candidate: ${candidateId}. Interviewer: ${interviewerId}. Preferred: ${preferredDate || "ASAP"}.
 Return ONLY JSON: {"duration": 60, "meetingLink": "https://interviewminds.com/meeting/...", "daysFromNow": 2}`;
@@ -310,21 +272,20 @@ export function getTask(taskId: string): AgentTask | undefined {
   return tasks.find(t => t.id === taskId);
 }
 
-export function createAgent(config: Omit<AgentConfig, "enabled">): AgentConfig {
-  const newAgent: AgentConfig = {
+export async function createAgent(config: Record<string, unknown>) {
+  const agent = await AgentConfigModel.create({
     ...config,
-    enabled: true,
-  };
-  agents.push(newAgent);
-  logger.info(`Created agent: ${newAgent.name}`);
-  return newAgent;
+    isActive: true,
+    createdBy: (config.createdBy as string) || "system",
+  });
+  logger.info(`Created agent: ${agent.name}`);
+  return agent.toObject();
 }
 
-export function deleteAgent(name: string): boolean {
-  const idx = agents.findIndex(a => a.name === name);
-  if (idx !== -1) {
-    agents.splice(idx, 1);
-    return true;
-  }
-  return false;
+export async function deleteAgent(name: string) {
+  const result = await AgentConfigModel.updateOne(
+    { name },
+    { $set: { isActive: false } }
+  );
+  return result.modifiedCount > 0;
 }

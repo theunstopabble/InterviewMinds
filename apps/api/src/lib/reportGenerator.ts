@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import { ReportModel } from '../models/Report';
+import { ReportTemplateModel } from '../models/ReportTemplate';
 
 export interface CandidateInfo {
   id: string;
@@ -55,60 +57,23 @@ export interface ReportTemplate {
 }
 
 class ReportGeneratorService {
-  private reports: Map<string, ReportData> = new Map();
-  private templates: Map<string, ReportTemplate> = new Map();
-
-  constructor() {
-    this.initializeDefaultTemplates();
-  }
-
-  private initializeDefaultTemplates() {
-    const defaultTemplates: ReportTemplate[] = [
-      {
-        id: 'standard',
-        name: 'Standard Report',
-        primaryColor: '#2563EB',
-        includeProctoring: true,
-        includeCodeSamples: true,
-        showWeaknesses: true,
-      },
-      {
-        id: 'executive',
-        name: 'Executive Summary',
-        primaryColor: '#7C3AED',
-        includeProctoring: true,
-        includeCodeSamples: false,
-        showWeaknesses: false,
-      },
-      {
-        id: 'technical',
-        name: 'Technical Deep-Dive',
-        primaryColor: '#059669',
-        includeProctoring: true,
-        includeCodeSamples: true,
-        showWeaknesses: true,
-      },
-    ];
-
-    defaultTemplates.forEach(t => this.templates.set(t.id, t));
-  }
-
   generateReportId(): string {
     return `RPT-${Date.now().toString(36).toUpperCase()}-${uuidv4().split('-')[0].toUpperCase()}`;
   }
 
-  createReport(
+  async createReport(
     candidate: CandidateInfo,
     interviews: InterviewSummary[],
     detailedScores: ReportData['detailedScores'],
     proctoringData?: ReportData['proctoringReport']
-  ): ReportData {
+  ): Promise<ReportData> {
     const overallScore = interviews.length > 0
       ? interviews.reduce((sum, i) => sum + i.score, 0) / interviews.length
       : 0;
 
-    const report: ReportData = {
-      reportId: this.generateReportId(),
+    const reportId = this.generateReportId();
+    const reportData: ReportData = {
+      reportId,
       candidate,
       interviews,
       overallScore: Math.round(overallScore * 10) / 10,
@@ -121,8 +86,20 @@ class ReportGeneratorService {
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     };
 
-    this.reports.set(report.reportId, report);
-    return report;
+    await ReportModel.create({
+      id: reportId,
+      title: `Candidate Report - ${candidate.name}`,
+      type: 'candidate',
+      candidateId: candidate.id,
+      interviewIds: interviews.map(i => i.id),
+      generatedBy: 'system',
+      data: reportData,
+      format: 'pdf',
+      status: 'ready',
+      expiresAt: reportData.expiresAt,
+    });
+
+    return reportData;
   }
 
   private getRecommendation(score: number): string {
@@ -145,19 +122,16 @@ class ReportGeneratorService {
       .map(s => s.category);
   }
 
-  getReport(reportId: string): ReportData | null {
-    const report = this.reports.get(reportId);
-    if (report && new Date() < report.expiresAt) {
-      return report;
-    }
-    return null;
+  async getReport(reportId: string): Promise<ReportData | null> {
+    const doc = await ReportModel.findOne({ id: reportId, expiresAt: { $gt: new Date() } });
+    if (!doc) return null;
+    return doc.data as ReportData;
   }
 
-  getReportsByCandidate(candidateId: string): ReportData[] {
-    return Array.from(this.reports.values())
-      .filter(r => r.candidate.id === candidateId)
-      .filter(r => new Date() < r.expiresAt)
-      .sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
+  async getReportsByCandidate(candidateId: string): Promise<ReportData[]> {
+    const docs = await ReportModel.find({ candidateId, expiresAt: { $gt: new Date() } })
+      .sort({ createdAt: -1 });
+    return docs.map(d => d.data as ReportData);
   }
 
   generatePDFContent(report: ReportData, template: ReportTemplate): string {
@@ -259,31 +233,81 @@ Eye Contact: ${proctoringReport.eyeContact}%
     return JSON.stringify(reports, null, 2);
   }
 
-  getTemplates(): ReportTemplate[] {
-    return Array.from(this.templates.values());
+  async getTemplates(): Promise<ReportTemplate[]> {
+    const docs = await ReportTemplateModel.find({}).lean();
+    if (docs.length > 0) {
+      return docs.map(d => ({
+        id: d.id,
+        name: d.name,
+        primaryColor: '#2563EB',
+        includeProctoring: true,
+        includeCodeSamples: true,
+        showWeaknesses: true,
+      }));
+    }
+
+    const defaults: ReportTemplate[] = [
+      {
+        id: 'standard',
+        name: 'Standard Report',
+        primaryColor: '#2563EB',
+        includeProctoring: true,
+        includeCodeSamples: true,
+        showWeaknesses: true,
+      },
+      {
+        id: 'executive',
+        name: 'Executive Summary',
+        primaryColor: '#7C3AED',
+        includeProctoring: true,
+        includeCodeSamples: false,
+        showWeaknesses: false,
+      },
+      {
+        id: 'technical',
+        name: 'Technical Deep-Dive',
+        primaryColor: '#059669',
+        includeProctoring: true,
+        includeCodeSamples: true,
+        showWeaknesses: true,
+      },
+    ];
+
+    for (const t of defaults) {
+      await ReportTemplateModel.create({
+        id: t.id,
+        name: t.name,
+        type: 'candidate',
+        sections: [],
+        isDefault: true,
+        createdBy: 'system',
+      });
+    }
+
+    return defaults;
   }
 
-  createCustomTemplate(template: Omit<ReportTemplate, 'id'>): ReportTemplate {
+  async createCustomTemplate(template: Omit<ReportTemplate, 'id'>): Promise<ReportTemplate> {
     const newTemplate: ReportTemplate = {
       ...template,
       id: uuidv4(),
     };
-    this.templates.set(newTemplate.id, newTemplate);
+
+    await ReportTemplateModel.create({
+      id: newTemplate.id,
+      name: newTemplate.name,
+      type: 'candidate',
+      sections: [],
+      isDefault: false,
+      createdBy: 'system',
+    });
+
     return newTemplate;
   }
 
-  expireOldReports(): number {
-    let expired = 0;
-    const now = new Date();
-    
-    for (const [id, report] of this.reports.entries()) {
-      if (now >= report.expiresAt) {
-        this.reports.delete(id);
-        expired++;
-      }
-    }
-    
-    return expired;
+  async expireOldReports(): Promise<number> {
+    const result = await ReportModel.deleteMany({ expiresAt: { $lt: new Date() } });
+    return result.deletedCount || 0;
   }
 }
 

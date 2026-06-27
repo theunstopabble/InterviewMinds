@@ -72,6 +72,8 @@ import { startWorkers, closeQueues } from "./lib/queue";
 import { requireEnvVars } from "./lib/envValidation";
 import { notificationService } from './lib/notifications';
 import { ScheduledInterviewModel } from './models/Scheduling';
+import { AgentConfigModel } from "./models/AgentConfig";
+import { AutomationModel } from "./models/Automation";
 
 dotenv.config();
 initSentry();
@@ -335,6 +337,7 @@ app.use(
 );
 
 import questionBankRoutes from "./routes/questionBank";
+import { seedDefaultCategories } from "./lib/questionBank";
 app.use(
   "/api/question-bank",
   questionBankRoutes,
@@ -584,6 +587,29 @@ if (!MONGO_URI) {
     .then(async () => {
       logger.info("MongoDB connected");
       await initializeDefaultPlanLimits();
+      await seedDefaultCategories();
+
+      // Seed default agents if empty
+      AgentConfigModel.countDocuments().then(count => {
+        if (count === 0) {
+          AgentConfigModel.create([
+            { name: "Resume Screening Agent", type: "screening", model: "llama-3.3-70b-versatile", temperature: 0.3, maxTokens: 1024, systemPrompt: "You are an expert technical recruiter.", tools: ["score.resume", "shortlist.candidate"], isActive: true, createdBy: "system" },
+            { name: "Scheduling Agent", type: "scheduling", model: "llama-3.3-70b-versatile", temperature: 0.2, maxTokens: 256, systemPrompt: "You are an interview scheduler.", tools: ["find.slot", "send.invite"], isActive: true, createdBy: "system" },
+            { name: "Feedback Agent", type: "feedback", model: "llama-3.3-70b-versatile", temperature: 0.4, maxTokens: 1200, systemPrompt: "You are a senior engineering manager giving feedback.", tools: ["analyze.responses", "generate.feedback"], isActive: true, createdBy: "system" },
+          ]);
+        }
+      }).catch(e => logger.error({ err: e }, 'Failed to seed agents'));
+
+      // Seed default automations if empty
+      AutomationModel.countDocuments().then(count => {
+        if (count === 0) {
+          AutomationModel.create([
+            { name: "Candidate Follow-up", description: "Send follow-up email after interview", trigger: "interview_completed", triggerConfig: {}, actions: [{ type: "custom", config: { actionType: "delay", minutes: 60 } }, { type: "email", config: { template: "interview_followup" } }], isActive: true, runCount: 0, createdBy: "system" },
+            { name: "Interview Reminder", description: "Send reminder before interview", trigger: "schedule_reminder", triggerConfig: {}, actions: [{ type: "custom", config: { actionType: "delay", minutes: 30 } }, { type: "notification", config: { type: "reminder" } }], isActive: true, runCount: 0, createdBy: "system" },
+          ]);
+        }
+      }).catch(e => logger.error({ err: e }, 'Failed to seed automations'));
+
       // Start background job workers after DB is ready
       try {
         startWorkers();

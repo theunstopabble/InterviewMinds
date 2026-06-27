@@ -1,158 +1,101 @@
 import { logger } from "./logger";
 import { notificationService } from "./notifications";
-import { InterviewModel } from "../models/Interview";
 import axios from "axios";
+import { AutomationModel, IAutomationAction } from "../models/Automation";
+import { AutomationRunModel } from "../models/AutomationRun";
 
-export interface AutomationTrigger {
-  id: string;
-  event: string;
-  conditions?: Record<string, unknown>;
+export async function getAutomations() {
+  return AutomationModel.find().sort({ createdAt: -1 }).lean();
 }
 
-export interface AutomationAction {
-  id: string;
-  type: "send_email" | "send_notification" | "update_status" | "webhook" | "delay" | "condition";
-  config: Record<string, unknown>;
-  condition?: Record<string, unknown>;
+export async function getAutomation(id: string) {
+  return AutomationModel.findOne({ id }).lean();
 }
 
-export interface Automation {
-  id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  triggers: AutomationTrigger[];
-  actions: AutomationAction[];
-  createdAt: Date;
-  lastRun?: Date;
+export async function createAutomation(data: Record<string, unknown>) {
+  const automation = await AutomationModel.create({
+    ...data,
+    createdBy: (data.createdBy as string) || "system",
+  });
+  return automation.toObject();
 }
 
-export interface AutomationRun {
-  id: string;
-  automationId: string;
-  status: "pending" | "running" | "completed" | "failed";
-  triggerEvent: string;
-  context: Record<string, unknown>;
-  results: Array<{ actionId: string; success: boolean; output?: unknown; error?: string }>;
-  startedAt: Date;
-  completedAt?: Date;
+export async function updateAutomation(id: string, updates: Record<string, unknown>) {
+  return AutomationModel.findOneAndUpdate(
+    { id },
+    { $set: updates },
+    { new: true }
+  ).lean();
 }
 
-const automations: Automation[] = [
-  {
-    id: "auto_001",
-    name: "Candidate Follow-up",
-    description: "Send follow-up email after interview",
-    enabled: true,
-    triggers: [{ id: "t1", event: "interview.completed" }],
-    actions: [
-      { id: "a1", type: "delay", config: { minutes: 60 } },
-      { id: "a2", type: "send_email", config: { template: "interview_followup", to: "candidate" } },
-    ],
-    createdAt: new Date(),
-  },
-  {
-    id: "auto_002",
-    name: "Interview Reminder",
-    description: "Send reminder before interview",
-    enabled: true,
-    triggers: [{ id: "t2", event: "interview.scheduled" }],
-    actions: [
-      { id: "a3", type: "delay", config: { minutes: 30 }, condition: { minutesBefore: 30 } },
-      { id: "a4", type: "send_notification", config: { type: "reminder" } },
-    ],
-    createdAt: new Date(),
-  },
-];
-
-const runs: AutomationRun[] = [];
-
-export function getAutomations(): Automation[] {
-  return automations;
+export async function deleteAutomation(id: string) {
+  const result = await AutomationModel.deleteOne({ id });
+  return result.deletedCount > 0;
 }
 
-export function getAutomation(id: string): Automation | undefined {
-  return automations.find(a => a.id === id);
-}
-
-export function createAutomation(automation: Omit<Automation, "id" | "createdAt">): Automation {
-  const newAutomation: Automation = {
-    ...automation,
-    id: `auto_${Date.now()}`,
-    createdAt: new Date(),
-  };
-  automations.push(newAutomation);
-  logger.info(`Created automation: ${newAutomation.name}`);
-  return newAutomation;
-}
-
-export function updateAutomation(id: string, updates: Partial<Automation>): Automation | null {
-  const automation = automations.find(a => a.id === id);
-  if (automation) {
-    Object.assign(automation, updates);
-    return automation;
-  }
-  return null;
-}
-
-export function deleteAutomation(id: string): boolean {
-  const idx = automations.findIndex(a => a.id === id);
-  if (idx !== -1) {
-    automations.splice(idx, 1);
-    return true;
-  }
-  return false;
-}
-
-export async function runAutomation(automationId: string, triggerEvent: string, context: Record<string, unknown>): Promise<AutomationRun> {
-  const automation = automations.find(a => a.id === automationId);
+export async function runAutomation(automationId: string, triggerEvent: string, context: Record<string, unknown>) {
+  const automation = await AutomationModel.findOne({ id: automationId }).lean();
   if (!automation) throw new Error(`Automation ${automationId} not found`);
 
-  const run: AutomationRun = {
-    id: `run_${Date.now()}`,
+  const run = await AutomationRunModel.create({
     automationId,
-    status: "running",
     triggerEvent,
-    context,
-    results: [],
+    status: "running",
     startedAt: new Date(),
-  };
-  runs.push(run);
+    results: [],
+  });
 
   logger.info(`Running automation: ${automation.name}`);
 
-  for (const action of automation.actions) {
+  for (const action of (automation as any).actions as IAutomationAction[]) {
+    const startTime = Date.now();
     try {
       const result = await executeAction(action, context);
-      run.results.push({ actionId: action.id, success: true, output: result });
+      run.results.push({
+        action: action.type,
+        status: "completed",
+        output: JSON.stringify(result),
+        duration: Date.now() - startTime,
+      });
     } catch (error) {
-      run.results.push({ actionId: action.id, success: false, error: String(error) });
+      run.results.push({
+        action: action.type,
+        status: "failed",
+        error: String(error),
+        duration: Date.now() - startTime,
+      });
     }
   }
 
-  run.status = "completed";
+  const allSucceeded = run.results.every(r => r.status === "completed");
+  run.status = allSucceeded ? "completed" : "failed";
   run.completedAt = new Date();
-  automation.lastRun = new Date();
+  await run.save();
 
-  return run;
+  await AutomationModel.updateOne(
+    { id: automationId },
+    { $set: { lastRunAt: new Date() }, $inc: { runCount: 1 } }
+  );
+
+  return run.toObject();
 }
 
-/* ------------------------------------------------------------------ */
-/*  REAL ACTION EXECUTION                                              */
-/* ------------------------------------------------------------------ */
+async function executeAction(action: IAutomationAction, context: Record<string, unknown>): Promise<unknown> {
+  const config = (action.config || {}) as Record<string, unknown>;
 
-async function executeAction(action: AutomationAction, context: Record<string, unknown>): Promise<unknown> {
   switch (action.type) {
-    case "delay": {
-      const delayMs = (action.config.minutes as number || 1) * 60000;
-      /* In production this should use BullMQ scheduled jobs; for now we simulate a short delay */
-      await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, 5000)));
-      return { delayed: true, duration: delayMs };
+    case "custom": {
+      if (config.actionType === "delay") {
+        const delayMs = (config.minutes as number || 1) * 60000;
+        await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, 5000)));
+        return { delayed: true, duration: delayMs };
+      }
+      return { actionCompleted: true };
     }
 
-    case "send_email": {
-      const template = String(action.config.template || "interview-reminder");
-      const to = String(action.config.to || context.candidateEmail || "");
+    case "email": {
+      const template = String(config.template || "interview-reminder");
+      const to = String(config.to || context.candidateEmail || "");
       const candidateName = String(context.candidateName || "Candidate");
       const result = await notificationService.sendTemplatedNotification(
         String(context.userId || "system"),
@@ -168,14 +111,14 @@ async function executeAction(action: AutomationAction, context: Record<string, u
       return { emailSent: !!result, notificationId: result?.id };
     }
 
-    case "send_notification": {
+    case "notification": {
       const userId = String(context.userId || "system");
       const title = String(context.title || "InterviewMinds Notification");
       const message = String(context.message || "You have a new notification.");
-      const channel = String(action.config.channel || "in-app") as any;
+      const channel = String(config.channel || "in-app") as any;
       const result = await notificationService.sendNotification(
         userId,
-        String(action.config.type || "general"),
+        String(config.type || "general"),
         channel,
         title,
         message,
@@ -184,17 +127,8 @@ async function executeAction(action: AutomationAction, context: Record<string, u
       return { notificationSent: result.status === "sent", notificationId: result.id };
     }
 
-    case "update_status": {
-      const interviewId = String(context.interviewId || "");
-      const newStatus = String(action.config.status || context.newStatus || "completed");
-      if (interviewId) {
-        await InterviewModel.findByIdAndUpdate(interviewId, { status: newStatus });
-      }
-      return { statusUpdated: true, interviewId, newStatus };
-    }
-
     case "webhook": {
-      const url = String(action.config.url || context.webhookUrl || "");
+      const url = String(config.url || context.webhookUrl || "");
       if (!url) throw new Error("No webhook URL configured");
       const payload = {
         event: context.event,
@@ -214,27 +148,25 @@ async function executeAction(action: AutomationAction, context: Record<string, u
   }
 }
 
-export function getRuns(automationId?: string): AutomationRun[] {
-  if (automationId) {
-    return runs.filter(r => r.automationId === automationId);
-  }
-  return runs;
+export async function getRuns(automationId?: string) {
+  const filter = automationId ? { automationId } : {};
+  return AutomationRunModel.find(filter).sort({ createdAt: -1 }).lean();
 }
 
-export function getRun(runId: string): AutomationRun | undefined {
-  return runs.find(r => r.id === runId);
+export async function getRun(runId: string) {
+  return AutomationRunModel.findOne({ id: runId }).lean();
 }
 
-export function findAutomationsByTrigger(event: string): Automation[] {
-  return automations.filter(a => a.enabled && a.triggers.some(t => t.event === event));
+export async function findAutomationsByTrigger(event: string) {
+  return AutomationModel.find({ isActive: true, trigger: event }).lean();
 }
 
-export async function triggerAutomations(event: string, context: Record<string, unknown>): Promise<AutomationRun[]> {
-  const matchingAutomations = findAutomationsByTrigger(event);
-  const results: AutomationRun[] = [];
+export async function triggerAutomations(event: string, context: Record<string, unknown>) {
+  const matchingAutomations = await findAutomationsByTrigger(event);
+  const results = [];
 
   for (const automation of matchingAutomations) {
-    const run = await runAutomation(automation.id, event, context);
+    const run = await runAutomation(automation.id!, event, context);
     results.push(run);
   }
 
@@ -242,8 +174,8 @@ export async function triggerAutomations(event: string, context: Record<string, 
   return results;
 }
 
-export function testAutomation(automationId: string, testContext: Record<string, unknown>): Promise<AutomationRun> {
-  const automation = automations.find(a => a.id === automationId);
+export async function testAutomation(automationId: string, testContext: Record<string, unknown>) {
+  const automation = await AutomationModel.findOne({ id: automationId }).lean();
   if (!automation) throw new Error(`Automation ${automationId} not found`);
 
   logger.info(`Testing automation: ${automation.name}`);

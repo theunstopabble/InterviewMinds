@@ -1,11 +1,14 @@
-import { v4 as uuidv4 } from 'uuid';
+import { QuestionModel, IQuestion } from '../models/Question';
+import { QuestionCategoryModel, IQuestionCategory } from '../models/QuestionCategory';
+import { QuestionTagModel, IQuestionTag } from '../models/QuestionTag';
+import { logger } from './logger';
 
-export type QuestionType = 
-  | 'coding' 
-  | 'multiple-choice' 
-  | 'sql' 
-  | 'system-design' 
-  | 'behavioral' 
+export type QuestionType =
+  | 'coding'
+  | 'multiple-choice'
+  | 'sql'
+  | 'system-design'
+  | 'behavioral'
   | 'technical';
 
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'expert';
@@ -56,36 +59,10 @@ export interface QuestionCategory {
 }
 
 class QuestionBankService {
-  private questions: Map<string, Question> = new Map();
-  private categories: Map<string, QuestionCategory> = new Map();
-  private tags: Map<string, QuestionTag> = new Map();
-
-  constructor() {
-    this.initializeDefaultCategories();
-  }
-
-  private initializeDefaultCategories() {
-    const defaultCategories: QuestionCategory[] = [
-      { id: 'algorithms', name: 'Algorithms', description: 'Data structures & algorithms', questionCount: 0, icon: '🧮' },
-      { id: 'frontend', name: 'Frontend', description: 'React, Vue, Angular, HTML/CSS', questionCount: 0, icon: '🎨' },
-      { id: 'backend', name: 'Backend', description: 'Node.js, Python, Java, Go', questionCount: 0, icon: '⚙️' },
-      { id: 'database', name: 'Database', description: 'SQL, NoSQL, System design', questionCount: 0, icon: '🗄️' },
-      { id: 'devops', name: 'DevOps', description: 'CI/CD, Docker, Kubernetes', questionCount: 0, icon: '🚀' },
-      { id: 'system-design', name: 'System Design', description: 'Architecture, Scalability', questionCount: 0, icon: '🏗️' },
-      { id: 'behavioral', name: 'Behavioral', description: 'Past experiences, Situations', questionCount: 0, icon: '💬' },
-      { id: 'mobile', name: 'Mobile', description: 'iOS, Android, Flutter', questionCount: 0, icon: '📱' },
-      { id: 'security', name: 'Security', description: 'Auth, Encryption, OWASP', questionCount: 0, icon: '🔐' },
-      { id: 'ai-ml', name: 'AI/ML', description: 'Machine Learning, Deep Learning', questionCount: 0, icon: '🤖' },
-    ];
-
-    defaultCategories.forEach(cat => this.categories.set(cat.id, cat));
-  }
-
-  createQuestion(
+  async createQuestion(
     data: Partial<Question> & { title: string; description: string; type: QuestionType; createdBy: string }
-  ): Question {
-    const question: Question = {
-      id: uuidv4(),
+  ): Promise<IQuestion> {
+    const question = await QuestionModel.create({
       title: data.title,
       description: data.description,
       type: data.type,
@@ -95,225 +72,227 @@ class QuestionBankService {
       skills: data.skills || [],
       timeLimit: data.timeLimit || 30,
       points: data.points || 100,
-      starterCode: data.starterCode,
+      starterCode: data.starterCode ? new Map(Object.entries(data.starterCode)) : new Map(),
       testCases: data.testCases || [],
       solution: data.solution,
       explanation: data.explanation,
       createdBy: data.createdBy,
       companyId: data.companyId,
       isPublic: data.isPublic ?? true,
-      usageCount: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    });
 
-    this.questions.set(question.id, question);
-
-    const category = this.categories.get(question.category);
-    if (category) {
-      category.questionCount++;
-      this.categories.set(category.id, category);
-    }
+    await QuestionCategoryModel.updateOne(
+      { id: question.category },
+      { $inc: { questionCount: 1 } }
+    ).catch(() => {});
 
     return question;
   }
 
-  getQuestion(id: string): Question | null {
-    const question = this.questions.get(id);
-    if (question) {
-      question.usageCount++;
-      this.questions.set(id, question);
-    }
-    return question || null;
+  async getQuestion(id: string): Promise<IQuestion | null> {
+    return QuestionModel.findOneAndUpdate(
+      { id },
+      { $inc: { usageCount: 1 } },
+      { new: true }
+    );
   }
 
-  getQuestionsByCategory(categoryId: string, filters?: {
+  async getAllQuestions(filters?: {
     difficulty?: Difficulty;
     type?: QuestionType;
     limit?: number;
     offset?: number;
-  }): Question[] {
-    let questions = Array.from(this.questions.values())
-      .filter(q => q.category === categoryId);
+  }): Promise<IQuestion[]> {
+    const query: Record<string, unknown> = {};
+    if (filters?.difficulty) query.difficulty = filters.difficulty;
+    if (filters?.type) query.type = filters.type;
+    const offset = filters?.offset || 0;
+    const limit = filters?.limit || 50;
+    return QuestionModel.find(query).skip(offset).limit(limit) as unknown as Promise<IQuestion[]>;
+  }
 
-    if (filters?.difficulty) {
-      questions = questions.filter(q => q.difficulty === filters.difficulty);
+  async getQuestionsByCategory(
+    categoryId: string,
+    filters?: {
+      difficulty?: Difficulty;
+      type?: QuestionType;
+      limit?: number;
+      offset?: number;
     }
-    if (filters?.type) {
-      questions = questions.filter(q => q.type === filters.type);
-    }
-
+  ): Promise<IQuestion[]> {
+    const query: Record<string, unknown> = { category: categoryId };
+    if (filters?.difficulty) query.difficulty = filters.difficulty;
+    if (filters?.type) query.type = filters.type;
     const offset = filters?.offset || 0;
     const limit = filters?.limit || 20;
-
-    return questions.slice(offset, offset + limit);
+    return QuestionModel.find(query).skip(offset).limit(limit) as unknown as Promise<IQuestion[]>;
   }
 
-  searchQuestions(query: string, filters?: {
-    category?: string;
-    difficulty?: Difficulty;
-    type?: QuestionType;
-    tags?: string[];
-    limit?: number;
-  }): Question[] {
-    const searchLower = query.toLowerCase();
-    let results = Array.from(this.questions.values())
-      .filter(q =>
-        q.title.toLowerCase().includes(searchLower) ||
-        q.description.toLowerCase().includes(searchLower) ||
-        q.tags.some(t => t.toLowerCase().includes(searchLower)) ||
-        q.skills.some(s => s.toLowerCase().includes(searchLower))
-      );
-
-    if (filters?.category) {
-      results = results.filter(q => q.category === filters.category);
+  async searchQuestions(
+    query: string,
+    filters?: {
+      category?: string;
+      difficulty?: Difficulty;
+      type?: QuestionType;
+      tags?: string[];
+      limit?: number;
     }
-    if (filters?.difficulty) {
-      results = results.filter(q => q.difficulty === filters.difficulty);
-    }
-    if (filters?.type) {
-      results = results.filter(q => q.type === filters.type);
-    }
+  ): Promise<IQuestion[]> {
+    const mongoQuery: Record<string, unknown> = {
+      $or: [
+        { title: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+        { tags: { $regex: query, $options: 'i' } },
+        { skills: { $regex: query, $options: 'i' } },
+      ],
+    };
+    if (filters?.category) mongoQuery.category = filters.category;
+    if (filters?.difficulty) mongoQuery.difficulty = filters.difficulty;
+    if (filters?.type) mongoQuery.type = filters.type;
     if (filters?.tags?.length) {
-      results = results.filter(q =>
-        filters.tags!.some(tag => q.tags.includes(tag))
-      );
+      mongoQuery.tags = { $in: filters.tags };
     }
-
-    return results.slice(0, filters?.limit || 20);
+    return QuestionModel.find(mongoQuery).limit(filters?.limit || 20) as unknown as Promise<IQuestion[]>;
   }
 
-  getRandomQuestions(
+  async getRandomQuestions(
     category: string,
     difficulty: Difficulty,
     count: number
-  ): Question[] {
-    const categoryQuestions = Array.from(this.questions.values())
-      .filter(q => 
-        q.category === category && 
-        q.difficulty === difficulty &&
-        q.isPublic
-      );
-
-    const shuffled = categoryQuestions.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+  ): Promise<IQuestion[]> {
+    return QuestionModel.aggregate([
+      { $match: { category, difficulty, isPublic: true } },
+      { $sample: { size: count } },
+    ]) as unknown as Promise<IQuestion[]>;
   }
 
-  updateQuestion(id: string, updates: Partial<Question>): Question | null {
-    const question = this.questions.get(id);
-    if (!question) return null;
-
-    const updated = { ...question, ...updates, updatedAt: new Date() };
-    this.questions.set(id, updated);
-    return updated;
+  async updateQuestion(id: string, updates: Record<string, unknown>): Promise<IQuestion | null> {
+    delete updates.id;
+    return QuestionModel.findOneAndUpdate(
+      { id },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
   }
 
-  deleteQuestion(id: string): boolean {
-    const question = this.questions.get(id);
+  async deleteQuestion(id: string): Promise<boolean> {
+    const question = await QuestionModel.findOneAndDelete({ id });
     if (!question) return false;
 
-    const category = this.categories.get(question.category);
-    if (category) {
-      category.questionCount = Math.max(0, category.questionCount - 1);
-      this.categories.set(category.id, category);
-    }
+    await QuestionCategoryModel.updateOne(
+      { id: question.category },
+      { $inc: { questionCount: -1 } }
+    ).catch(() => {});
 
-    return this.questions.delete(id);
+    return true;
   }
 
-  getCategories(): QuestionCategory[] {
-    return Array.from(this.categories.values());
+  async getCategories(): Promise<IQuestionCategory[]> {
+    return QuestionCategoryModel.find() as unknown as Promise<IQuestionCategory[]>;
   }
 
-  createCategory(name: string, description: string, icon: string = '📝'): QuestionCategory {
-    const category: QuestionCategory = {
+  async createCategory(name: string, description: string, icon: string = '📝'): Promise<IQuestionCategory> {
+    return QuestionCategoryModel.create({
       id: name.toLowerCase().replace(/\s+/g, '-'),
       name,
       description,
-      questionCount: 0,
       icon,
-    };
-    this.categories.set(category.id, category);
-    return category;
-  }
-
-  addTag(name: string, category: string): QuestionTag {
-    const tag: QuestionTag = {
-      id: uuidv4(),
-      name,
-      category,
-    };
-    this.tags.set(tag.id, tag);
-    return tag;
-  }
-
-  getTags(category?: string): QuestionTag[] {
-    const allTags = Array.from(this.tags.values());
-    if (category) {
-      return allTags.filter(t => t.category === category);
-    }
-    return allTags;
-  }
-
-  getQuestionStats() {
-    const questions = Array.from(this.questions.values());
-    return {
-      total: questions.length,
-      byDifficulty: {
-        easy: questions.filter(q => q.difficulty === 'easy').length,
-        medium: questions.filter(q => q.difficulty === 'medium').length,
-        hard: questions.filter(q => q.difficulty === 'hard').length,
-        expert: questions.filter(q => q.difficulty === 'expert').length,
-      },
-      byType: {
-        coding: questions.filter(q => q.type === 'coding').length,
-        'multiple-choice': questions.filter(q => q.type === 'multiple-choice').length,
-        sql: questions.filter(q => q.type === 'sql').length,
-        'system-design': questions.filter(q => q.type === 'system-design').length,
-        behavioral: questions.filter(q => q.type === 'behavioral').length,
-        technical: questions.filter(q => q.type === 'technical').length,
-      },
-      byCategory: Object.fromEntries(
-        Array.from(this.categories.entries()).map(([id, cat]) => [id, cat.questionCount])
-      ),
-    };
-  }
-
-  importQuestions(questions: Partial<Question>[]): number {
-    let imported = 0;
-    questions.forEach(q => {
-      if (q.title && q.description && q.type && q.createdBy) {
-        this.createQuestion(q as any);
-        imported++;
-      }
+      questionCount: 0,
     });
-    return imported;
   }
 
-  exportQuestions(filters?: {
+  async addTag(name: string, category: string): Promise<IQuestionTag> {
+    return QuestionTagModel.create({ name, category });
+  }
+
+  async getTags(category?: string): Promise<IQuestionTag[]> {
+    if (category) {
+      return QuestionTagModel.find({ category }) as unknown as Promise<IQuestionTag[]>;
+    }
+    return QuestionTagModel.find() as unknown as Promise<IQuestionTag[]>;
+  }
+
+  async getQuestionStats(): Promise<{
+    total: number;
+    byDifficulty: Record<string, number>;
+    byType: Record<string, number>;
+    byCategory: Record<string, number>;
+  }> {
+    const [total, byDifficulty, byType, byCategory] = await Promise.all([
+      QuestionModel.countDocuments(),
+      QuestionModel.aggregate([
+        { $group: { _id: '$difficulty', count: { $sum: 1 } } },
+      ]),
+      QuestionModel.aggregate([
+        { $group: { _id: '$type', count: { $sum: 1 } } },
+      ]),
+      QuestionCategoryModel.find().select('id questionCount').lean(),
+    ]);
+
+    const diffMap: Record<string, number> = { easy: 0, medium: 0, hard: 0, expert: 0 };
+    for (const d of byDifficulty) {
+      diffMap[d._id as string] = d.count;
+    }
+
+    const typeMap: Record<string, number> = { coding: 0, 'multiple-choice': 0, sql: 0, 'system-design': 0, behavioral: 0, technical: 0 };
+    for (const t of byType) {
+      typeMap[t._id as string] = t.count;
+    }
+
+    const catMap: Record<string, number> = {};
+    for (const c of byCategory) {
+      catMap[c.id] = c.questionCount;
+    }
+
+    return { total, byDifficulty: diffMap, byType: typeMap, byCategory: catMap };
+  }
+
+  async importQuestions(questions: Partial<IQuestion>[]): Promise<number> {
+    const valid = questions.filter(q => q.title && q.description && q.type && q.createdBy);
+    if (valid.length === 0) return 0;
+    await QuestionModel.insertMany(valid);
+    return valid.length;
+  }
+
+  async exportQuestions(filters?: {
     category?: string;
     difficulty?: Difficulty;
     isPublic?: boolean;
-  }): Question[] {
-    let questions = Array.from(this.questions.values());
+  }): Promise<Partial<IQuestion>[]> {
+    const query: Record<string, unknown> = {};
+    if (filters?.category) query.category = filters.category;
+    if (filters?.difficulty) query.difficulty = filters.difficulty;
+    if (filters?.isPublic !== undefined) query.isPublic = filters.isPublic;
 
-    if (filters?.category) {
-      questions = questions.filter(q => q.category === filters.category);
-    }
-    if (filters?.difficulty) {
-      questions = questions.filter(q => q.difficulty === filters.difficulty);
-    }
-    if (filters?.isPublic !== undefined) {
-      questions = questions.filter(q => q.isPublic === filters.isPublic);
-    }
-
-    return questions.map(q => ({
-      ...q,
-      solution: undefined,
-      explanation: undefined,
-    }));
+    return QuestionModel.find(query)
+      .select('-solution -explanation') as unknown as Promise<Partial<IQuestion>[]>;
   }
 }
 
 export const questionBankService = new QuestionBankService();
+
+export async function seedDefaultCategories(): Promise<void> {
+  const defaults = [
+    { id: 'algorithms', name: 'Algorithms', description: 'Data structures & algorithms', icon: '🧮' },
+    { id: 'frontend', name: 'Frontend', description: 'React, Vue, Angular, HTML/CSS', icon: '🎨' },
+    { id: 'backend', name: 'Backend', description: 'Node.js, Python, Java, Go', icon: '⚙️' },
+    { id: 'database', name: 'Database', description: 'SQL, NoSQL, System design', icon: '🗄️' },
+    { id: 'devops', name: 'DevOps', description: 'CI/CD, Docker, Kubernetes', icon: '🚀' },
+    { id: 'system-design', name: 'System Design', description: 'Architecture, Scalability', icon: '🏗️' },
+    { id: 'behavioral', name: 'Behavioral', description: 'Past experiences, Situations', icon: '💬' },
+    { id: 'mobile', name: 'Mobile', description: 'iOS, Android, Flutter', icon: '📱' },
+    { id: 'security', name: 'Security', description: 'Auth, Encryption, OWASP', icon: '🔐' },
+    { id: 'ai-ml', name: 'AI/ML', description: 'Machine Learning, Deep Learning', icon: '🤖' },
+  ];
+
+  for (const cat of defaults) {
+    await QuestionCategoryModel.updateOne(
+      { id: cat.id },
+      { $setOnInsert: cat },
+      { upsert: true }
+    );
+  }
+  logger.info('Default question categories seeded');
+}
+
 export default questionBankService;

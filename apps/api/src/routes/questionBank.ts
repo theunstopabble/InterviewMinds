@@ -5,46 +5,37 @@ import { logger } from '../lib/logger';
 
 const router = Router();
 
-// GET /api/question-bank - List questions
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { category, difficulty, type, limit = '50', offset = '0' } = req.query;
-    
+
     let questions;
     if (category && category !== 'all') {
-      questions = questionBankService.getQuestionsByCategory(category as string, {
+      questions = await questionBankService.getQuestionsByCategory(category as string, {
         difficulty: difficulty as Difficulty,
         type: type as QuestionType,
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),
       });
     } else {
-      // Get all questions
-      const allQuestions = Array.from(questionBankService['questions'].values());
-      if (difficulty) {
-        questions = allQuestions.filter(q => q.difficulty === difficulty);
-      } else {
-        questions = allQuestions;
-      }
-      if (type) {
-        questions = (questions as any[]).filter(q => q.type === type);
-      }
-      const off = parseInt(offset as string);
-      const lim = parseInt(limit as string);
-      questions = (questions as any[]).slice(off, off + lim);
+      questions = await questionBankService.getAllQuestions({
+        difficulty: difficulty as Difficulty,
+        type: type as QuestionType,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+      });
     }
-    
-    res.json({ questions, count: (questions as any[]).length });
+
+    res.json({ questions, count: questions.length });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching questions:');
     res.status(500).json({ error: 'Failed to fetch questions' });
   }
 });
 
-// GET /api/question-bank/categories
-router.get('/categories', (_req, res) => {
+router.get('/categories', async (_req, res) => {
   try {
-    const categories = questionBankService.getCategories();
+    const categories = await questionBankService.getCategories();
     res.json({ categories });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching categories:');
@@ -52,10 +43,9 @@ router.get('/categories', (_req, res) => {
   }
 });
 
-// GET /api/question-bank/stats
-router.get('/stats', (_req, res) => {
+router.get('/stats', async (_req, res) => {
   try {
-    const stats = questionBankService.getQuestionStats();
+    const stats = await questionBankService.getQuestionStats();
     res.json({ stats });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching stats:');
@@ -63,11 +53,10 @@ router.get('/stats', (_req, res) => {
   }
 });
 
-// GET /api/question-bank/:id
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const question = questionBankService['questions'].get(id);
+    const question = await questionBankService.getQuestion(id);
     if (!question) {
       res.status(404).json({ error: 'Question not found' });
       return;
@@ -79,11 +68,10 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// POST /api/question-bank - Create question
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const question = req.body;
-    const created = questionBankService.createQuestion(question);
+    const created = await questionBankService.createQuestion(question);
     res.status(201).json({ question: created });
   } catch (error) {
     logger.error({ err: error }, 'Error creating question:');
@@ -91,12 +79,11 @@ router.post('/', (req, res) => {
   }
 });
 
-// PATCH /api/question-bank/:id
-router.patch('/:id', (req, res) => {
+router.patch('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    const updated = questionBankService.updateQuestion(id, updates);
+    const updated = await questionBankService.updateQuestion(id, updates);
     if (!updated) {
       res.status(404).json({ error: 'Question not found' });
       return;
@@ -108,11 +95,10 @@ router.patch('/:id', (req, res) => {
   }
 });
 
-// DELETE /api/question-bank/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = questionBankService.deleteQuestion(id);
+    const deleted = await questionBankService.deleteQuestion(id);
     if (!deleted) {
       res.status(404).json({ error: 'Question not found' });
       return;
@@ -124,11 +110,10 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-// GET /api/question-bank/search
-router.get('/search', (req, res) => {
+router.get('/search', async (req, res) => {
   try {
     const { q, category, difficulty, tags } = req.query;
-    const questions = questionBankService.searchQuestions(q as string, {
+    const questions = await questionBankService.searchQuestions(q as string, {
       category: category as string,
       difficulty: difficulty as Difficulty,
       tags: tags ? (tags as string).split(',') : undefined,

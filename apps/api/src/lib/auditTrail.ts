@@ -1,3 +1,4 @@
+import { AuditLogModel } from "../models/AuditLog";
 import { logger } from "./logger";
 
 export interface AuditEntry {
@@ -24,54 +25,77 @@ export interface AuditExportOptions {
   format: "json" | "csv" | "pdf";
 }
 
-const auditLog: AuditEntry[] = [];
+export async function logAuditEntry(entry: Omit<AuditEntry, "id" | "timestamp">): Promise<AuditEntry> {
+  const doc = await AuditLogModel.create({
+    userId: entry.userId,
+    role: entry.userRole,
+    action: entry.action,
+    resource: entry.resource,
+    resourceId: entry.resourceId || null,
+    metadata: entry.details || {},
+    ip: entry.ipAddress,
+    userAgent: entry.userAgent,
+    status: entry.status,
+    statusCode: null,
+  });
 
-export function logAuditEntry(entry: Omit<AuditEntry, "id" | "timestamp">): AuditEntry {
-  const newEntry: AuditEntry = {
-    ...entry,
-    id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    timestamp: new Date(),
-  };
-  auditLog.push(newEntry);
   logger.info(`Audit: ${entry.action} on ${entry.resource}`);
-  return newEntry;
+  return {
+    id: doc._id.toString(),
+    timestamp: doc.createdAt,
+    userId: doc.userId,
+    userRole: doc.role,
+    action: doc.action,
+    resource: doc.resource,
+    resourceId: doc.resourceId || undefined,
+    details: (doc.metadata as Record<string, unknown>) || {},
+    ipAddress: doc.ip || "",
+    userAgent: doc.userAgent || "",
+    status: doc.status as "success" | "failure",
+  };
 }
 
-export function getAuditLogs(filters?: {
+export async function getAuditLogs(filters?: {
   userId?: string;
   action?: string;
   resource?: string;
   startDate?: Date;
   endDate?: Date;
-}): AuditEntry[] {
-  let results = [...auditLog];
-
-  if (filters?.userId) {
-    results = results.filter(e => e.userId === filters.userId);
-  }
-  if (filters?.action) {
-    results = results.filter(e => e.action.includes(filters.action as string));
-  }
-  if (filters?.resource) {
-    results = results.filter(e => e.resource === filters.resource);
-  }
-  if (filters?.startDate) {
-    results = results.filter(e => e.timestamp >= filters.startDate!);
-  }
-  if (filters?.endDate) {
-    results = results.filter(e => e.timestamp <= filters.endDate!);
+}): Promise<AuditEntry[]> {
+  const query: Record<string, unknown> = {};
+  if (filters?.userId) query.userId = filters.userId;
+  if (filters?.action) query.action = { $regex: filters.action, $options: "i" };
+  if (filters?.resource) query.resource = filters.resource;
+  if (filters?.startDate || filters?.endDate) {
+    query.createdAt = {};
+    if (filters?.startDate) (query.createdAt as Record<string, unknown>)["$gte"] = filters.startDate;
+    if (filters?.endDate) (query.createdAt as Record<string, unknown>)["$lte"] = filters.endDate;
   }
 
-  return results.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  const docs = await AuditLogModel.find(query).sort({ createdAt: -1 }).lean();
+
+  return docs.map(doc => ({
+    id: doc._id.toString(),
+    timestamp: doc.createdAt,
+    userId: doc.userId,
+    userRole: doc.role,
+    action: doc.action,
+    resource: doc.resource,
+    resourceId: doc.resourceId || undefined,
+    details: (doc.metadata as Record<string, unknown>) || {},
+    ipAddress: doc.ip || "",
+    userAgent: doc.userAgent || "",
+    status: doc.status as "success" | "failure",
+  }));
 }
 
-export function exportAuditTrail(options: AuditExportOptions): {
+export async function exportAuditTrail(options: AuditExportOptions): Promise<{
   entries: AuditEntry[];
   totalCount: number;
   format: string;
   generatedAt: Date;
-} {
-  let entries = getAuditLogs({
+}> {
+  let entries = await getAuditLogs({
     userId: options.userId,
     action: options.action,
     resource: options.resource,
@@ -110,14 +134,14 @@ export function generateAuditCSV(entries: AuditEntry[]): string {
   return [headers.join(","), ...rows].join("\n");
 }
 
-export function getAuditStats(dateRange: { start: Date; end: Date }): {
+export async function getAuditStats(dateRange: { start: Date; end: Date }): Promise<{
   totalEntries: number;
   byAction: Record<string, number>;
   byUser: Record<string, number>;
   byResource: Record<string, number>;
   successRate: number;
-} {
-  const entries = getAuditLogs({ startDate: dateRange.start, endDate: dateRange.end });
+}> {
+  const entries = await getAuditLogs({ startDate: dateRange.start, endDate: dateRange.end });
 
   const byAction: Record<string, number> = {};
   const byUser: Record<string, number> = {};
@@ -141,12 +165,26 @@ export function getAuditStats(dateRange: { start: Date; end: Date }): {
   };
 }
 
-export function searchAuditLogs(query: string): AuditEntry[] {
-  const lowerQuery = query.toLowerCase();
-  return auditLog.filter(e =>
-    e.action.toLowerCase().includes(lowerQuery) ||
-    e.resource.toLowerCase().includes(lowerQuery) ||
-    e.userId.toLowerCase().includes(lowerQuery) ||
-    JSON.stringify(e.details).toLowerCase().includes(lowerQuery)
-  );
+export async function searchAuditLogs(query: string): Promise<AuditEntry[]> {
+  const docs = await AuditLogModel.find({
+    $or: [
+      { action: { $regex: query, $options: "i" } },
+      { resource: { $regex: query, $options: "i" } },
+      { userId: { $regex: query, $options: "i" } },
+    ],
+  }).sort({ createdAt: -1 }).lean();
+
+  return docs.map(doc => ({
+    id: doc._id.toString(),
+    timestamp: doc.createdAt,
+    userId: doc.userId,
+    userRole: doc.role,
+    action: doc.action,
+    resource: doc.resource,
+    resourceId: doc.resourceId || undefined,
+    details: (doc.metadata as Record<string, unknown>) || {},
+    ipAddress: doc.ip || "",
+    userAgent: doc.userAgent || "",
+    status: doc.status as "success" | "failure",
+  }));
 }
