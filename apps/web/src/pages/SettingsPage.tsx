@@ -753,7 +753,7 @@ function IntegrationSettings({ config: _config }: { config: any }) {
   const [hrisStatus, setHrisStatus] = useState<string>('not_configured');
   const [slackStatus, setSlackStatus] = useState<string>('not_configured');
   const [teamsStatus, setTeamsStatus] = useState<string>('not_configured');
-  const [zoomStatus, setZoomStatus] = useState<string>('not_configured');
+  const [jitsiStatus, setJitsiStatus] = useState<string>('not_configured');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -761,12 +761,12 @@ function IntegrationSettings({ config: _config }: { config: any }) {
       integrationService.validateHRIS?.({}).catch(() => null) ?? Promise.resolve(null),
       integrationService.sendSlackNotification?.('', {}).catch(() => null) ?? Promise.resolve(null),
       integrationService.sendTeamsMessage?.('', {}).catch(() => null) ?? Promise.resolve(null),
-      integrationService.getZoomMeeting?.('').catch(() => null) ?? Promise.resolve(null),
-    ]).then(([hris, slack, teams, zoom]) => {
+      integrationService.getJitsiMeeting?.('').catch(() => null) ?? Promise.resolve(null),
+    ]).then(([hris, slack, teams, jitsi]) => {
       if (hris) setHrisStatus('connected');
       if (slack) setSlackStatus('connected');
       if (teams) setTeamsStatus('connected');
-      if (zoom) setZoomStatus('connected');
+      if (jitsi) setJitsiStatus('connected');
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -794,7 +794,7 @@ function IntegrationSettings({ config: _config }: { config: any }) {
           case 'hris': setHrisStatus('connected'); break;
           case 'slack': setSlackStatus('connected'); break;
           case 'teams': setTeamsStatus('connected'); break;
-          case 'zoom': setZoomStatus('connected'); break;
+          case 'jitsi': setJitsiStatus('connected'); break;
         }
       }
     } catch {
@@ -806,7 +806,7 @@ function IntegrationSettings({ config: _config }: { config: any }) {
     { id: 'hris', label: 'HRIS (Workday/BambooHR)', icon: Users, status: hrisStatus },
     { id: 'slack', label: 'Slack', icon: MessageSquare, status: slackStatus },
     { id: 'teams', label: 'Microsoft Teams', icon: Users, status: teamsStatus },
-    { id: 'zoom', label: 'Zoom', icon: Video, status: zoomStatus },
+    { id: 'jitsi', label: 'Jitsi Meet', icon: Video, status: jitsiStatus },
   ];
 
   return (

@@ -211,110 +211,61 @@ export function createDiscordEmbed(notification: DiscordNotification): { embed: 
 }
 
 /* ------------------------------------------------------------------ */
-/*  Zoom — real REST API integration                                   */
+/*  Jitsi Meet — free, open-source video conferencing                  */
+/*  Uses meet.jit.si by default. Self-host with JITSI_DOMAIN env var.  */
+/*  No API key required.                                               */
 /* ------------------------------------------------------------------ */
 
-export interface ZoomMeeting {
-  id: string;
+export interface JitsiMeeting {
+  roomName: string;
   topic: string;
   startTime: Date;
   duration: number;
   joinUrl: string;
-  hostEmail: string;
+  moderatorUrl: string;
 }
 
-export interface ZoomCreateOptions {
+export interface JitsiCreateOptions {
   topic: string;
   startTime: Date;
   duration: number;
-  hostEmail: string;
-  agenda?: string;
+  hostEmail?: string;
 }
 
-export async function createZoomMeeting(options: ZoomCreateOptions): Promise<ZoomMeeting> {
-  logger.info({ topic: options.topic }, "Creating Zoom meeting");
-  const jwtToken = process.env.ZOOM_JWT_TOKEN;
-  if (!jwtToken) {
-    logger.warn("ZOOM_JWT_TOKEN not configured; returning placeholder meeting");
-    return {
-      id: `zoom_${Date.now()}`,
-      topic: options.topic,
-      startTime: options.startTime,
-      duration: options.duration,
-      joinUrl: `https://zoom.us/j/${Date.now()}`,
-      hostEmail: options.hostEmail,
-    };
-  }
-  try {
-    const res = await axios.post("https://api.zoom.us/v2/users/me/meetings", {
-      topic: options.topic,
-      type: 2,
-      start_time: options.startTime.toISOString(),
-      duration: options.duration,
-      agenda: options.agenda || "InterviewMinds interview",
-      settings: { join_before_host: false, waiting_room: true },
-    }, {
-      headers: { Authorization: `Bearer ${jwtToken}`, "Content-Type": "application/json" },
-      timeout: 15000,
-    });
-    const data = res.data;
-    return {
-      id: String(data.id || `zoom_${Date.now()}`),
-      topic: String(data.topic || options.topic),
-      startTime: new Date(data.start_time || options.startTime),
-      duration: data.duration || options.duration,
-      joinUrl: String(data.join_url || `https://zoom.us/j/${Date.now()}`),
-      hostEmail: String(data.host_email || options.hostEmail),
-    };
-  } catch (err: any) {
-    logger.error({ err: err.message }, "Zoom meeting creation failed");
-    return {
-      id: `zoom_${Date.now()}`,
-      topic: options.topic,
-      startTime: options.startTime,
-      duration: options.duration,
-      joinUrl: `https://zoom.us/j/${Date.now()}`,
-      hostEmail: options.hostEmail,
-    };
-  }
+function getJitsiDomain(): string {
+  return process.env.JITSI_DOMAIN || "meet.jit.si";
 }
 
-export async function getZoomMeeting(meetingId: string): Promise<ZoomMeeting | null> {
-  const jwtToken = process.env.ZOOM_JWT_TOKEN;
-  if (!jwtToken) return null;
-  try {
-    const res = await axios.get(`https://api.zoom.us/v2/meetings/${meetingId}`, {
-      headers: { Authorization: `Bearer ${jwtToken}` },
-      timeout: 10000,
-    });
-    const data = res.data;
-    return {
-      id: String(data.id),
-      topic: String(data.topic),
-      startTime: new Date(data.start_time),
-      duration: data.duration,
-      joinUrl: String(data.join_url),
-      hostEmail: String(data.host_email),
-    };
-  } catch (err: any) {
-    logger.error({ err: err.message }, "Zoom meeting fetch failed");
-    return null;
-  }
+function generateRoomName(): string {
+  const prefix = "InterviewMinds";
+  const random = crypto.randomUUID ? crypto.randomUUID().split("-")[0] : `${Date.now()}`;
+  return `${prefix}-${random}`;
 }
 
-export async function deleteZoomMeeting(meetingId: string): Promise<boolean> {
-  const jwtToken = process.env.ZOOM_JWT_TOKEN;
-  if (!jwtToken) return false;
-  try {
-    await axios.delete(`https://api.zoom.us/v2/meetings/${meetingId}`, {
-      headers: { Authorization: `Bearer ${jwtToken}` },
-      timeout: 10000,
-    });
-    return true;
-  } catch (err: any) {
-    logger.error({ err: err.message }, "Zoom meeting deletion failed");
-    return false;
-  }
+export async function createJitsiMeeting(options: JitsiCreateOptions): Promise<JitsiMeeting> {
+  logger.info({ topic: options.topic }, "Creating Jitsi Meet room");
+  const domain = getJitsiDomain();
+  const roomName = generateRoomName();
+  return {
+    roomName,
+    topic: options.topic,
+    startTime: options.startTime,
+    duration: options.duration,
+    joinUrl: `https://${domain}/${roomName}`,
+    moderatorUrl: `https://${domain}/${roomName}#config.callDisplayName=${encodeURIComponent(options.topic)}`,
+  };
+}
+
+export async function getJitsiMeeting(roomName: string): Promise<JitsiMeeting | null> {
+  const domain = getJitsiDomain();
+  return {
+    roomName,
+    topic: "",
+    startTime: new Date(),
+    duration: 30,
+    joinUrl: `https://${domain}/${roomName}`,
+    moderatorUrl: `https://${domain}/${roomName}`,
+  };
 }
 
 /* ------------------------------------------------------------------ */

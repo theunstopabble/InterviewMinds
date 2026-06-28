@@ -19,9 +19,8 @@ import {
   formatTeamsNotification,
   sendDiscordMessage,
   createDiscordEmbed,
-  createZoomMeeting,
-  getZoomMeeting,
-  deleteZoomMeeting,
+  createJitsiMeeting,
+  getJitsiMeeting,
   createGoogleMeetEvent,
   formatCalendarInvite,
 } from "../lib/communicationIntegration";
@@ -214,10 +213,10 @@ router.post("/discord/notification", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/video/zoom/create", requireAuth, async (req, res) => {
+router.post("/video/jitsi/create", requireAuth, async (req, res) => {
   try {
-    const { topic, startTime, duration, hostEmail, agenda } = req.body;
-    const meeting = await createZoomMeeting({ topic, startTime: new Date(startTime), duration, hostEmail, agenda });
+    const { topic, startTime, duration } = req.body;
+    const meeting = await createJitsiMeeting({ topic, startTime: new Date(startTime), duration });
     res.json({ success: true, data: meeting });
   } catch (err) {
     logger.error({ err, path: req.path }, "Integration route error");
@@ -225,23 +224,12 @@ router.post("/video/zoom/create", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/video/zoom/:meetingId", requireAuth, async (req, res) => {
+router.get("/video/jitsi/:roomName", requireAuth, async (req, res) => {
   try {
-    const { meetingId } = req.params;
-    const meeting = await getZoomMeeting(meetingId);
+    const { roomName } = req.params;
+    const meeting = await getJitsiMeeting(roomName);
     if (!meeting) return res.status(404).json({ success: false, error: "Meeting not found" });
     res.json({ success: true, data: meeting });
-  } catch (err) {
-    logger.error({ err, path: req.path }, "Integration route error");
-    res.status(500).json({ success: false, error: "Internal server error" });
-  }
-});
-
-router.delete("/video/zoom/:meetingId", requireAuth, async (req, res) => {
-  try {
-    const { meetingId } = req.params;
-    const result = await deleteZoomMeeting(meetingId);
-    res.json({ success: result });
   } catch (err) {
     logger.error({ err, path: req.path }, "Integration route error");
     res.status(500).json({ success: false, error: "Internal server error" });

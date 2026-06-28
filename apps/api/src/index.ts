@@ -65,6 +65,7 @@ import schedulingRoutes from "./routes/scheduling";
 import llmInterviewerRoutes from "./routes/llmInterviewer";
 import multimodalAIRoutes from "./routes/multimodalAI";
 import smartAssessmentRoutes from "./routes/smartAssessment";
+import notificationRoutes from "./routes/notifications";
 import infrastructureRoutes from "./routes/infrastructure";
 import collaborationRoutes from "./routes/collaboration";
 import developerRoutes from "./routes/developer";
@@ -401,6 +402,14 @@ app.use(
   requireAuth,
   attachRole,
   infrastructureRoutes,
+);
+
+// Notifications API
+app.use(
+  "/api/notifications",
+  requireAuth,
+  attachRole,
+  notificationRoutes,
 );
 
 // Phase 11: Real-Time Collaboration

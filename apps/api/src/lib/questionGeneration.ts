@@ -59,7 +59,7 @@ const questionBank: QuestionBank = {
     lead: [
       {
         id: 'tk_lead_1',
-        text: 'Design a scalable frontend architecture for an enterprise application with millions of users.',
+        text: 'Design a scalable frontend architecture for an production application with millions of users.',
         competency: 'Technical Knowledge',
         difficulty: 'lead',
         evaluationCriteria: ['Scalability', 'Performance', 'Maintainability', 'Team Structure'],

@@ -1,6 +1,7 @@
 import { ResumeModel } from "../models/Resume";
 import { logger } from "./logger";
 import { groqCircuitBreaker } from "./circuitBreaker";
+import axios from "axios";
 import type { ExtractedEntity, VerificationResult } from "@interview-minds/shared";
 
 // Common tech skills taxonomy for verification
@@ -273,33 +274,66 @@ export class ResumeVerificationService {
   }
 
   /**
-   * Verify resume content against external sources (mock implementation)
-   * In production, this would integrate with:
-   * - LinkedIn API
-   * - Company registries
-   * - Certification databases
+   * Verify a GitHub profile via the free public API
+   */
+  static async verifyGithubProfile(username: string): Promise<{ verified: boolean; data?: any }> {
+    try {
+      const res = await axios.get(`https://api.github.com/users/${username}`, {
+        headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "InterviewMinds" },
+        timeout: 10000,
+      });
+      const profile = res.data;
+      if (profile?.id) {
+        logger.info({ username, publicRepos: profile.public_repos }, "GitHub profile verified");
+        return {
+          verified: true,
+          data: {
+            name: profile.name,
+            bio: profile.bio,
+            publicRepos: profile.public_repos,
+            followers: profile.followers,
+            createdAt: profile.created_at,
+          },
+        };
+      }
+      return { verified: false };
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        logger.warn({ username }, "GitHub profile not found");
+      } else {
+        logger.error({ err: err.message, username }, "GitHub API error");
+      }
+      return { verified: false };
+    }
+  }
+
+  /**
+   * Extract GitHub URLs from resume content
+   */
+  private static extractGithubUsernames(content: string): string[] {
+    const patterns = [
+      /github\.com\/([a-zA-Z0-9_-]+)/gi,
+      /git@github\.com:([a-zA-Z0-9_-]+)/gi,
+    ];
+    const usernames = new Set<string>();
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        if (match[1]) usernames.add(match[1]);
+      }
+    }
+    return [...usernames];
+  }
+
+  /**
+   * Verify entity via free external sources (GitHub) vs. paid placeholders
    */
   static async verifyWithExternalSources(entity: ExtractedEntity): Promise<boolean> {
-    // This is a mock implementation
-    // In production, integrate with actual APIs
-
-    logger.warn({ entity: entity.name, type: entity.type }, "External verification not configured—using mock");
-
-    // Simulate API call with circuit breaker
-    try {
-      await groqCircuitBreaker.execute(async () => {
-        // In production, call appropriate verification API:
-        // - LinkedIn for employment history
-        // - Degree verification services for education
-        // - Certification authority for certs
-        // For now, return true for high-confidence entities
-        return true;
-      });
-      return true;
-    } catch (error) {
-      logger.warn({ entity: entity.name }, "External verification failed, using local");
+    if (entity.type === "company" || entity.type === "school" || entity.type === "certification") {
+      logger.warn({ entity: entity.name, type: entity.type }, "External API not available (paid) — using local confidence");
       return entity.confidence >= 0.7;
     }
+    return entity.confidence >= 0.7;
   }
 
   /**
@@ -319,20 +353,32 @@ export class ResumeVerificationService {
     // Analyze skill gaps
     const skillAnalysis = this.analyzeSkillGaps(entities, targetRole);
 
+    // Verify GitHub profiles found in the resume (free API)
+    const githubUsernames = this.extractGithubUsernames(content);
+    const githubResults: { username: string; verified: boolean; data?: any }[] = [];
+    for (const username of githubUsernames) {
+      const result = await this.verifyGithubProfile(username);
+      githubResults.push({ username, ...result });
+    }
+    if (githubResults.length > 0) {
+      logger.info({ verified: githubResults.filter(r => r.verified).length, total: githubResults.length }, "GitHub verification complete");
+    }
+
     // Verify entities with external sources
     const verifiedEntities = await Promise.all(
       entities.map(async (entity) => {
         if (entity.type === "skill") {
-          return entity; // Skills don't need external verification
+          return entity;
         }
         const verified = await this.verifyWithExternalSources(entity);
         return { ...entity, verified };
       })
     );
 
-    // Calculate overall score
+    // Calculate overall score (bump if GitHub verified)
     const verifiedCount = verifiedEntities.filter((e) => e.verified || e.confidence >= 0.7).length;
-    const overallScore = Math.round((verifiedCount / verifiedEntities.length) * 100);
+    const githubBonus = githubResults.some(r => r.verified) ? 10 : 0;
+    const overallScore = Math.min(100, Math.round((verifiedCount / verifiedEntities.length) * 100) + githubBonus);
 
     // Generate red flags
     const redFlags: VerificationResult["redFlags"] = [];

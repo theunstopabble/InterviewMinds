@@ -913,12 +913,10 @@ export const integrationService = {
     fetchAPI<any>('/integration/teams/channel', { method: 'POST', body: JSON.stringify({ name }) }),
   sendDiscordMessage: (webhookUrl: string, message: any) =>
     fetchAPI<any>('/integration/discord/send', { method: 'POST', body: JSON.stringify({ webhookUrl, message }) }),
-  createZoomMeeting: (meeting: any) =>
-    fetchAPI<any>('/integration/video/zoom/create', { method: 'POST', body: JSON.stringify(meeting) }),
-  getZoomMeeting: (meetingId: string) =>
-    fetchAPI<any>(`/integration/video/zoom/${meetingId}`),
-  deleteZoomMeeting: (meetingId: string) =>
-    fetchAPI<any>(`/integration/video/zoom/${meetingId}`, { method: 'DELETE' }),
+  createJitsiMeeting: (meeting: any) =>
+    fetchAPI<any>('/integration/video/jitsi/create', { method: 'POST', body: JSON.stringify(meeting) }),
+  getJitsiMeeting: (roomName: string) =>
+    fetchAPI<any>(`/integration/video/jitsi/${roomName}`),
   createGoogleMeetEvent: (config: any, event: any) =>
     fetchAPI<any>('/integration/video/google-meet/create', { method: 'POST', body: JSON.stringify({ config, event }) }),
   generateCalendarInvite: (invite: any) =>
@@ -1082,6 +1080,30 @@ export const codeEvaluationService = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+};
+
+export const notificationService = {
+  list: (params?: { page?: number; limit?: number; status?: string; channel?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.status) qs.set('status', params.status);
+    if (params?.channel) qs.set('channel', params.channel);
+    const query = qs.toString();
+    return fetchAPI<any>(`/notifications${query ? `?${query}` : ''}`);
+  },
+
+  unreadCount: () =>
+    fetchAPI<{ data: { count: number } }>('/notifications/unread-count'),
+
+  markRead: (id: string) =>
+    fetchAPI<any>(`/notifications/${id}/read`, { method: 'PATCH' }),
+
+  markAllRead: () =>
+    fetchAPI<any>('/notifications/read-all', { method: 'PATCH' }),
+
+  delete: (id: string) =>
+    fetchAPI<any>(`/notifications/${id}`, { method: 'DELETE' }),
 };
 
 export const interviewService = {
