@@ -3,7 +3,7 @@
   
   # InterviewMinds — Production-grade AI Mock Interview Platform
   
-  **Created & Developed by [Gautam Kumar](https://gautam-kr.vercel.app) | Full-Stack Developer | Solo-shipped 4 SaaS products | AI integration
+  **Created & Developed by [Gautam Kumar](https://gautam-kr.vercel.app) | Full-Stack Developer | Solo-shipped 4 SaaS Products | AI Integration
 **
 
 _Production-grade AI interview simulation platform with real-time ML proctoring, CRDT collaborative coding, multimodal candidate analysis, and WebRTC video — serving production-level candidate evaluation at scale._
@@ -374,7 +374,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 <br/>
 
-**[Gautam Kumar](https://gautam-kr.vercel.app)** — Full-Stack Developer | Solo-shipped 4 SaaS products | AI integration
+**[Gautam Kumar](https://gautam-kr.vercel.app)** — Full-Stack Developer | Solo-shipped 4 SaaS Products | AI Integration
 
 _Building production-grade applications with React, Node.js, TypeScript, MongoDB, and AI/ML_
 
