@@ -1,0 +1,52 @@
+# InterviewMinds — AI-Powered Interview Platform
+
+> InterviewMinds is a full-stack AI interview platform with AI-powered coding assessments, live interviewing with proctoring, candidate pipeline management, and analytics. Built with React, TypeScript, Express, MongoDB, and Clerk authentication.
+
+## Public Pages
+- [Sign In](https://interviewminds.vercel.app/sign-in)
+- [Pricing](https://interviewminds.vercel.app/pricing)
+- [Home / Landing](https://interviewminds.vercel.app/)
+
+## Core Features (Requires Authentication)
+- [Dashboard](https://interviewminds.vercel.app/dashboard) — Overview, score distribution, competency radar, skill breakdown, score progression
+- [Live Interview](https://interviewminds.vercel.app/interview) — AI-powered interview with voice, webcam, proctoring, and real-time code editor
+- [Feedback](https://interviewminds.vercel.app/feedback/:id) — Post-interview AI feedback with per-question scores and hiring recommendations
+- [Analytics](https://interviewminds.vercel.app/analytics) — Score distribution, trends, competency progress, top performers, proctoring metrics
+- [Question Bank](https://interviewminds.vercel.app/questions) — Create, search, manage coding/behavioral/technical interview questions
+- [Coding Challenge](https://interviewminds.vercel.app/coding-challenge/:id) — Standalone coding challenge with Monaco editor, test runner, and AI evaluation
+- [Pipeline](https://interviewminds.vercel.app/pipeline) — Kanban candidate pipeline with reject/offer workflow
+- [Scheduling](https://interviewminds.vercel.app/scheduling) — Interview scheduling with email notifications (Brevo SMTP)
+- [Reports](https://interviewminds.vercel.app/reports) — Exportable reports and scorecards
+- [Settings](https://interviewminds.vercel.app/settings) — SSO, encryption keys, biometric enrollment, integrations, webhooks
+- [Admin](https://interviewminds.vercel.app/admin) — Compliance framework, security controls, audit log, tenant management
+- [Candidate Portal](https://interviewminds.vercel.app/candidate-portal) — Candidate-facing interview dashboard
+- [Preparation](https://interviewminds.vercel.app/preparation) — Interview preparation resources and practice
+
+## API Endpoints
+- `POST /api/compiler/execute` — Execute code via Piston API (JavaScript, TypeScript, Python, Java, C, C++, Go, Rust)
+- `POST /api/code-evaluation/evaluate` — AI code evaluation via Groq (llama-3.3-70b)
+- `POST /api/code-analysis/analyze` — Big-O complexity analysis
+- `POST /api/code-analysis/security-scan` — Security vulnerability scan
+- `POST /api/feedback/generate` — AI interview feedback generation
+- `POST /api/questions/generate` — AI question generation
+- `GET/POST /api/question-bank` — Question CRUD
+- `GET/POST /api/scheduling` — Interview scheduling
+- `GET/POST/PATCH/DELETE /api/notifications` — Notification management
+- `POST /api/sso/*` — SSO integration (Google, Azure AD, Okta)
+- `POST /api/interview/reject` — Reject candidate workflow
+- `POST /api/interview/offer` — Send offer letter workflow
+
+## Technical Stack
+- **Frontend:** React 19, TypeScript, Tailwind CSS, Vite, Monaco Editor, Recharts, Clerk React
+- **Backend:** Node.js, Express, TypeScript, MongoDB (Mongoose), Clerk Express, Redis
+- **AI:** Groq (llama-3.3-70b) for code evaluation, feedback, and interview
+- **Email:** Brevo SMTP via Nodemailer (300 emails/day free tier)
+- **Video:** Jitsi Meet (free, open-source, no API key)
+- **Code Execution:** Piston API (emkc.org, free, no auth)
+- **Monitoring:** Sentry error tracking, Firebase Cloud Messaging
+
+## Crawling Guidelines
+- All pages under `/api/` require `Authorization: Bearer <clerk_jwt_token>` header
+- Frontend routes other than `/sign-in` and `/pricing` require Clerk authentication
+- The sitemap at `/sitemap.xml` lists all public and authenticated pages
+- Rate limits apply on `/api/compiler/` and `/api/code-evaluation/` endpoints

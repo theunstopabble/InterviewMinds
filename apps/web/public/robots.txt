@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://interviewminds.vercel.app/sitemap.xml
+LLMs.txt: https://interviewminds.vercel.app/llms.txt
