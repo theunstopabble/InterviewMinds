@@ -89,25 +89,25 @@ router.post("/alerts/check", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/alerts/active", requireAuth, (req, res) => {
-  const alerts = getActiveAlerts();
+router.get("/alerts/active", requireAuth, async (_req, res) => {
+  const alerts = await getActiveAlerts();
   res.json({ success: true, data: { alerts, count: alerts.length } });
 });
 
-router.post("/alerts/:alertId/resolve", requireAuth, (req, res) => {
+router.post("/alerts/:alertId/resolve", requireAuth, async (req, res) => {
   const { alertId } = req.params;
-  const alert = resolveAlert(alertId);
+  const alert = await resolveAlert(alertId);
   if (!alert) return res.status(404).json({ success: false, error: "Alert not found" });
   res.json({ success: true, data: alert });
 });
 
-router.get("/uptime", requireAuth, (req, res) => {
-  const checks = getUptimeChecks();
+router.get("/uptime", requireAuth, async (_req, res) => {
+  const checks = await getUptimeChecks();
   res.json({ success: true, data: { checks, count: checks.length } });
 });
 
-router.post("/uptime", requireAuth, (req, res) => {
-  const check = createUptimeCheck(req.body);
+router.post("/uptime", requireAuth, async (req, res) => {
+  const check = await createUptimeCheck(req.body);
   res.json({ success: true, data: check });
 });
 

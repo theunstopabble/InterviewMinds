@@ -1,6 +1,8 @@
 import axios from "axios";
 import { logger } from "./logger";
 import { AlertRuleModel, IAlertRule } from "../models/AlertRule";
+import { AlertEventModel } from "../models/AlertEvent";
+import { UptimeCheckModel } from "../models/UptimeCheck";
 
 export interface MetricData {
   name: string;
@@ -144,29 +146,62 @@ export async function checkAlertConditions(metrics: MetricData[]): Promise<Alert
       };
       activeAlerts.push(alert);
       triggeredAlerts.push(alert);
+      await AlertEventModel.create({
+        ruleId: rule.id,
+        ruleName: rule.name,
+        severity: rule.severity,
+        message: alert.message,
+        status: "firing",
+        firedAt: new Date(),
+      }).catch((err: unknown) => logger.warn({ err }, "Failed to persist alert event"));
     }
   }
 
   return triggeredAlerts;
 }
 
-export function getActiveAlerts(): Alert[] {
-  return activeAlerts.filter(a => a.status === "firing");
+export async function getActiveAlerts(): Promise<Alert[]> {
+  const cached = activeAlerts.filter(a => a.status === "firing");
+  if (cached.length > 0) return cached;
+  const docs = await AlertEventModel.find({ status: "firing" }).sort({ firedAt: -1 }).limit(50).lean();
+  return docs.map(d => ({
+    id: String(d._id),
+    ruleId: d.ruleId,
+    ruleName: d.ruleName,
+    severity: d.severity,
+    message: d.message,
+    status: d.status as "firing" | "resolved",
+    firedAt: d.firedAt,
+    resolvedAt: d.resolvedAt || undefined,
+  }));
 }
 
-export function resolveAlert(alertId: string): Alert | null {
-  const alert = activeAlerts.find(a => a.id === alertId) || null;
-  if (alert) {
-    alert.status = "resolved";
-    alert.resolvedAt = new Date();
+export async function resolveAlert(alertId: string): Promise<Alert | null> {
+  const index = activeAlerts.findIndex(a => a.id === alertId);
+  let alert: Alert | null = null;
+  if (index !== -1) {
+    activeAlerts[index].status = "resolved";
+    activeAlerts[index].resolvedAt = new Date();
+    alert = activeAlerts[index];
   }
+  await AlertEventModel.findOneAndUpdate(
+    { _id: alertId },
+    { status: "resolved", resolvedAt: new Date() },
+    { new: true }
+  ).catch((err: unknown) => logger.warn({ err }, "Failed to update alert resolution"));
   return alert;
 }
 
-export function createUptimeCheck(check: Omit<UptimeCheck, "id" | "status" | "lastCheck" | "uptimePercentage">): UptimeCheck {
+export async function createUptimeCheck(check: Omit<UptimeCheck, "id" | "status" | "lastCheck" | "uptimePercentage">): Promise<UptimeCheck> {
+  const doc = await UptimeCheckModel.create({
+    name: check.name,
+    url: check.url,
+    interval: check.interval,
+    timeout: check.timeout,
+  });
   const newCheck: UptimeCheck = {
+    id: String(doc._id),
     ...check,
-    id: `uptime_${Date.now()}`,
     status: "up",
     lastCheck: new Date(),
     uptimePercentage: 100,
@@ -176,13 +211,42 @@ export function createUptimeCheck(check: Omit<UptimeCheck, "id" | "status" | "la
   return newCheck;
 }
 
-export function getUptimeChecks(): UptimeCheck[] {
+export async function getUptimeChecks(): Promise<UptimeCheck[]> {
+  if (uptimeChecks.length > 0) return uptimeChecks;
+  const docs = await UptimeCheckModel.find().lean();
+  uptimeChecks.length = 0;
+  for (const d of docs) {
+    uptimeChecks.push({
+      id: String(d._id),
+      name: d.name,
+      url: d.url,
+      interval: d.interval,
+      timeout: d.timeout,
+      status: d.status as "up" | "down" | "degraded",
+      lastCheck: d.lastCheck,
+      uptimePercentage: d.uptimePercentage,
+    });
+  }
   return uptimeChecks;
 }
 
 export async function runUptimeCheck(checkId: string): Promise<UptimeCheck | null> {
-  const check = uptimeChecks.find(c => c.id === checkId);
-  if (!check) return null;
+  let check = uptimeChecks.find(c => c.id === checkId);
+  if (!check) {
+    const doc = await UptimeCheckModel.findById(checkId).lean();
+    if (!doc) return null;
+    check = {
+      id: String(doc._id),
+      name: doc.name,
+      url: doc.url,
+      interval: doc.interval,
+      timeout: doc.timeout,
+      status: doc.status as "up" | "down" | "degraded",
+      lastCheck: doc.lastCheck,
+      uptimePercentage: doc.uptimePercentage,
+    };
+    uptimeChecks.push(check);
+  }
 
   logger.info({ checkId: check.id, url: check.url }, "Running uptime check");
   check.lastCheck = new Date();
@@ -200,6 +264,12 @@ export async function runUptimeCheck(checkId: string): Promise<UptimeCheck | nul
   const alpha = 0.1;
   const upValue = check.status === "up" ? 100 : 0;
   check.uptimePercentage = check.uptimePercentage * (1 - alpha) + upValue * alpha;
+
+  await UptimeCheckModel.findByIdAndUpdate(checkId, {
+    status: check.status,
+    lastCheck: check.lastCheck,
+    uptimePercentage: Math.round(check.uptimePercentage * 100) / 100,
+  }).catch((err: unknown) => logger.warn({ err }, "Failed to persist uptime check"));
 
   return check;
 }

@@ -1,4 +1,4 @@
-import multer, { MulterError } from "multer";
+import multer from "multer";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 import cloudinary from "../config/cloudinary";
 import { logger } from "../lib/logger";

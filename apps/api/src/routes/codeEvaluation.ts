@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { logger } from '../lib/logger';
 import { evaluateCode, CodeEvaluationRequest } from '../lib/codeEvaluationAgent';
+import { notificationService } from '../lib/notifications';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -15,6 +16,21 @@ router.post('/evaluate', requireAuth, async (req, res) => {
     }
 
     const result = await evaluateCode(body);
+
+      notificationService.sendTemplatedNotification(
+        (req as any).auth?.userId || 'unknown',
+      'code-assessment',
+      {
+        candidate_name: body.candidateName || 'Candidate',
+        role: body.role || 'Software Engineer',
+        challenge_name: body.challengeName || 'Coding Challenge',
+        deadline: body.deadline || 'N/A',
+        duration: body.duration || 'N/A',
+        language: body.language,
+        email: body.email || '',
+      }
+    ).catch((err: unknown) => logger.warn({ err }, 'Failed to send code-assessment notification'));
+
     res.json({ success: true, evaluation: result });
   } catch (error) {
     logger.error({ err: error }, 'Code evaluation route error');

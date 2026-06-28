@@ -9,6 +9,11 @@ export interface CodeEvaluationRequest {
   problemStatement: string;
   testCases?: { input: string; expectedOutput: string }[];
   candidateName?: string;
+  role?: string;
+  challengeName?: string;
+  deadline?: string;
+  duration?: string;
+  email?: string;
 }
 
 export interface CodeEvaluationResult {

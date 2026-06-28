@@ -1,4 +1,6 @@
 import { InterviewModel } from "../models/Interview";
+import { ProctoringSessionModel } from "../models/ProctoringSession";
+import { ResumeModel } from "../models/Resume";
 import { logger } from "./logger";
 
 interface InterviewAnalytics {
@@ -62,6 +64,37 @@ function calculateTrend(current: number, previous: number): 'up' | 'down' | 'sta
   return 'stable';
 }
 
+async function getProctoringData(): Promise<InterviewAnalytics['proctoring']> {
+  try {
+    const [violationAgg] = await ProctoringSessionModel.aggregate([
+      { $unwind: '$violations' },
+      {
+        $group: {
+          _id: null,
+          totalViolations: { $sum: 1 },
+          types: { $push: '$violations.type' },
+          totalSessions: { $addToSet: '$_id' },
+        },
+      },
+    ]);
+    if (!violationAgg) {
+      return { violations: 0, violationTypes: {}, flagRate: 0 };
+    }
+    const violationTypes: Record<string, number> = {};
+    for (const t of violationAgg.types as string[]) {
+      violationTypes[t] = (violationTypes[t] || 0) + 1;
+    }
+    const totalSessions = violationAgg.totalSessions.length;
+    return {
+      violations: violationAgg.totalViolations,
+      violationTypes,
+      flagRate: totalSessions > 0 ? Math.round((violationAgg.totalViolations / totalSessions) * 100) / 100 : 0,
+    };
+  } catch {
+    return { violations: 0, violationTypes: {}, flagRate: 0 };
+  }
+}
+
 export async function getDashboardAnalytics(_tenantId?: string): Promise<InterviewAnalytics> {
   try {
     const total = await InterviewModel.countDocuments();
@@ -104,14 +137,11 @@ export async function getDashboardAnalytics(_tenantId?: string): Promise<Intervi
         problemSolving: { average: Math.round(avg(problemSolving)) || 0, trend: calculateTrend(avg(cur(problemSolving)), avg(prev(problemSolving))) },
         cultureFit: { average: Math.round(avg(cultureFit)) || 0, trend: calculateTrend(avg(cur(cultureFit)), avg(prev(cultureFit))) },
       },
-      proctoring: {
-        violations: 0,
-        violationTypes: {},
-        flagRate: 0,
-      },
+      proctoring: await getProctoringData(),
     };
   } catch (err: any) {
     logger.error({ err: err.message }, "Failed to get dashboard analytics");
+    const fallbackProctoring = await getProctoringData().catch(() => ({ violations: 0, violationTypes: {}, flagRate: 0 }));
     return {
       overview: { totalInterviews: 0, completionRate: 0, averageScore: 0, averageDuration: 0 },
       scoreDistribution: { range90_100: 0, range80_89: 0, range70_79: 0, range60_69: 0, below60: 0 },
@@ -121,7 +151,7 @@ export async function getDashboardAnalytics(_tenantId?: string): Promise<Intervi
         problemSolving: { average: 0, trend: 'stable' },
         cultureFit: { average: 0, trend: 'stable' },
       },
-      proctoring: { violations: 0, violationTypes: {}, flagRate: 0 },
+      proctoring: fallbackProctoring,
     };
   }
 }
@@ -163,9 +193,21 @@ export async function getTopPerformers(limit: number = 10): Promise<{ candidateI
     .select("userId score createdAt")
     .lean();
 
-  return docs.map((d, i) => ({
+  const userIds = [...new Set(docs.map(d => d.userId))];
+  const resumes = await ResumeModel.find({ userId: { $in: userIds } }).select("userId fileName").lean();
+  const nameMap = new Map<string, string>();
+  for (const r of resumes) {
+    const name = r.fileName
+      .replace(/\.\w+$/, '')
+      .replace(/[_-]/g, ' ')
+      .replace(/\b(resume|cv|bio)\b/gi, '')
+      .trim();
+    if (name) nameMap.set(r.userId, name);
+  }
+
+  return docs.map((d) => ({
     candidateId: d.userId,
-    name: `Candidate ${i + 1}`,
+    name: nameMap.get(d.userId) || `Candidate ${d.userId.slice(0, 8)}`,
     score: d.score as number,
     trend: 'stable',
   }));
