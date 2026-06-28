@@ -1,6 +1,6 @@
 import { InterviewModel } from "../models/Interview";
 import { ProctoringSessionModel } from "../models/ProctoringSession";
-import { ResumeModel } from "../models/Resume";
+import { UserProfileModel } from "../models/UserProfile";
 import { logger } from "./logger";
 
 interface InterviewAnalytics {
@@ -194,20 +194,15 @@ export async function getTopPerformers(limit: number = 10): Promise<{ candidateI
     .lean();
 
   const userIds = [...new Set(docs.map(d => d.userId))];
-  const resumes = await ResumeModel.find({ userId: { $in: userIds } }).select("userId fileName").lean();
+  const profiles = await UserProfileModel.find({ userId: { $in: userIds } }).select("userId name").lean();
   const nameMap = new Map<string, string>();
-  for (const r of resumes) {
-    const name = r.fileName
-      .replace(/\.\w+$/, '')
-      .replace(/[_-]/g, ' ')
-      .replace(/\b(resume|cv|bio)\b/gi, '')
-      .trim();
-    if (name) nameMap.set(r.userId, name);
+  for (const p of profiles) {
+    if (p.name) nameMap.set(p.userId, p.name);
   }
 
   return docs.map((d) => ({
     candidateId: d.userId,
-    name: nameMap.get(d.userId) || `Candidate ${d.userId.slice(0, 8)}`,
+    name: nameMap.get(d.userId) || d.userId.slice(0, 8),
     score: d.score as number,
     trend: 'stable',
   }));

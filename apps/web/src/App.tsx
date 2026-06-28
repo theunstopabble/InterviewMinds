@@ -29,6 +29,7 @@ import AdminPage from "./pages/AdminPage";
 import CandidatePortal from "./pages/CandidatePortal";
 import SchedulingPage from "./pages/SchedulingPage";
 import QuestionBankPage from "./pages/QuestionBankPage";
+import CodingChallengePage from "./pages/CodingChallengePage";
 import ReportsPage from "./pages/ReportsPage";
 import PreparationPage from "./pages/PreparationPage";
 import PipelinePage from "./pages/PipelinePage";
@@ -193,6 +194,7 @@ function App() {
             <Route path="/candidate-portal" element={<ProtectedRoute><CandidatePortal /></ProtectedRoute>} />
             <Route path="/scheduling" element={<ProtectedRoute><SchedulingPage /></ProtectedRoute>} />
             <Route path="/questions" element={<ProtectedRoute><QuestionBankPage /></ProtectedRoute>} />
+            <Route path="/coding-challenge/:id" element={<ProtectedRoute><CodingChallengePage /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
             <Route path="/preparation" element={<ProtectedRoute><PreparationPage /></ProtectedRoute>} />
             <Route path="/pipeline" element={<ProtectedRoute><PipelinePage /></ProtectedRoute>} />

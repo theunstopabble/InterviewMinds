@@ -38,8 +38,7 @@ export async function sendSlackMessage(webhookUrl: string, message: SlackMessage
 export async function createSlackChannel(name: string, topic?: string): Promise<{ channelId: string; name: string }> {
   const token = process.env.SLACK_BOT_TOKEN;
   if (!token) {
-    logger.warn("SLACK_BOT_TOKEN not configured; returning placeholder channel ID");
-    return { channelId: `C${Date.now()}`, name };
+    throw new Error("SLACK_BOT_TOKEN not configured — cannot create Slack channel");
   }
   try {
     const res = await axios.post("https://slack.com/api/conversations.create", {
@@ -61,7 +60,7 @@ export async function createSlackChannel(name: string, topic?: string): Promise<
     throw new Error(res.data?.error || "Slack API error");
   } catch (err: any) {
     logger.error({ err: err.message }, "Slack channel creation failed");
-    return { channelId: `C${Date.now()}`, name };
+    throw err;
   }
 }
 
@@ -305,8 +304,7 @@ export async function createGoogleMeetEvent(config: GoogleMeetConfig, event: Goo
   logger.info({ summary: event.summary }, "Creating Google Meet event");
   const accessToken = await refreshGoogleAccessToken(config);
   if (!accessToken) {
-    logger.warn("No Google access token; returning placeholder Meet link");
-    return { meetLink: `https://meet.google.com/abc-${Date.now()}`, eventId: `gcal_${Date.now()}` };
+    throw new Error("Google OAuth token refresh failed — cannot create Meet event. Ensure valid refreshToken is provided.");
   }
   try {
     const res = await axios.post("https://www.googleapis.com/calendar/v3/calendars/primary/events", {

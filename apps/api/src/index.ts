@@ -13,6 +13,7 @@ import geoFencingRoutes from "./routes/geoFencing";
 import videoProctoringRoutes from "./routes/videoProctoring";
 import ssoIntegrationRoutes from "./routes/ssoIntegration";
 import webhooksRoutes from "./routes/webhooks";
+import clerkWebhookRoutes from "./routes/clerkWebhook";
 import multiTenancyRoutes from "./routes/multiTenancy";
 import { initializeDefaultPlanLimits } from "./lib/multiTenancy";
 import jobMatchingRoutes from "./routes/jobMatching";
@@ -334,6 +335,11 @@ app.use(
 app.use(
   "/api/webhooks",
   webhooksRoutes,
+);
+
+app.use(
+  "/api/clerk",
+  clerkWebhookRoutes,
 );
 
 app.use(
