@@ -11,6 +11,10 @@ const webhookSchema = new mongoose.Schema(
     url: {
       type: String,
       required: true,
+      validate: {
+        validator: (v: string) => /^https:\/\//i.test(v),
+        message: "Webhook URL must use HTTPS",
+      },
     },
     events: {
       type: [String],

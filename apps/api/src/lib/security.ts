@@ -6,21 +6,14 @@ import { getRedisClient } from "./redis";
 import { logger } from "./logger";
 
 // ============================================================================
-// 1. HELMET — Enterprise Security Headers with CSP Nonce
+// 1. HELMET — Enterprise Security Headers
 // ============================================================================
-const generateNonce = (): string => {
-  return crypto.randomBytes(32).toString("base64");
-};
 
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: [
-        "'self'",
-        "'nonce-INLINE-SCRIPT-NONCE'",
-        "'strict-dynamic'",
-      ],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https:"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
       connectSrc: [
@@ -59,14 +52,8 @@ export const securityHeaders = helmet({
   xssFilter: true,
 });
 
-// Middleware to add CSP nonce to requests
-export const cspNonceMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  res.locals.nonce = generateNonce();
-  next();
-};
-
 // ============================================================================
-// 2. CSRF PROTECTION
+// 2. CSRF TOKEN UTILITY (Clerk JWT Bearer auth handles CSRF — middleware not needed)
 // ============================================================================
 const CSRF_TOKEN_LENGTH = 32;
 
@@ -74,47 +61,8 @@ function generateCsrfToken(): string {
   return crypto.randomBytes(CSRF_TOKEN_LENGTH).toString("hex");
 }
 
-// Store CSRF tokens in memory (in production, use Redis)
 const csrfTokens = new Map<string, { token: string; expiresAt: number }>();
 
-export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
-  // Skip CSRF for safe methods
-  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
-    return next();
-  }
-
-  // Skip for API routes with token auth (Clerk handles this)
-  const authHeader = req.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    return next();
-  }
-
-  const csrfToken = req.get("x-csrf-token") || req.body?._csrf;
-  const sessionId = req.ip + ":" + (req.get("user-agent") || "").slice(0, 50);
-
-  if (!csrfToken) {
-    logger.warn({ path: req.path, ip: req.ip }, "CSRF token missing");
-    return res.status(403).json({ error: "CSRF token required" });
-  }
-
-  const stored = csrfTokens.get(sessionId);
-  if (!stored || stored.token !== csrfToken || Date.now() > stored.expiresAt) {
-    logger.warn({ path: req.path, ip: req.ip }, "CSRF token invalid or expired");
-    return res.status(403).json({ error: "CSRF token invalid or expired" });
-  }
-
-  // Regenerate token after successful validation
-  const newToken = generateCsrfToken();
-  csrfTokens.set(sessionId, {
-    token: newToken,
-    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
-  });
-
-  res.setHeader("x-csrf-token", newToken);
-  next();
-};
-
-// Endpoint to get CSRF token
 export const getCsrfToken = (_req: Request, res: Response) => {
   const sessionId = _req.ip + ":" + (_req.get("user-agent") || "").slice(0, 50);
   const token = generateCsrfToken();
@@ -125,16 +73,6 @@ export const getCsrfToken = (_req: Request, res: Response) => {
   res.setHeader("x-csrf-token", token);
   res.json({ csrfToken: token });
 };
-
-// Clean expired tokens periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of csrfTokens.entries()) {
-    if (value.expiresAt < now) {
-      csrfTokens.delete(key);
-    }
-  }
-}, 60 * 60 * 1000); // Every hour
 
 // ============================================================================
 // 2. RATE LIMITING — Tiered Limits with Redis Store

@@ -44,12 +44,14 @@ import {
   configureTrustProxy,
   generalLimiter,
   aiLimiter,
+  authLimiter,
   uploadLimiter,
   requestTimeout,
   sanitizeInput,
   getCsrfToken,
   graphqlLimiter,
 } from "./lib/security";
+import mongoSanitize from "express-mongo-sanitize";
 import { getCircuitBreakersHealth } from "./lib/circuitBreaker";
 import { attachRole } from "./middleware/rbac";
 import { auditLog } from "./middleware/audit";
@@ -110,7 +112,7 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "1mb" }));
 
 // Correlation ID middleware (must be early for request tracing)
 app.use(correlationMiddleware);
@@ -151,6 +153,7 @@ app.use(requestTimeout(30000));
 
 // 5. Input Sanitization (prevent NoSQL injection & XSS payloads)
 app.use(sanitizeInput);
+app.use(mongoSanitize());
 
 // 6. Rate Limiters
 app.use(generalLimiter);
@@ -232,17 +235,27 @@ app.get("/ping", (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Quick admin endpoint (temporary - for first admin setup only)
-app.get("/api/admin/setup-admin", async (_req: Request, res: Response) => {
+// Admin setup endpoint — requires authentication + existing admin role
+app.get("/api/admin/setup-admin", requireAuth, async (req: any, res: Response) => {
   try {
-    const userId = _req.query.userId as string;
+    const requestingUserId = req.auth?.userId;
+    if (!requestingUserId) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    const requestingUser = await UserRoleModel.findOne({ userId: requestingUserId });
+    if (!requestingUser || requestingUser.role !== "admin") {
+      res.status(403).json({ error: "Admin privileges required" });
+      return;
+    }
+    const userId = req.query.userId as string;
     if (!userId) {
       res.status(400).json({ error: "userId required" });
       return;
     }
     const role = await UserRoleModel.findOneAndUpdate(
       { userId },
-      { role: "admin", assignedBy: "setup", assignedAt: new Date() },
+      { role: "admin", assignedBy: `admin:${requestingUserId}`, assignedAt: new Date() },
       { upsert: true, new: true }
     );
     res.json({ success: true, role });
@@ -314,6 +327,7 @@ app.use(
 
 app.use(
   "/api/sso",
+  authLimiter,
   ssoIntegrationRoutes,
 );
 
@@ -329,11 +343,15 @@ app.use(
 
 app.use(
   "/api/job-matching",
+  requireAuth,
+  attachRole,
   jobMatchingRoutes,
 );
 
 app.use(
   "/api/questions",
+  requireAuth,
+  attachRole,
   questionGenerationRoutes,
 );
 
@@ -341,26 +359,36 @@ import questionBankRoutes from "./routes/questionBank";
 import { seedDefaultCategories } from "./lib/questionBank";
 app.use(
   "/api/question-bank",
+  requireAuth,
+  attachRole,
   questionBankRoutes,
 );
 
 app.use(
   "/api/code-analysis",
+  requireAuth,
+  attachRole,
   codeAnalysisRoutes,
 );
 
 app.use(
   "/api/e2e-encryption",
+  requireAuth,
+  attachRole,
   e2eEncryptionRoutes,
 );
 
 app.use(
   "/api/biometric",
+  requireAuth,
+  attachRole,
   biometricAuthRoutes,
 );
 
 app.use(
   "/api/ats",
+  requireAuth,
+  attachRole,
   atsIntegrationRoutes,
 );
 

@@ -37,6 +37,7 @@
     "dotenv": "^16.3.1",
     "esbuild": "^0.28.1",
     "express": "^4.21.2",
+    "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^7.5.0",
     "firebase-admin": "^14.1.0",
     "graphql": "^16.14.0",
