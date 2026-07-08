@@ -48,7 +48,7 @@ Google's E-E-A-T framework is crucial for ranking, particularly for tools dealin
 
 - **Authoritativeness & Expertise:** The `JSON-LD` schema explicitly defines the creator.
   - `@type: "Person", "name": "Gautam Kumar"`
-  - `"jobTitle": "Full-Stack Developer | Solo-shipped 4 SaaS Products | AI Integration
+  - `"jobTitle": "Full-Stack Developer | Solo-shipped SaaS Products | AI Integration
 "`
 - **Trustworthiness:** We link external verification profiles directly in the `sameAs` array, including GitHub (`https://github.com/theunstopabble`), LinkedIn (`https://www.linkedin.com/in/gautamkr62`), and personal portfolio.
 - **Organization Linkage:** We cite `"EducationalOrganization": "Jagannath University, Jaipur"`, legally grounding the project's origins, building strong entity relationships in Google’s Knowledge Graph.

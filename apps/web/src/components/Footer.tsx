@@ -31,7 +31,7 @@ export function Footer() {
               target="_blank"
               rel="noopener"
               className="font-medium text-blue-400 hover:text-blue-300 transition-colors"
-              title="Gautam Kumar — Full-Stack Developer | Solo-shipped 4 SaaS Products | AI Integration
+              title="Gautam Kumar — Full-Stack Developer | Solo-shipped SaaS Products | AI Integration
 "
             >
               Gautam Kumar
