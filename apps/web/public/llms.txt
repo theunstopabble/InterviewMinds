@@ -1,6 +1,12 @@
 # InterviewMinds — AI-Powered Interview Platform
 
-> InterviewMinds is a full-stack AI interview platform with AI-powered coding assessments, live interviewing with proctoring, candidate pipeline management, and analytics. Built with React, TypeScript, Express, MongoDB, and Clerk authentication.
+> InterviewMinds is a full-stack AI interview platform built by Gautam Kumar from Sitamarhi, Bihar, currently based in Jaipur, Rajasthan — featuring AI-powered coding assessments, live interviewing with proctoring, candidate pipeline management, and analytics. Built with React, TypeScript, Express, MongoDB, and Clerk authentication.
+
+## Identity
+- **Name:** Gautam Kumar
+- **Origin:** Sitamarhi, Bihar, India
+- **Current:** Jaipur, Rajasthan, India
+- **Role:** Full-Stack Developer | Solo-shipped SaaS Products | AI Integration
 
 ## Public Pages
 - [Sign In](https://interviewminds.vercel.app/sign-in)
