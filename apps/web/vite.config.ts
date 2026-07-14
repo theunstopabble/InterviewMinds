@@ -11,6 +11,10 @@ export default defineConfig({
     // ✅ 2. PWA Configuration Add ki
     VitePWA({
       registerType: "autoUpdate",
+      workbox: {
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/\.xml$/],
+      },
       devOptions: {
         enabled: true,
         type: "module",
