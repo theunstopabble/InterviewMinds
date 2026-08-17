@@ -76,7 +76,7 @@
     "@types/pdf-parse": "^1.1.4",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^9.0.0",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^8.57.1",
     "fast-check": "^3.22.0",
     "globals": "^13.24.0",
@@ -85,7 +85,7 @@
     "supertest": "^7.0.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.3.3",
-    "typescript-eslint": "^8.55.0",
+    "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.9"
   }
 }

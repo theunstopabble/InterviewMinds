@@ -11,7 +11,7 @@
     "lint": "turbo run lint"
   },
   "devDependencies": {
-    "prettier": "^3.0.0",
+    "prettier": "^3.9.6",
     "turbo": "latest"
   },
   "packageManager": "npm@10.2.0",
