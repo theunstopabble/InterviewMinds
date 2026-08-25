@@ -35,12 +35,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary fallback={<div>Application error. Please refresh.</div>}>
       <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true,
-          }}
-        >
+        <BrowserRouter>
           <App />
         </BrowserRouter>
         <Analytics />
