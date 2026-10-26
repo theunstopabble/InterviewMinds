@@ -74,7 +74,7 @@
     "@types/node": "^20.10.0",
     "@types/nodemailer": "^8.0.1",
     "@types/pdf-parse": "^1.1.4",
-    "@types/supertest": "^6.0.2",
+    "@types/supertest": "^7.2.1",
     "@types/uuid": "^9.0.0",
     "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^8.57.1",
@@ -82,10 +82,10 @@
     "globals": "^13.24.0",
     "pino-pretty": "^11.3.0",
     "socket.io-client": "^4.8.1",
-    "supertest": "^7.0.0",
+    "supertest": "^7.3.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.3.3",
-    "typescript-eslint": "^8.55.0",
+    "typescript-eslint": "^8.72.0",
     "vitest": "^4.1.9"
   }
 }
